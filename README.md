@@ -31,7 +31,7 @@ Apple 건강/피트니스 데이터를 활용한 “생활형 RPG” 앱의 실�
    - iOS 앱에서 HealthKit 권한 요청, 데이터 조회, 서버 전송까지 구현한다.
 
 2. Backend
-   - Spring Boot + Java 또는 Kotlin으로 구현한다.
+   - Spring Boot + Java 구현한다.
    - 기존 백엔드 프로젝트가 있으면 현재 구조를 분석하고 거기에 맞춘다.
    - 없으면 Spring Boot 기준으로 신규 구성한다.
    - DB는 PostgreSQL 또는 MySQL 중 현재 프로젝트에 맞춰 선택한다.
