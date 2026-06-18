@@ -1,13 +1,22 @@
+import AuthenticationServices
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var viewModel = DashboardViewModel()
+    @StateObject private var userSession: UserSession
+    @StateObject private var viewModel: DashboardViewModel
+
+    init() {
+        let userSession = UserSession()
+        _userSession = StateObject(wrappedValue: userSession)
+        _viewModel = StateObject(wrappedValue: DashboardViewModel(userSession: userSession))
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 18) {
                     header
+                    account
                     controls
                     healthSummary
                     characterSummary
@@ -36,6 +45,45 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
             Toggle("Mock 데이터 사용", isOn: $viewModel.useMockData)
                 .font(.subheadline)
+        }
+        .cardStyle()
+    }
+
+    private var account: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label(userSession.accountLabel, systemImage: userSession.isSignedIn ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle")
+                    .font(.headline)
+                Spacer()
+                Text(userSession.isSignedIn ? "로그인" : "비로그인")
+                    .font(.caption.bold())
+                    .foregroundStyle(userSession.isSignedIn ? .green : .secondary)
+            }
+
+            Text(userSession.statusMessage)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if userSession.isSignedIn {
+                Button("로그아웃") {
+                    userSession.signOut()
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isLoading)
+            } else {
+                SignInWithAppleButton(.signIn) { request in
+                    userSession.configure(request)
+                } onCompletion: { result in
+                    userSession.handle(result)
+                }
+                .signInWithAppleButtonStyle(.black)
+                .frame(height: 48)
+                .disabled(viewModel.isLoading)
+
+                Text("로그인은 선택 사항입니다. 게스트도 건강 데이터 조회와 XP 동기화를 이용할 수 있습니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .cardStyle()
     }
@@ -209,4 +257,3 @@ private extension WorkoutType {
 #Preview {
     ContentView()
 }
-
