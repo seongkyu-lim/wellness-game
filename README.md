@@ -7,6 +7,8 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 ## 구현 범위
 
 - SwiftUI iOS 앱
+  - 선택형 Sign in with Apple 로그인과 로그아웃
+  - 로그인 없이 유지되는 기기별 게스트 계정
   - HealthKit 사용 가능 여부 확인 및 읽기 권한 요청
   - 오늘 걸음 수 합계 조회
   - 오늘 `HKWorkout` 조회 및 운동 유형 매핑
@@ -151,11 +153,21 @@ mvn test
 1. Xcode에서 `ios/WellnessGame.xcodeproj`를 엽니다.
 2. `WellnessGame` target의 Signing & Capabilities에서 Team과 고유 Bundle Identifier를 선택합니다.
 3. `+ Capability`에서 **HealthKit**을 추가합니다.
-4. 백엔드를 실행합니다.
-5. 실제 iPhone을 선택하고 앱을 실행합니다.
-6. 앱에서 순서대로 권한 요청 → 오늘 데이터 불러오기 → 서버 동기화를 누릅니다.
+4. `+ Capability`에서 **Sign in with Apple**을 추가합니다.
+5. 백엔드를 실행합니다.
+6. 실제 iPhone을 선택하고 앱을 실행합니다.
+7. 로그인 여부와 관계없이 권한 요청 → 오늘 데이터 불러오기 → 서버 동기화를 누릅니다.
 
-프로젝트에는 `WellnessGame.entitlements`가 포함되어 있지만, Apple Developer Team과 App ID에 HealthKit capability가 활성화되어 있어야 실제 서명이 됩니다.
+프로젝트에는 `WellnessGame.entitlements`가 포함되어 있지만, Apple Developer Team과 App ID에 HealthKit 및 Sign in with Apple capability가 활성화되어 있어야 실제 서명이 됩니다.
+
+### 선택형 Apple 로그인과 게스트 이용
+
+- Sign in with Apple은 선택 사항입니다. 로그인 화면을 건너뛰어도 HealthKit 조회, 서버 동기화, XP 획득 기능을 이용할 수 있습니다.
+- 최초 실행 시 기기 안에 임의의 게스트 식별자를 만들고 `UserDefaults`에 유지합니다. 앱을 다시 실행해도 같은 게스트 캐릭터를 사용합니다.
+- Apple 로그인에 성공하면 Apple이 앱에 제공하는 고유 사용자 식별자로 캐릭터를 분리합니다.
+- 로그아웃하면 기존 게스트 식별자로 돌아가므로 게스트 진행 상황이 삭제되지 않습니다.
+- Apple은 이름과 이메일을 최초 승인 시에만 제공할 수 있으므로 앱은 처음 받은 표시 이름을 기기에 저장합니다.
+- 현재 MVP 서버는 앱이 보낸 사용자 식별자를 신뢰합니다. 운영 서비스에서는 Apple identity token을 서버에서 검증하고 자체 세션을 발급해야 합니다.
 
 ### Info.plist 권한 문구
 
@@ -200,7 +212,8 @@ mvn test
 
 ## MVP 이후 TODO
 
-- 고정 `test-user` 대신 Sign in with Apple 기반 사용자 인증
+- Apple identity token 서버 검증과 자체 세션 발급
+- 게스트 진행 상황을 Apple 계정으로 이전하는 계정 연결 기능
 - 운영 DB migration 도구(Flyway/Liquibase)
 - 서버 HTTPS 배포 및 iOS 환경별 API 설정
 - 백그라운드 동기화와 실패 요청 재시도 저장소
