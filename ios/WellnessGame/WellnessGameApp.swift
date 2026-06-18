@@ -4,6 +4,7 @@ import SwiftUI
 struct WellnessGameApp: App {
     init() {
         SocialLoginService.initializeKakaoIfConfigured()
+        SocialLoginService.initializeNaverIfConfigured()
     }
 
     var body: some Scene {

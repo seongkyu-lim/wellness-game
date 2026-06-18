@@ -4,6 +4,7 @@ import GoogleSignIn
 import KakaoSDKAuth
 import KakaoSDKCommon
 import KakaoSDKUser
+import NidThirdPartyLogin
 import UIKit
 
 @MainActor
@@ -19,6 +20,24 @@ final class SocialLoginService: ObservableObject {
         KakaoSDK.initSDK(appKey: appKey)
     }
 
+    static func initializeNaverIfConfigured() {
+        guard
+            let appName = configurationValue(for: "NAVER_APP_NAME"),
+            let clientId = configurationValue(for: "NAVER_CLIENT_ID"),
+            let clientSecret = configurationValue(for: "NAVER_CLIENT_SECRET"),
+            let urlScheme = configurationValue(for: "NAVER_URL_SCHEME")
+        else {
+            return
+        }
+
+        NidOAuth.shared.initialize(
+            appName: appName,
+            clientId: clientId,
+            clientSecret: clientSecret,
+            urlScheme: urlScheme
+        )
+    }
+
     static func handleOpenURL(_ url: URL) -> Bool {
         if GIDSignIn.sharedInstance.handle(url) {
             return true
@@ -26,6 +45,9 @@ final class SocialLoginService: ObservableObject {
         if configurationValue(for: "KAKAO_NATIVE_APP_KEY") != nil,
            AuthApi.isKakaoTalkLoginUrl(url) {
             return AuthController.handleOpenUrl(url: url)
+        }
+        if isNaverConfigured {
+            return NidOAuth.shared.handleURL(url)
         }
         return false
     }
@@ -41,6 +63,8 @@ final class SocialLoginService: ObservableObject {
             restoreGoogleSession(session)
         case .kakao:
             restoreKakaoSession(session)
+        case .naver:
+            restoreNaverSession(session)
         case .apple, .none:
             break
         }
@@ -102,6 +126,30 @@ final class SocialLoginService: ObservableObject {
         }
     }
 
+    func signInWithNaver(_ session: UserSession) {
+        guard Self.isNaverConfigured else {
+            session.updateStatus("Naver OAuth 앱 정보를 먼저 설정해 주세요.")
+            return
+        }
+
+        isLoading = true
+        session.updateStatus("Naver 로그인을 진행하고 있습니다.")
+        NidOAuth.shared.requestLogin { [weak self] result in
+            Task { @MainActor in
+                switch result {
+                case let .success(loginResult):
+                    self?.loadNaverProfile(
+                        accessToken: loginResult.accessToken.tokenString,
+                        session: session
+                    )
+                case let .failure(error):
+                    self?.isLoading = false
+                    session.updateStatus("Naver 로그인에 실패했습니다: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
     func signOut(_ session: UserSession) {
         switch session.provider {
         case .google:
@@ -119,6 +167,9 @@ final class SocialLoginService: ObservableObject {
                     }
                 }
             }
+        case .naver:
+            NidOAuth.shared.logout()
+            session.signOut()
         case .apple, .none:
             session.signOut()
         }
@@ -163,6 +214,28 @@ final class SocialLoginService: ObservableObject {
         }
     }
 
+    private func restoreNaverSession(_ session: UserSession) {
+        guard Self.isNaverConfigured,
+              let accessToken = NidOAuth.shared.accessToken,
+              !accessToken.isExpired else {
+            session.signOut(message: "Naver 로그인 상태가 없어 게스트로 전환했습니다.")
+            return
+        }
+
+        isLoading = true
+        NidOAuth.shared.verifyAccessToken(accessToken.tokenString) { [weak self] result in
+            Task { @MainActor in
+                switch result {
+                case .success(true):
+                    self?.loadNaverProfile(accessToken: accessToken.tokenString, session: session)
+                case .success(false), .failure:
+                    self?.isLoading = false
+                    session.signOut(message: "Naver 로그인 상태가 만료되어 게스트로 전환했습니다.")
+                }
+            }
+        }
+    }
+
     private func loadKakaoProfile(_ session: UserSession) {
         UserApi.shared.me { [weak self] user, error in
             Task { @MainActor in
@@ -179,6 +252,32 @@ final class SocialLoginService: ObservableObject {
                 session.signIn(provider: .kakao, userIdentifier: String(identifier), displayName: name)
             }
         }
+    }
+
+    private func loadNaverProfile(accessToken: String, session: UserSession) {
+        NidOAuth.shared.getUserProfile(accessToken: accessToken) { [weak self] result in
+            Task { @MainActor in
+                self?.isLoading = false
+                switch result {
+                case let .success(profile):
+                    guard let identifier = profile["id"], !identifier.isEmpty else {
+                        session.updateStatus("Naver 사용자 정보를 확인하지 못했습니다.")
+                        return
+                    }
+                    let name = profile["nickname"] ?? profile["name"] ?? profile["email"]
+                    session.signIn(provider: .naver, userIdentifier: identifier, displayName: name)
+                case let .failure(error):
+                    session.updateStatus("Naver 사용자 정보 조회에 실패했습니다: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private static var isNaverConfigured: Bool {
+        configurationValue(for: "NAVER_APP_NAME") != nil
+            && configurationValue(for: "NAVER_CLIENT_ID") != nil
+            && configurationValue(for: "NAVER_CLIENT_SECRET") != nil
+            && configurationValue(for: "NAVER_URL_SCHEME") != nil
     }
 
     private static func configurationValue(for key: String) -> String? {

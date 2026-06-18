@@ -6,12 +6,14 @@ enum LoginProvider: String {
     case apple
     case google
     case kakao
+    case naver
 
     var displayName: String {
         switch self {
         case .apple: "Apple"
         case .google: "Google"
         case .kakao: "Kakao"
+        case .naver: "Naver"
         }
     }
 }

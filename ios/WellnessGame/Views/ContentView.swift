@@ -116,6 +116,26 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .disabled(viewModel.isLoading || socialLogin.isLoading)
 
+                Button {
+                    socialLogin.signInWithNaver(userSession)
+                } label: {
+                    HStack {
+                        Text("N")
+                            .font(.headline.bold())
+                        Text("Naver로 로그인")
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        Color(red: 0.01, green: 0.78, blue: 0.35),
+                        in: RoundedRectangle(cornerRadius: 10)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isLoading || socialLogin.isLoading)
+
                 Text("소셜 로그인은 선택 사항입니다. 게스트도 건강 데이터 조회와 XP 동기화를 이용할 수 있습니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
