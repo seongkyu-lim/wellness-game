@@ -99,10 +99,6 @@ final class UserSession: ObservableObject {
         request.requestedScopes = [.fullName, .email]
     }
 
-    func configure(_ request: ASAuthorizationAppleIDRequest) {
-        configureAppleRequest(request)
-    }
-
     func handleAppleResult(_ result: Result<ASAuthorization, Error>) {
         switch result {
         case let .success(authorization):
@@ -119,10 +115,6 @@ final class UserSession: ObservableObject {
                 statusMessage = "Apple 로그인에 실패했습니다: \(error.localizedDescription)"
             }
         }
-    }
-
-    func handle(_ result: Result<ASAuthorization, Error>) {
-        handleAppleResult(result)
     }
 
     func signIn(provider: LoginProvider, userIdentifier: String, displayName: String?) {

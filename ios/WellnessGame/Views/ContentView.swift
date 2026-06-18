@@ -3,11 +3,13 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var userSession: UserSession
+    @StateObject private var socialLogin: SocialLoginService
     @StateObject private var viewModel: DashboardViewModel
 
     init() {
         let userSession = UserSession()
         _userSession = StateObject(wrappedValue: userSession)
+        _socialLogin = StateObject(wrappedValue: SocialLoginService())
         _viewModel = StateObject(wrappedValue: DashboardViewModel(userSession: userSession))
     }
 
@@ -26,8 +28,11 @@ struct ContentView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Wellness Game")
+            .task {
+                socialLogin.restoreSessionIfNeeded(userSession)
+            }
             .overlay {
-                if viewModel.isLoading {
+                if viewModel.isLoading || socialLogin.isLoading {
                     ProgressView()
                         .padding(24)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -55,7 +60,7 @@ struct ContentView: View {
                 Label(userSession.accountLabel, systemImage: userSession.isSignedIn ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle")
                     .font(.headline)
                 Spacer()
-                Text(userSession.isSignedIn ? "로그인" : "비로그인")
+                Text(userSession.provider?.displayName ?? "비로그인")
                     .font(.caption.bold())
                     .foregroundStyle(userSession.isSignedIn ? .green : .secondary)
             }
@@ -66,21 +71,52 @@ struct ContentView: View {
 
             if userSession.isSignedIn {
                 Button("로그아웃") {
-                    userSession.signOut()
+                    socialLogin.signOut(userSession)
                 }
                 .buttonStyle(.bordered)
-                .disabled(viewModel.isLoading)
+                .disabled(viewModel.isLoading || socialLogin.isLoading)
             } else {
                 SignInWithAppleButton(.signIn) { request in
-                    userSession.configure(request)
+                    userSession.configureAppleRequest(request)
                 } onCompletion: { result in
-                    userSession.handle(result)
+                    userSession.handleAppleResult(result)
                 }
                 .signInWithAppleButtonStyle(.black)
                 .frame(height: 48)
-                .disabled(viewModel.isLoading)
+                .disabled(viewModel.isLoading || socialLogin.isLoading)
 
-                Text("로그인은 선택 사항입니다. 게스트도 건강 데이터 조회와 XP 동기화를 이용할 수 있습니다.")
+                Button {
+                    socialLogin.signInWithGoogle(userSession)
+                } label: {
+                    HStack {
+                        Text("G")
+                            .font(.headline.bold())
+                        Text("Google로 로그인")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.bordered)
+                .tint(.primary)
+                .disabled(viewModel.isLoading || socialLogin.isLoading)
+
+                Button {
+                    socialLogin.signInWithKakao(userSession)
+                } label: {
+                    Text("Kakao로 로그인")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color(red: 0.12, green: 0.09, blue: 0.08))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            Color(red: 1.0, green: 0.90, blue: 0.0),
+                            in: RoundedRectangle(cornerRadius: 10)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isLoading || socialLogin.isLoading)
+
+                Text("소셜 로그인은 선택 사항입니다. 게스트도 건강 데이터 조회와 XP 동기화를 이용할 수 있습니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
