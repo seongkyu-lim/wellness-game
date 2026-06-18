@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/wellness_game}
+    url: ${DATABASE_URL:jdbc:mysql://localhost:3306/wellness_game?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${DATABASE_USERNAME:wellness}
     password: ${DATABASE_PASSWORD:wellness}
   jpa:
@@ -13,4 +13,3 @@ spring:
 
 server:
   port: ${PORT:8080}
-

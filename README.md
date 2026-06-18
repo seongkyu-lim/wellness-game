@@ -16,7 +16,7 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
   - 오늘 활동, 획득 XP, 레벨, 다음 레벨 XP, 스탯 표시
 - Spring Boot API
   - `POST /api/health-activities/sync`
-  - PostgreSQL 활동 로그와 캐릭터 저장
+  - MySQL 활동 로그와 캐릭터 저장
   - 걸음·운동·수면 XP 계산
   - 여러 단계 레벨업 및 잔여 XP 이월
   - 활동별 스탯 증가
@@ -33,11 +33,11 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 
 ```text
 .
-├── backend/                     Spring Boot + PostgreSQL API
+├── backend/                     Spring Boot + MySQL API
 ├── ios/
 │   ├── WellnessGame.xcodeproj   Xcode 프로젝트
 │   └── WellnessGame/            SwiftUI·HealthKit 소스
-└── docker-compose.yml           PostgreSQL + API
+└── docker-compose.yml           MySQL + API
 ```
 
 ## 백엔드 실행
@@ -46,7 +46,7 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 
 - Java 17 이상
 - Maven 3.6.3 이상
-- PostgreSQL 17 또는 Docker
+- MySQL 8.4 LTS 또는 Docker
 
 가장 간단한 실행 방법:
 
@@ -55,15 +55,15 @@ docker compose up --build
 ```
 
 - API: `http://localhost:8080`
-- PostgreSQL host port: `15432`
+- MySQL host port: `13306`
 - DB/user/password: `wellness_game` / `wellness` / `wellness`
 
 로컬 Maven 실행:
 
 ```bash
-docker compose up -d postgres
+docker compose up -d mysql
 cd backend
-DATABASE_URL=jdbc:postgresql://localhost:15432/wellness_game \
+DATABASE_URL='jdbc:mysql://localhost:13306/wellness_game?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC' \
 DATABASE_USERNAME=wellness \
 DATABASE_PASSWORD=wellness \
 mvn spring-boot:run
@@ -76,7 +76,7 @@ cd backend
 mvn test
 ```
 
-테스트는 PostgreSQL 호환 모드의 인메모리 H2를 사용합니다.
+테스트는 MySQL 호환 모드의 인메모리 H2를 사용합니다.
 
 ## API
 
@@ -207,4 +207,3 @@ mvn test
 - HealthKit anchored query 기반 증분 동기화
 - 개인정보 삭제 API와 보관 기간 정책
 - iOS unit/UI test target 및 실제 기기 통합 테스트
-

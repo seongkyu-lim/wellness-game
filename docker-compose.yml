@@ -1,33 +1,34 @@
 services:
-  postgres:
-    image: postgres:17-alpine
+  mysql:
+    image: mysql:8.4.10
     environment:
-      POSTGRES_DB: wellness_game
-      POSTGRES_USER: wellness
-      POSTGRES_PASSWORD: wellness
+      MYSQL_DATABASE: wellness_game
+      MYSQL_USER: wellness
+      MYSQL_PASSWORD: wellness
+      MYSQL_ROOT_PASSWORD: wellness-root
     ports:
-      - "15432:5432"
+      - "13306:3306"
     volumes:
-      - wellness-postgres:/var/lib/postgresql/data
+      - wellness-mysql:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wellness -d wellness_game"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u wellness -pwellness --silent"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
+      start_period: 20s
 
   backend:
     build:
       context: ./backend
     environment:
-      DATABASE_URL: jdbc:postgresql://postgres:5432/wellness_game
+      DATABASE_URL: jdbc:mysql://mysql:3306/wellness_game?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DATABASE_USERNAME: wellness
       DATABASE_PASSWORD: wellness
     ports:
       - "8080:8080"
     depends_on:
-      postgres:
+      mysql:
         condition: service_healthy
 
 volumes:
-  wellness-postgres:
-
+  wellness-mysql:
