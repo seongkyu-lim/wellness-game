@@ -1,104 +1,90 @@
-# wellness-game
+# Wellness Game
 
+Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송하고 XP·레벨·캐릭터 스탯으로 변환하는 iOS + Spring Boot MVP입니다.
 
+웹 프로토타입은 포함하지 않습니다. HealthKit은 서버나 브라우저에서 직접 읽을 수 없으므로 iOS 앱이 사용자의 명시적 권한을 받은 뒤 필요한 요약 데이터만 서버에 전송합니다.
 
-너는 iOS 앱 + 백엔드 개발을 함께 진행하는 시니어 풀스택 개발 에이전트다.
+## 구현 범위
 
-목표:
-Apple 건강/피트니스 데이터를 활용한 “생활형 RPG” 앱의 실제 동작 가능한 MVP를 만든다.
-웹 프로토타입은 만들지 않는다.
-바로 iOS 앱에서 HealthKit 데이터를 읽고, 서버 API로 전송한 뒤, 서버에서 XP와 레벨업을 계산하는 구조로 구현한다.
+- SwiftUI iOS 앱
+  - HealthKit 사용 가능 여부 확인 및 읽기 권한 요청
+  - 오늘 걸음 수 합계 조회
+  - 오늘 `HKWorkout` 조회 및 운동 유형 매핑
+  - 지난 밤 수면 구간 병합, 수면 시간 및 MVP 수면 점수 계산
+  - Mock 데이터 fallback
+  - async/await 기반 서버 동기화
+  - 오늘 활동, 획득 XP, 레벨, 다음 레벨 XP, 스탯 표시
+- Spring Boot API
+  - `POST /api/health-activities/sync`
+  - PostgreSQL 활동 로그와 캐릭터 저장
+  - 걸음·운동·수면 XP 계산
+  - 여러 단계 레벨업 및 잔여 XP 이월
+  - 활동별 스탯 증가
+  - `external_key` unique constraint 기반 중복 XP 방지
+- 테스트
+  - XP 계산
+  - 걸음 XP 상한
+  - 수면 점수와 보너스/감소
+  - 여러 단계 레벨업
+  - 중복 활동 방지
+  - API 요청/응답
 
-핵심 컨셉:
-- 사용자의 실제 Apple 건강/피트니스 데이터를 RPG 경험치로 변환한다.
-- 운동 완료, 수면 완료, 걸음 수 데이터를 기반으로 XP를 계산한다.
-- XP가 누적되면 캐릭터가 레벨업한다.
-- 첫 MVP는 복잡한 게임이 아니라 “건강 데이터 → 점수 계산 → 캐릭터 성장” 루프를 완성하는 것이 목표다.
+## 프로젝트 구조
 
-중요 전제:
-- 웹 브라우저에서는 HealthKit에 직접 접근할 수 없다.
-- 따라서 iOS 앱에서 HealthKit 데이터를 읽어야 한다.
-- HealthKit 데이터는 사용자의 명시적 권한을 받아야 한다.
-- 서버는 Apple HealthKit에 직접 접근할 수 없다.
-- iOS 앱이 HealthKit 데이터를 읽고 서버로 전송한다.
-- HealthKit 실제 연동을 구현한다.
-- Mock 데이터는 테스트용 fallback으로만 둔다.
+```text
+.
+├── backend/                     Spring Boot + PostgreSQL API
+├── ios/
+│   ├── WellnessGame.xcodeproj   Xcode 프로젝트
+│   └── WellnessGame/            SwiftUI·HealthKit 소스
+└── docker-compose.yml           PostgreSQL + API
+```
 
-권장 기술 스택:
-1. iOS 앱
-   - 우선 Swift + SwiftUI로 구현한다.
-   - HealthKit 연동은 Apple HealthKit framework를 사용한다.
-   - iOS 앱에서 HealthKit 권한 요청, 데이터 조회, 서버 전송까지 구현한다.
+## 백엔드 실행
 
-2. Backend
-   - Spring Boot + Java 구현한다.
-   - 기존 백엔드 프로젝트가 있으면 현재 구조를 분석하고 거기에 맞춘다.
-   - 없으면 Spring Boot 기준으로 신규 구성한다.
-   - DB는 PostgreSQL 또는 MySQL 중 현재 프로젝트에 맞춰 선택한다.
-   - 우선 인증은 단순화한다. userId는 임시 UUID 또는 고정 테스트 유저를 사용한다.
+요구 사항:
 
-개발 단계:
+- Java 17 이상
+- Maven 3.6.3 이상
+- PostgreSQL 17 또는 Docker
 
-STEP 1. 프로젝트 구조 분석
-- 현재 프로젝트 구조를 먼저 확인한다.
-- iOS 앱 프로젝트가 있는지 확인한다.
-- 백엔드 프로젝트가 있는지 확인한다.
-- 없다면 각각 최소 MVP 프로젝트 구조를 제안하고 생성한다.
-- 어떤 파일을 생성/수정할지 먼저 짧게 설명한다.
+가장 간단한 실행 방법:
 
-STEP 2. iOS HealthKit 권한 요청 구현
-- HealthKit 사용 가능 여부를 체크한다.
-- 다음 데이터 읽기 권한을 요청한다.
-  - stepCount
-  - workouts
-  - activeEnergyBurned
-  - heartRate
-  - sleepAnalysis
-- Info.plist에 필요한 HealthKit permission description을 추가한다.
-- HealthKit capability 설정이 필요하다는 안내를 코드 주석 또는 README에 남긴다.
+```bash
+docker compose up --build
+```
 
-구현해야 할 iOS 파일 예시:
-- HealthKitManager.swift
-- HealthDataProvider.swift
-- AppleHealthKitProvider.swift
-- MockHealthDataProvider.swift
-- HealthActivityDTO.swift
+- API: `http://localhost:8080`
+- PostgreSQL host port: `15432`
+- DB/user/password: `wellness_game` / `wellness` / `wellness`
 
-STEP 3. HealthKit 데이터 조회 구현
-오늘 기준으로 다음 데이터를 읽는다.
+로컬 Maven 실행:
 
-1. 걸음 수
-- 오늘 00:00부터 현재까지 stepCount 합계 조회
+```bash
+docker compose up -d postgres
+cd backend
+DATABASE_URL=jdbc:postgresql://localhost:15432/wellness_game \
+DATABASE_USERNAME=wellness \
+DATABASE_PASSWORD=wellness \
+mvn spring-boot:run
+```
 
-2. 운동 기록
-- 오늘의 HKWorkout 조회
-- workoutActivityType
-- startDate
-- endDate
-- duration
-- totalEnergyBurned
-- totalDistance
-- 가능하면 swimming/running/walking 등 activity type 매핑
+테스트:
 
-3. 수면 데이터
-- 지난 밤 기준 sleepAnalysis 조회
-- asleep 상태의 총 시간을 계산
-- 수면 점수는 Apple이 직접 제공하지 않을 수 있으므로 MVP에서는 자체 계산한다.
-- 수면 시간 기반으로 sleepScore를 계산한다.
-  - 7~9시간: 90
-  - 6~7시간: 70
-  - 5~6시간: 50
-  - 5시간 미만: 30
+```bash
+cd backend
+mvn test
+```
 
-STEP 4. iOS 내부 Activity DTO 변환
-HealthKit 원본 객체를 서버 전송용 DTO로 변환한다.
+테스트는 PostgreSQL 호환 모드의 인메모리 H2를 사용합니다.
 
-Activity 타입:
-- STEPS
-- WORKOUT
-- SLEEP
+## API
 
-DTO 예시:
+### `POST /api/health-activities/sync`
+
+요청 예시:
+
+```json
 {
   "userId": "test-user",
   "date": "2026-06-17",
@@ -113,233 +99,112 @@ DTO 예시:
       "durationMinutes": 45,
       "calories": 420,
       "distanceMeters": 1200,
-      "startedAt": "...",
-      "endedAt": "..."
+      "startedAt": "2026-06-17T07:00:00Z",
+      "endedAt": "2026-06-17T07:45:00Z"
     },
     {
       "type": "SLEEP",
       "sleepMinutes": 450,
-      "sleepScore": 86,
-      "startedAt": "...",
-      "endedAt": "..."
+      "sleepScore": 90,
+      "startedAt": "2026-06-16T22:30:00Z",
+      "endedAt": "2026-06-17T06:00:00Z"
     }
   ]
 }
+```
 
-STEP 5. iOS 서버 전송 구현
-- URLSession 또는 async/await 기반 NetworkClient를 만든다.
-- POST /api/health-activities/sync 로 오늘 활동 데이터를 전송한다.
-- 서버 응답으로 XP 계산 결과와 캐릭터 상태를 받는다.
-- 네트워크 실패 시 에러 메시지를 표시한다.
-- 나중에 재시도 가능하도록 구조를 분리한다.
+응답에는 `gainedXp`, `levelUp`, 현재 캐릭터 상태와 활동별 XP 결과가 포함됩니다. 동일한 활동을 다시 보내면 `duplicate: true`, `gainedXp: 0`으로 반환합니다.
 
-iOS 화면 MVP:
-- SwiftUI로 간단한 화면을 만든다.
-- 버튼:
-  - HealthKit 권한 요청
-  - 오늘 데이터 불러오기
-  - 서버에 동기화
-- 표시:
-  - 걸음 수
-  - 운동 목록
-  - 수면 시간
-  - 오늘 획득 XP
-  - 현재 레벨
-  - 현재 XP / 다음 레벨 필요 XP
-  - 레벨업 여부
+중복 키:
 
-STEP 6. 백엔드 API 구현
-Spring Boot 기준으로 다음 API를 구현한다.
+- `STEPS`: `userId + date + STEPS`
+- `WORKOUT`: `userId + startedAt + endedAt + workoutType`
+- `SLEEP`: `userId + startedAt + endedAt + SLEEP`
 
-1. Health activity sync API
-POST /api/health-activities/sync
+## XP 규칙
 
-Request:
-{
-  "userId": "test-user",
-  "date": "2026-06-17",
-  "activities": [...]
-}
+- 걸음: `steps / 200`, 최대 80 XP
+- 운동: `durationMinutes × 2 + calories × 0.1 + distanceMeters × 0.01`
+  - 수영 +20, 달리기 +10, 걷기 +5
+- 수면:
+  - 기본 XP는 수면 점수
+  - 7~9시간이면 +30
+  - 5시간 미만이면 최종 XP 50% 감소
+- 다음 레벨 요구 XP: `현재 level × 100`
+- 요구 XP를 넘으면 남은 XP를 이월하며 여러 레벨 상승을 처리합니다.
 
-Response:
-{
-  "userId": "test-user",
-  "date": "2026-06-17",
-  "gainedXp": 280,
-  "levelUp": true,
-  "character": {
-    "level": 3,
-    "currentXp": 40,
-    "totalXp": 340,
-    "nextLevelXp": 300,
-    "stats": {
-      "str": 3,
-      "vit": 5,
-      "int": 1,
-      "discipline": 4,
-      "recovery": 2
-    }
-  },
-  "activityResults": [
-    {
-      "type": "WORKOUT",
-      "source": "SWIMMING",
-      "gainedXp": 152,
-      "message": "수영 완료 +152 XP"
-    },
-    {
-      "type": "SLEEP",
-      "gainedXp": 86,
-      "message": "수면 회복 보너스 +86 XP"
-    },
-    {
-      "type": "STEPS",
-      "gainedXp": 42,
-      "message": "걸음 수 보상 +42 XP"
-    }
-  ]
-}
+수면 점수:
 
-STEP 7. 백엔드 도메인 모델 설계
-최소 도메인:
-- UserCharacter
-- CharacterStats
-- HealthActivity
-- ActivityXpResult
+- 7~9시간: 90
+- 6~7시간: 70
+- 5~6시간: 50
+- 5시간 미만: 30
 
-DB 저장:
-- character
-  - id
-  - user_id
-  - level
-  - current_xp
-  - total_xp
-  - str
-  - vit
-  - int_stat
-  - discipline
-  - recovery
-  - created_at
-  - updated_at
+## iOS 앱 실행
 
-- health_activity_log
-  - id
-  - user_id
-  - activity_date
-  - type
-  - source_type
-  - duration_minutes
-  - calories
-  - distance_meters
-  - steps
-  - sleep_minutes
-  - sleep_score
-  - gained_xp
-  - external_key
-  - started_at
-  - ended_at
-  - created_at
+요구 사항:
 
-중복 방지:
-- 같은 운동/수면 데이터가 여러 번 전송될 수 있으므로 중복 적립을 방지한다.
-- external_key를 만든다.
-- 예:
-  - WORKOUT: userId + startedAt + endedAt + workoutType
-  - SLEEP: userId + startedAt + endedAt + "SLEEP"
-  - STEPS: userId + date + "STEPS"
-- DB에 unique constraint를 둔다.
-- 이미 처리된 activity는 XP를 다시 지급하지 않는다.
+- macOS와 Xcode 16 이상
+- iOS 17 이상 실제 기기 권장
+- HealthKit을 사용할 수 있는 Apple Developer 서명 설정
 
-STEP 8. XP 계산 로직 구현
-서버에서 계산한다.
-iOS에서는 원본 데이터를 보내고, 게임 로직은 서버가 책임진다.
+1. Xcode에서 `ios/WellnessGame.xcodeproj`를 엽니다.
+2. `WellnessGame` target의 Signing & Capabilities에서 Team과 고유 Bundle Identifier를 선택합니다.
+3. `+ Capability`에서 **HealthKit**을 추가합니다.
+4. 백엔드를 실행합니다.
+5. 실제 iPhone을 선택하고 앱을 실행합니다.
+6. 앱에서 순서대로 권한 요청 → 오늘 데이터 불러오기 → 서버 동기화를 누릅니다.
 
-점수 계산 규칙:
-1. Steps XP
-- steps / 200
-- 최대 80 XP 제한
+프로젝트에는 `WellnessGame.entitlements`가 포함되어 있지만, Apple Developer Team과 App ID에 HealthKit capability가 활성화되어 있어야 실제 서명이 됩니다.
 
-2. Workout XP
-- durationMinutes * 2
-- calories * 0.1
-- distanceMeters * 0.01
-- swimming bonus +20
-- running bonus +10
-- walking bonus +5
+### Info.plist 권한 문구
 
-3. Sleep XP
-- sleepScore 그대로 기본 XP
-- 7~9시간이면 +30 recovery bonus
-- 5시간 미만이면 XP 50% 감소
+`ios/WellnessGame/Resources/Info.plist`에 다음 키가 포함되어 있습니다.
 
-4. Level system
-- nextLevelXp = level * 100
-- XP가 nextLevelXp 이상이면 레벨업
-- 여러 레벨업도 처리 가능해야 한다.
-- 남은 XP는 이월한다.
+- `NSHealthShareUsageDescription`
+- `NSHealthUpdateUsageDescription`
 
-5. Stats 증가
-- WORKOUT:
-  - str +1
-  - vit +1
-- SWIMMING:
-  - vit +2
-- STEPS:
-  - discipline +1
-- SLEEP:
-  - recovery +1
-  - 7시간 이상이면 vit +1
+앱은 읽기 권한만 요청합니다. `NSHealthUpdateUsageDescription`은 HealthKit capability 검토와 향후 설정 호환성을 위해 앱이 데이터를 기록하지 않는다는 점을 명시합니다.
 
-STEP 9. 테스트 작성
-가능하면 다음 테스트를 작성한다.
-- XP 계산 테스트
-- 레벨업 테스트
-- 중복 activity 처리 테스트
-- 수면 점수 계산 테스트
-- steps 최대 XP 제한 테스트
+요청하는 읽기 타입:
 
-STEP 10. README 작성
-README에 다음 내용을 정리한다.
-- 실행 방법
-- iOS HealthKit capability 설정 방법
-- Info.plist 권한 문구
-- 서버 실행 방법
-- API endpoint
-- HealthKit 데이터 접근 제한 사항
-- 실제 기기에서 테스트해야 하는 이유
-- Simulator에서는 HealthKit 데이터가 제한적일 수 있다는 점
-- App Store 심사 시 개인정보 처리방침과 HealthKit 사용 목적 설명이 필요하다는 점
+- `stepCount`
+- `workoutType`
+- `activeEnergyBurned`
+- `heartRate`
+- `sleepAnalysis`
 
-구현 시 주의사항:
-- HealthKit 데이터는 민감정보이므로 최소 데이터만 요청한다.
-- 사용자가 권한을 거부해도 앱이 죽지 않게 처리한다.
-- iOS 앱에는 의료 조언처럼 보이는 문구를 넣지 않는다.
-- “진단”, “치료”, “의학적 판단” 표현은 피한다.
-- 데이터는 XP 계산과 캐릭터 성장에만 사용한다는 구조로 만든다.
-- 광고/마케팅 목적 사용은 고려하지 않는다.
-- 서버에는 가능한 한 필요한 요약 데이터만 저장한다.
-- 원본 HealthKit 객체 전체를 저장하지 않는다.
+심박수는 MVP 권한 범위에는 포함되지만 서버 전송이나 XP 계산에는 사용하지 않습니다.
 
-최종 완료 기준:
-- iOS 앱에서 HealthKit 권한을 요청할 수 있다.
-- iOS 앱에서 오늘 걸음 수를 조회할 수 있다.
-- iOS 앱에서 오늘 운동 기록을 조회할 수 있다.
-- iOS 앱에서 지난 밤 수면 데이터를 조회할 수 있다.
-- iOS 앱에서 조회한 데이터를 서버 DTO로 변환할 수 있다.
-- iOS 앱에서 서버 API로 데이터를 전송할 수 있다.
-- 백엔드에서 활동 데이터를 저장할 수 있다.
-- 백엔드에서 XP를 계산할 수 있다.
-- 백엔드에서 레벨업을 처리할 수 있다.
-- 백엔드에서 중복 XP 적립을 방지할 수 있다.
-- iOS 앱에서 서버 응답을 받아 캐릭터 성장 결과를 표시할 수 있다.
-- README에 실행 방법과 HealthKit 설정 방법이 정리되어 있다.
+### 실제 기기 서버 주소
 
-진행 방식:
-1. 먼저 현재 프로젝트 구조를 분석한다.
-2. iOS 앱과 백엔드 중 어떤 프로젝트가 있는지 확인한다.
-3. 없다면 SwiftUI iOS 앱과 Spring Boot 백엔드 MVP 구조를 생성한다.
-4. 단계별로 구현한다.
-5. 각 단계가 끝날 때마다 무엇을 구현했는지 요약한다.
-6. 마지막에 실행 방법, 수정 파일 목록, 남은 TODO를 알려준다.
+기본 API 주소는 `http://127.0.0.1:8080`입니다. 이는 Simulator에서 Mac의 로컬 서버에 접속할 때 사용할 수 있습니다.
 
+실제 iPhone에서는 `ios/WellnessGame/Networking/NetworkClient.swift`의 `baseURL`을 Mac 또는 배포 서버의 접근 가능한 HTTPS 주소로 변경해야 합니다. 로컬 네트워크를 사용할 경우 iPhone과 Mac을 같은 네트워크에 연결하고 Mac의 LAN IP를 사용하세요.
+
+운영 배포에서는 HTTPS만 사용해야 합니다.
+
+## HealthKit 제한과 개인정보
+
+- HealthKit 데이터는 민감정보입니다. 이 MVP는 XP 계산에 필요한 요약 데이터만 서버에 보냅니다.
+- 원본 `HKObject`나 심박수 샘플 전체를 서버에 저장하지 않습니다.
+- 사용자가 권한을 거부해도 앱은 종료되지 않고 오류 메시지를 표시합니다.
+- HealthKit은 실제 기기에서 테스트해야 합니다. Simulator의 HealthKit 데이터는 없거나 제한적일 수 있습니다.
+- 이 앱은 진단, 치료, 의학적 판단을 제공하지 않습니다.
+- App Store 제출 전 개인정보 처리방침, 데이터 보관/삭제 정책, HealthKit 사용 목적을 정확히 작성해야 합니다.
+- HealthKit 데이터를 광고, 마케팅 또는 데이터 판매에 사용해서는 안 됩니다.
+
+## Mock 데이터
+
+화면의 `Mock 데이터 사용`을 켜면 HealthKit 대신 테스트용 걸음·수영·수면 데이터가 로드됩니다. 실제 HealthKit 연동이 기본이며 Mock은 개발 fallback입니다.
+
+## MVP 이후 TODO
+
+- 고정 `test-user` 대신 Sign in with Apple 기반 사용자 인증
+- 운영 DB migration 도구(Flyway/Liquibase)
+- 서버 HTTPS 배포 및 iOS 환경별 API 설정
+- 백그라운드 동기화와 실패 요청 재시도 저장소
+- HealthKit anchored query 기반 증분 동기화
+- 개인정보 삭제 API와 보관 기간 정책
+- iOS unit/UI test target 및 실제 기기 통합 테스트
 
