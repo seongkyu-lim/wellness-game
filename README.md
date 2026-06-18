@@ -7,7 +7,7 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 ## 구현 범위
 
 - SwiftUI iOS 앱
-  - 선택형 Apple·Google·Kakao 로그인과 로그아웃
+  - 선택형 Apple·Google·Kakao·Naver 로그인과 로그아웃
   - 로그인 없이 유지되는 기기별 게스트 계정
   - HealthKit 사용 가능 여부 확인 및 읽기 권한 요청
   - 오늘 걸음 수 합계 조회
@@ -162,12 +162,13 @@ mvn test
 
 ### 선택형 소셜 로그인과 게스트 이용
 
-- Apple, Google, Kakao 로그인은 모두 선택 사항입니다. 로그인 화면을 건너뛰어도 HealthKit 조회, 서버 동기화, XP 획득 기능을 이용할 수 있습니다.
+- Apple, Google, Kakao, Naver 로그인은 모두 선택 사항입니다. 로그인 화면을 건너뛰어도 HealthKit 조회, 서버 동기화, XP 획득 기능을 이용할 수 있습니다.
 - 최초 실행 시 기기 안에 임의의 게스트 식별자를 만들고 `UserDefaults`에 유지합니다. 앱을 다시 실행해도 같은 게스트 캐릭터를 사용합니다.
-- 로그인에 성공하면 공급자가 제공한 고유 사용자 식별자를 `apple:`, `google:`, `kakao:` 접두사와 함께 사용해 캐릭터를 분리합니다.
+- 로그인에 성공하면 공급자가 제공한 고유 사용자 식별자를 `apple:`, `google:`, `kakao:`, `naver:` 접두사와 함께 사용해 캐릭터를 분리합니다.
 - 로그아웃하면 기존 게스트 식별자로 돌아가므로 게스트 진행 상황이 삭제되지 않습니다.
 - Apple은 이름과 이메일을 최초 승인 시에만 제공할 수 있으므로 앱은 처음 받은 표시 이름을 기기에 저장합니다.
 - Google 로그인은 GoogleSignIn iOS SDK 9.2 이상, Kakao 로그인은 Kakao iOS SDK 2.28 이상을 Swift Package Manager로 사용합니다.
+- Naver 로그인은 네이버 아이디로 로그인 iOS SDK 5.1 이상을 Swift Package Manager로 사용합니다.
 - 현재 MVP 서버는 앱이 보낸 사용자 식별자를 신뢰합니다. 운영 서비스에서는 각 공급자의 ID 토큰을 서버에서 검증하고 자체 세션을 발급해야 합니다.
 
 ### Google 로그인 설정
@@ -190,6 +191,21 @@ mvn test
 `Info.plist`에는 카카오톡 실행 허용 스킴과 `kakao${NATIVE_APP_KEY}` 콜백 스킴이 포함되어 있습니다.
 
 공식 설정 문서: [Kakao iOS SDK 시작하기](https://developers.kakao.com/docs/ko/ios/getting-started), [Kakao 로그인 iOS](https://developers.kakao.com/docs/ko/kakaologin/ios)
+
+### Naver 로그인 설정
+
+1. [네이버 개발자 센터](https://developers.naver.com/apps/)에서 애플리케이션을 등록하고 **네이버 로그인** API를 추가합니다.
+2. iOS 환경에 앱의 실제 Bundle Identifier와 고유한 URL Scheme을 등록합니다.
+3. Xcode의 `WellnessGame` target → Build Settings → User-Defined에서 다음 값을 교체합니다.
+   - `NAVER_APP_NAME`: 네이버 로그인 화면에 표시할 서비스 이름
+   - `NAVER_CLIENT_ID`: 발급받은 클라이언트 아이디
+   - `NAVER_CLIENT_SECRET`: 발급받은 클라이언트 시크릿
+   - `NAVER_URL_SCHEME`: 네이버 개발자 센터에 등록한 콜백 URL Scheme
+4. 네이버 개발자 센터의 제공 정보에서 서비스에 필요한 프로필 항목을 선택합니다.
+
+앱은 네이버 앱이 설치되어 있으면 네이버 앱을 우선 사용하고, 그렇지 않으면 인앱 브라우저로 로그인합니다. `Info.plist`에는 `naversearchapp`, `naversearchthirdlogin` 조회 스킴과 등록한 콜백 URL Scheme이 포함됩니다.
+
+공식 설정 문서: [네이버 아이디로 로그인 iOS](https://developers.naver.com/docs/login/ios/ios.md)
 
 ### Info.plist 권한 문구
 
@@ -234,7 +250,7 @@ mvn test
 
 ## MVP 이후 TODO
 
-- Apple·Google·Kakao ID token 서버 검증과 자체 세션 발급
+- Apple·Google·Kakao·Naver 토큰 서버 검증과 자체 세션 발급
 - 게스트 진행 상황을 소셜 계정으로 이전하는 계정 연결 기능
 - 운영 DB migration 도구(Flyway/Liquibase)
 - 서버 HTTPS 배포 및 iOS 환경별 API 설정
