@@ -1,0 +1,16 @@
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+backend/target/
+backend/.classpath
+backend/.project
+backend/.settings/
+
+ios/**/xcuserdata/
+ios/**/DerivedData/
+ios/**/*.xcuserstate
+
+.env
+

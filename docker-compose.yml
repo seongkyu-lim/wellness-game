@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: wellness_game
+      POSTGRES_USER: wellness
+      POSTGRES_PASSWORD: wellness
+    ports:
+      - "15432:5432"
+    volumes:
+      - wellness-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wellness -d wellness_game"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/wellness_game
+      DATABASE_USERNAME: wellness
+      DATABASE_PASSWORD: wellness
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  wellness-postgres:
+
