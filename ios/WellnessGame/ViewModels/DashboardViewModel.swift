@@ -12,18 +12,18 @@ final class DashboardViewModel: ObservableObject {
     private let appleProvider: HealthDataProvider
     private let mockProvider: HealthDataProvider
     private let networkClient: NetworkClient
-    private let userId: String
+    private let userSession: UserSession
 
     init(
         appleProvider: HealthDataProvider = AppleHealthKitProvider(),
         mockProvider: HealthDataProvider = MockHealthDataProvider(),
         networkClient: NetworkClient = NetworkClient(),
-        userId: String = "test-user"
+        userSession: UserSession
     ) {
         self.appleProvider = appleProvider
         self.mockProvider = mockProvider
         self.networkClient = networkClient
-        self.userId = userId
+        self.userSession = userSession
     }
 
     var activeProvider: HealthDataProvider {
@@ -56,7 +56,7 @@ final class DashboardViewModel: ObservableObject {
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.dateFormat = "yyyy-MM-dd"
             let request = HealthActivitySyncRequest(
-                userId: userId,
+                userId: userSession.userId,
                 date: formatter.string(from: snapshot.date),
                 activities: snapshot.activities
             )

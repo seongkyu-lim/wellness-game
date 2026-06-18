@@ -18,6 +18,7 @@
 		A10000000000000000000009 /* MockHealthDataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* MockHealthDataProvider.swift */; };
 		A1000000000000000000000A /* NetworkClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* NetworkClient.swift */; };
 		A1000000000000000000000B /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* HealthKit.framework */; };
+		A1000000000000000000000C /* UserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* UserSession.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,7 @@
 		B1000000000000000000000C /* WellnessGame.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WellnessGame.entitlements; sourceTree = "<group>"; };
 		B1000000000000000000000D /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		B1000000000000000000000E /* WellnessGame.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WellnessGame.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1000000000000000000000F /* UserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSession.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -62,6 +64,7 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000001 /* WellnessGameApp.swift */,
+				D1000000000000000000000B /* Authentication */,
 				D10000000000000000000003 /* Models */,
 				D10000000000000000000004 /* Health */,
 				D10000000000000000000005 /* Networking */,
@@ -139,6 +142,14 @@
 				B1000000000000000000000C /* WellnessGame.entitlements */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		D1000000000000000000000B /* Authentication */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000000F /* UserSession.swift */,
+			);
+			path = Authentication;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -219,6 +230,7 @@
 				A10000000000000000000008 /* AppleHealthKitProvider.swift in Sources */,
 				A10000000000000000000009 /* MockHealthDataProvider.swift in Sources */,
 				A1000000000000000000000A /* NetworkClient.swift in Sources */,
+				A1000000000000000000000C /* UserSession.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -361,4 +373,3 @@
 	};
 	rootObject = E10000000000000000000002 /* Project object */;
 }
-
