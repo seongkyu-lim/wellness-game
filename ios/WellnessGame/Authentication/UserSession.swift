@@ -2,16 +2,35 @@ import AuthenticationServices
 import Combine
 import Foundation
 
+enum LoginProvider: String {
+    case apple
+    case google
+    case kakao
+
+    var displayName: String {
+        switch self {
+        case .apple: "Apple"
+        case .google: "Google"
+        case .kakao: "Kakao"
+        }
+    }
+}
+
 @MainActor
 final class UserSession: ObservableObject {
-    @Published private(set) var appleUserIdentifier: String?
+    @Published private(set) var provider: LoginProvider?
+    @Published private(set) var providerUserIdentifier: String?
     @Published private(set) var displayName: String?
     @Published private(set) var statusMessage = "로그인하지 않아도 모든 기본 기능을 사용할 수 있습니다."
 
     private enum Key {
         static let guestIdentifier = "auth.guestIdentifier"
-        static let appleUserIdentifier = "auth.appleUserIdentifier"
+        static let provider = "auth.provider"
+        static let providerUserIdentifier = "auth.providerUserIdentifier"
         static let displayName = "auth.displayName"
+
+        // Migration keys used by the first Apple-only session implementation.
+        static let legacyAppleUserIdentifier = "auth.appleUserIdentifier"
     }
 
     private let defaults: UserDefaults
@@ -33,45 +52,61 @@ final class UserSession: ObservableObject {
             guestIdentifier = newGuestIdentifier
         }
 
-        appleUserIdentifier = defaults.string(forKey: Key.appleUserIdentifier)
+        let storedProvider = defaults.string(forKey: Key.provider).flatMap(LoginProvider.init(rawValue:))
+        let storedIdentifier = defaults.string(forKey: Key.providerUserIdentifier)
+        let legacyAppleIdentifier = defaults.string(forKey: Key.legacyAppleUserIdentifier)
+
+        if let storedProvider, let storedIdentifier {
+            provider = storedProvider
+            providerUserIdentifier = storedIdentifier
+        } else if let legacyAppleIdentifier {
+            provider = .apple
+            providerUserIdentifier = legacyAppleIdentifier
+            defaults.set(LoginProvider.apple.rawValue, forKey: Key.provider)
+            defaults.set(legacyAppleIdentifier, forKey: Key.providerUserIdentifier)
+            defaults.removeObject(forKey: Key.legacyAppleUserIdentifier)
+        }
+
         displayName = defaults.string(forKey: Key.displayName)
 
-        if appleUserIdentifier != nil {
-            statusMessage = "Apple 계정으로 로그인되어 있습니다."
-            Task { await refreshCredentialState() }
+        if let provider {
+            statusMessage = "\(provider.displayName) 계정으로 로그인되어 있습니다."
+            if provider == .apple {
+                Task { await refreshAppleCredentialState() }
+            }
         }
     }
 
     var userId: String {
-        if let appleUserIdentifier {
-            return "apple:\(appleUserIdentifier)"
+        if let provider, let providerUserIdentifier {
+            return "\(provider.rawValue):\(providerUserIdentifier)"
         }
         return "guest:\(guestIdentifier)"
     }
 
     var isSignedIn: Bool {
-        appleUserIdentifier != nil
+        provider != nil && providerUserIdentifier != nil
     }
 
     var accountLabel: String {
         if isSignedIn {
-            return displayName ?? "Apple 사용자"
+            return displayName ?? "\(provider?.displayName ?? "") 사용자"
         }
         return "게스트"
     }
 
-    func configure(_ request: ASAuthorizationAppleIDRequest) {
+    func configureAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
         request.requestedScopes = [.fullName, .email]
     }
 
-    func handle(_ result: Result<ASAuthorization, Error>) {
+    func handleAppleResult(_ result: Result<ASAuthorization, Error>) {
         switch result {
         case let .success(authorization):
             guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
                 statusMessage = "Apple 로그인 정보를 확인하지 못했습니다."
                 return
             }
-            save(credential)
+            saveAppleCredential(credential)
         case let .failure(error):
             if let authorizationError = error as? ASAuthorizationError,
                authorizationError.code == .canceled {
@@ -82,27 +117,48 @@ final class UserSession: ObservableObject {
         }
     }
 
-    func signOut() {
-        appleUserIdentifier = nil
-        displayName = nil
-        defaults.removeObject(forKey: Key.appleUserIdentifier)
-        defaults.removeObject(forKey: Key.displayName)
-        statusMessage = "로그아웃했습니다. 게스트 데이터로 계속 이용합니다."
+    func signIn(provider: LoginProvider, userIdentifier: String, displayName: String?) {
+        self.provider = provider
+        providerUserIdentifier = userIdentifier
+        self.displayName = displayName
+
+        defaults.set(provider.rawValue, forKey: Key.provider)
+        defaults.set(userIdentifier, forKey: Key.providerUserIdentifier)
+        if let displayName, !displayName.isEmpty {
+            defaults.set(displayName, forKey: Key.displayName)
+        } else {
+            defaults.removeObject(forKey: Key.displayName)
+        }
+        statusMessage = "\(provider.displayName) 계정으로 로그인했습니다."
     }
 
-    func refreshCredentialState() async {
-        guard let appleUserIdentifier else {
+    func signOut(message: String = "로그아웃했습니다. 게스트 데이터로 계속 이용합니다.") {
+        provider = nil
+        providerUserIdentifier = nil
+        displayName = nil
+        defaults.removeObject(forKey: Key.provider)
+        defaults.removeObject(forKey: Key.providerUserIdentifier)
+        defaults.removeObject(forKey: Key.displayName)
+        defaults.removeObject(forKey: Key.legacyAppleUserIdentifier)
+        statusMessage = message
+    }
+
+    func updateStatus(_ message: String) {
+        statusMessage = message
+    }
+
+    func refreshAppleCredentialState() async {
+        guard provider == .apple, let providerUserIdentifier else {
             return
         }
 
         do {
-            let state = try await appleIDProvider.credentialState(forUserID: appleUserIdentifier)
+            let state = try await appleIDProvider.credentialState(forUserID: providerUserIdentifier)
             switch state {
             case .authorized:
                 break
             case .revoked, .notFound:
-                signOut()
-                statusMessage = "Apple 로그인 상태가 만료되어 게스트로 전환했습니다."
+                signOut(message: "Apple 로그인 상태가 만료되어 게스트로 전환했습니다.")
             case .transferred:
                 statusMessage = "Apple 계정 이전 상태입니다. 다시 로그인해 주세요."
             @unknown default:
@@ -113,10 +169,7 @@ final class UserSession: ObservableObject {
         }
     }
 
-    private func save(_ credential: ASAuthorizationAppleIDCredential) {
-        appleUserIdentifier = credential.user
-        defaults.set(credential.user, forKey: Key.appleUserIdentifier)
-
+    private func saveAppleCredential(_ credential: ASAuthorizationAppleIDCredential) {
         let formatter = PersonNameComponentsFormatter()
         let providedName = credential.fullName.map { formatter.string(from: $0) }?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -124,10 +177,6 @@ final class UserSession: ObservableObject {
             .compactMap { $0 }
             .first { !$0.isEmpty }
 
-        displayName = resolvedName
-        if let resolvedName {
-            defaults.set(resolvedName, forKey: Key.displayName)
-        }
-        statusMessage = "Apple 계정으로 로그인했습니다."
+        signIn(provider: .apple, userIdentifier: credential.user, displayName: resolvedName)
     }
 }

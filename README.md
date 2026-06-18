@@ -7,7 +7,7 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 ## 구현 범위
 
 - SwiftUI iOS 앱
-  - 선택형 Sign in with Apple 로그인과 로그아웃
+  - 선택형 Apple·Google·Kakao 로그인과 로그아웃
   - 로그인 없이 유지되는 기기별 게스트 계정
   - HealthKit 사용 가능 여부 확인 및 읽기 권한 요청
   - 오늘 걸음 수 합계 조회
@@ -160,14 +160,36 @@ mvn test
 
 프로젝트에는 `WellnessGame.entitlements`가 포함되어 있지만, Apple Developer Team과 App ID에 HealthKit 및 Sign in with Apple capability가 활성화되어 있어야 실제 서명이 됩니다.
 
-### 선택형 Apple 로그인과 게스트 이용
+### 선택형 소셜 로그인과 게스트 이용
 
-- Sign in with Apple은 선택 사항입니다. 로그인 화면을 건너뛰어도 HealthKit 조회, 서버 동기화, XP 획득 기능을 이용할 수 있습니다.
+- Apple, Google, Kakao 로그인은 모두 선택 사항입니다. 로그인 화면을 건너뛰어도 HealthKit 조회, 서버 동기화, XP 획득 기능을 이용할 수 있습니다.
 - 최초 실행 시 기기 안에 임의의 게스트 식별자를 만들고 `UserDefaults`에 유지합니다. 앱을 다시 실행해도 같은 게스트 캐릭터를 사용합니다.
-- Apple 로그인에 성공하면 Apple이 앱에 제공하는 고유 사용자 식별자로 캐릭터를 분리합니다.
+- 로그인에 성공하면 공급자가 제공한 고유 사용자 식별자를 `apple:`, `google:`, `kakao:` 접두사와 함께 사용해 캐릭터를 분리합니다.
 - 로그아웃하면 기존 게스트 식별자로 돌아가므로 게스트 진행 상황이 삭제되지 않습니다.
 - Apple은 이름과 이메일을 최초 승인 시에만 제공할 수 있으므로 앱은 처음 받은 표시 이름을 기기에 저장합니다.
-- 현재 MVP 서버는 앱이 보낸 사용자 식별자를 신뢰합니다. 운영 서비스에서는 Apple identity token을 서버에서 검증하고 자체 세션을 발급해야 합니다.
+- Google 로그인은 GoogleSignIn iOS SDK 9.2 이상, Kakao 로그인은 Kakao iOS SDK 2.28 이상을 Swift Package Manager로 사용합니다.
+- 현재 MVP 서버는 앱이 보낸 사용자 식별자를 신뢰합니다. 운영 서비스에서는 각 공급자의 ID 토큰을 서버에서 검증하고 자체 세션을 발급해야 합니다.
+
+### Google 로그인 설정
+
+1. [Google Cloud Console](https://console.cloud.google.com/apis/credentials)에서 앱의 실제 Bundle Identifier와 일치하는 iOS OAuth 클라이언트를 만듭니다.
+2. Xcode의 `WellnessGame` target → Build Settings → User-Defined에서 다음 값을 교체합니다.
+   - `GOOGLE_CLIENT_ID`: iOS OAuth 클라이언트 ID
+   - `GOOGLE_REVERSED_CLIENT_ID`: Google 설정에 표시되는 reversed client ID
+3. 백엔드 인증을 추가할 때는 별도의 Web application client ID를 만들고 Google ID token의 서명, 발급자, audience를 서버에서 검증합니다.
+
+공식 설정 문서: [Google Sign-In for iOS](https://developers.google.com/identity/sign-in/ios/start-integrating)
+
+### Kakao 로그인 설정
+
+1. [Kakao Developers](https://developers.kakao.com/)에서 앱을 만들고 카카오 로그인을 활성화합니다.
+2. iOS 플랫폼에 앱의 실제 Bundle Identifier를 등록합니다.
+3. Xcode의 `WellnessGame` target → Build Settings → User-Defined에서 `KAKAO_NATIVE_APP_KEY`를 네이티브 앱 키로 교체합니다.
+4. 필요한 사용자 정보는 Kakao Developers의 동의항목에서 활성화합니다. 닉네임이나 이메일 동의가 없으면 앱은 공급자 기본 이름을 표시합니다.
+
+`Info.plist`에는 카카오톡 실행 허용 스킴과 `kakao${NATIVE_APP_KEY}` 콜백 스킴이 포함되어 있습니다.
+
+공식 설정 문서: [Kakao iOS SDK 시작하기](https://developers.kakao.com/docs/ko/ios/getting-started), [Kakao 로그인 iOS](https://developers.kakao.com/docs/ko/kakaologin/ios)
 
 ### Info.plist 권한 문구
 
@@ -212,8 +234,8 @@ mvn test
 
 ## MVP 이후 TODO
 
-- Apple identity token 서버 검증과 자체 세션 발급
-- 게스트 진행 상황을 Apple 계정으로 이전하는 계정 연결 기능
+- Apple·Google·Kakao ID token 서버 검증과 자체 세션 발급
+- 게스트 진행 상황을 소셜 계정으로 이전하는 계정 연결 기능
 - 운영 DB migration 도구(Flyway/Liquibase)
 - 서버 HTTPS 배포 및 iOS 환경별 API 설정
 - 백그라운드 동기화와 실패 요청 재시도 저장소

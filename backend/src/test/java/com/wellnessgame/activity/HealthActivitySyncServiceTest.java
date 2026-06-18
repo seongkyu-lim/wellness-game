@@ -88,5 +88,39 @@ class HealthActivitySyncServiceTest {
         assertThat(response.character().stats().recovery()).isEqualTo(1);
         assertThat(response.character().stats().vit()).isEqualTo(1);
     }
-}
 
+    @Test
+    void keepsGuestAndSocialProviderProgressSeparate() {
+        List<String> userIds = List.of(
+                "guest:device-123",
+                "apple:apple-user-123",
+                "google:google-user-123",
+                "kakao:987654321"
+        );
+
+        for (String userId : userIds) {
+            HealthActivitySyncResponse response = syncService.sync(new HealthActivitySyncRequest(
+                    userId,
+                    LocalDate.of(2026, 6, 18),
+                    List.of(new ActivityPayload(
+                            ActivityType.STEPS,
+                            null,
+                            null,
+                            null,
+                            null,
+                            2_000,
+                            null,
+                            null,
+                            null,
+                            null
+                    ))
+            ));
+
+            assertThat(response.userId()).isEqualTo(userId);
+            assertThat(response.gainedXp()).isEqualTo(10);
+        }
+
+        assertThat(characterRepository.count()).isEqualTo(4);
+        assertThat(activityRepository.count()).isEqualTo(4);
+    }
+}
