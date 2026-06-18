@@ -30,6 +30,14 @@
                 <string>kakao$(KAKAO_NATIVE_APP_KEY)</string>
             </array>
         </dict>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.wellnessgame.naver-login</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>$(NAVER_URL_SCHEME)</string>
+            </array>
+        </dict>
     </array>
     <key>CFBundleShortVersionString</key>
     <string>1.0</string>
@@ -40,11 +48,21 @@
     <key>LSApplicationQueriesSchemes</key>
     <array>
         <string>kakaokompassauth</string>
+        <string>naversearchapp</string>
+        <string>naversearchthirdlogin</string>
     </array>
     <key>GIDClientID</key>
     <string>$(GOOGLE_CLIENT_ID)</string>
     <key>KAKAO_NATIVE_APP_KEY</key>
     <string>$(KAKAO_NATIVE_APP_KEY)</string>
+    <key>NAVER_APP_NAME</key>
+    <string>$(NAVER_APP_NAME)</string>
+    <key>NAVER_CLIENT_ID</key>
+    <string>$(NAVER_CLIENT_ID)</string>
+    <key>NAVER_CLIENT_SECRET</key>
+    <string>$(NAVER_CLIENT_SECRET)</string>
+    <key>NAVER_URL_SCHEME</key>
+    <string>$(NAVER_URL_SCHEME)</string>
     <key>NSHealthShareUsageDescription</key>
     <string>걸음 수, 운동, 활동 에너지, 심박수 및 수면 요약을 XP와 캐릭터 성장으로 변환하기 위해 건강 데이터를 읽습니다.</string>
     <key>NSHealthUpdateUsageDescription</key>

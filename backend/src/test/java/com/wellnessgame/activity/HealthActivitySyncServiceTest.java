@@ -95,7 +95,8 @@ class HealthActivitySyncServiceTest {
                 "guest:device-123",
                 "apple:apple-user-123",
                 "google:google-user-123",
-                "kakao:987654321"
+                "kakao:987654321",
+                "naver:naver-user-123"
         );
 
         for (String userId : userIds) {
@@ -120,7 +121,7 @@ class HealthActivitySyncServiceTest {
             assertThat(response.gainedXp()).isEqualTo(10);
         }
 
-        assertThat(characterRepository.count()).isEqualTo(4);
-        assertThat(activityRepository.count()).isEqualTo(4);
+        assertThat(characterRepository.count()).isEqualTo(5);
+        assertThat(activityRepository.count()).isEqualTo(5);
     }
 }

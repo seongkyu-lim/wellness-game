@@ -24,6 +24,7 @@
 		A1000000000000000000000F /* KakaoSDKCommon in Frameworks */ = {isa = PBXBuildFile; productRef = H10000000000000000000002 /* KakaoSDKCommon */; };
 		A10000000000000000000010 /* KakaoSDKAuth in Frameworks */ = {isa = PBXBuildFile; productRef = H10000000000000000000003 /* KakaoSDKAuth */; };
 		A10000000000000000000011 /* KakaoSDKUser in Frameworks */ = {isa = PBXBuildFile; productRef = H10000000000000000000004 /* KakaoSDKUser */; };
+		A10000000000000000000012 /* NidThirdPartyLogin in Frameworks */ = {isa = PBXBuildFile; productRef = H10000000000000000000005 /* NidThirdPartyLogin */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -55,6 +56,7 @@
 				A1000000000000000000000F /* KakaoSDKCommon in Frameworks */,
 				A10000000000000000000010 /* KakaoSDKAuth in Frameworks */,
 				A10000000000000000000011 /* KakaoSDKUser in Frameworks */,
+				A10000000000000000000012 /* NidThirdPartyLogin in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -184,6 +186,7 @@
 				H10000000000000000000002 /* KakaoSDKCommon */,
 				H10000000000000000000003 /* KakaoSDKAuth */,
 				H10000000000000000000004 /* KakaoSDKUser */,
+				H10000000000000000000005 /* NidThirdPartyLogin */,
 			);
 			productName = WellnessGame;
 			productReference = B1000000000000000000000E /* WellnessGame.app */;
@@ -216,6 +219,7 @@
 			packageReferences = (
 				G10000000000000000000001 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				G10000000000000000000002 /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */,
+				G10000000000000000000003 /* XCRemoteSwiftPackageReference "naveridlogin-sdk-ios-swift" */,
 			);
 			productRefGroup = D10000000000000000000009 /* Products */;
 			projectDirPath = "";
@@ -333,6 +337,10 @@
 				GOOGLE_CLIENT_ID = REPLACE_WITH_GOOGLE_IOS_CLIENT_ID;
 				GOOGLE_REVERSED_CLIENT_ID = REPLACE_WITH_REVERSED_GOOGLE_IOS_CLIENT_ID;
 				KAKAO_NATIVE_APP_KEY = REPLACE_WITH_KAKAO_NATIVE_APP_KEY;
+				NAVER_APP_NAME = "Wellness Game";
+				NAVER_CLIENT_ID = REPLACE_WITH_NAVER_CLIENT_ID;
+				NAVER_CLIENT_SECRET = REPLACE_WITH_NAVER_CLIENT_SECRET;
+				NAVER_URL_SCHEME = REPLACE_WITH_NAVER_URL_SCHEME;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -361,6 +369,10 @@
 				GOOGLE_CLIENT_ID = REPLACE_WITH_GOOGLE_IOS_CLIENT_ID;
 				GOOGLE_REVERSED_CLIENT_ID = REPLACE_WITH_REVERSED_GOOGLE_IOS_CLIENT_ID;
 				KAKAO_NATIVE_APP_KEY = REPLACE_WITH_KAKAO_NATIVE_APP_KEY;
+				NAVER_APP_NAME = "Wellness Game";
+				NAVER_CLIENT_ID = REPLACE_WITH_NAVER_CLIENT_ID;
+				NAVER_CLIENT_SECRET = REPLACE_WITH_NAVER_CLIENT_SECRET;
+				NAVER_URL_SCHEME = REPLACE_WITH_NAVER_URL_SCHEME;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -416,6 +428,14 @@
 				minimumVersion = 2.28.0;
 			};
 		};
+		G10000000000000000000003 /* XCRemoteSwiftPackageReference "naveridlogin-sdk-ios-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/naver/naveridlogin-sdk-ios-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -438,6 +458,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = G10000000000000000000002 /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */;
 			productName = KakaoSDKUser;
+		};
+		H10000000000000000000005 /* NidThirdPartyLogin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = G10000000000000000000003 /* XCRemoteSwiftPackageReference "naveridlogin-sdk-ios-swift" */;
+			productName = NidThirdPartyLogin;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
