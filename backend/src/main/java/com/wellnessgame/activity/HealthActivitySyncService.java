@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -104,10 +103,16 @@ public class HealthActivitySyncService {
     private void validatePayload(ActivityPayload activity) {
         switch (activity.type()) {
             case STEPS -> require(activity.steps() != null, "STEPS 활동에는 steps가 필요합니다.");
-            case WORKOUT -> require(activity.startedAt() != null && activity.endedAt() != null,
-                    "WORKOUT 활동에는 startedAt과 endedAt이 필요합니다.");
-            case SLEEP -> require(activity.sleepMinutes() != null && activity.startedAt() != null && activity.endedAt() != null,
-                    "SLEEP 활동에는 sleepMinutes, startedAt, endedAt이 필요합니다.");
+            case WORKOUT -> {
+                require(activity.startedAt() != null && activity.endedAt() != null,
+                        "WORKOUT 활동에는 startedAt과 endedAt이 필요합니다.");
+                requireValidTimeRange(activity);
+            }
+            case SLEEP -> {
+                require(activity.sleepMinutes() != null && activity.startedAt() != null && activity.endedAt() != null,
+                        "SLEEP 활동에는 sleepMinutes, startedAt, endedAt이 필요합니다.");
+                requireValidTimeRange(activity);
+            }
         }
     }
 
@@ -115,6 +120,11 @@ public class HealthActivitySyncService {
         if (!condition) {
             throw new IllegalArgumentException(message);
         }
+    }
+
+    private void requireValidTimeRange(ActivityPayload activity) {
+        require(!activity.endedAt().isBefore(activity.startedAt()),
+                "활동 종료 시간은 시작 시간 이후여야 합니다.");
     }
 
     private String externalKey(HealthActivitySyncRequest request, ActivityPayload activity) {
@@ -206,4 +216,3 @@ public class HealthActivitySyncService {
         };
     }
 }
-
