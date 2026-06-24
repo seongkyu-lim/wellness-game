@@ -47,9 +47,6 @@ public class ActivityXpCalculator {
         if (minutes >= 420 && minutes <= 540) {
             return 90;
         }
-        if (minutes > 540) {
-            return 70;
-        }
         if (minutes >= 360) {
             return 70;
         }

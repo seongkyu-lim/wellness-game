@@ -68,5 +68,27 @@ class HealthActivityControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", is("WORKOUT 활동에는 startedAt과 endedAt이 필요합니다.")));
     }
-}
 
+    @Test
+    void rejectsWorkoutThatEndsBeforeItStarts() throws Exception {
+        mockMvc.perform(post("/api/health-activities/sync")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": "test-user",
+                                  "date": "2026-06-17",
+                                  "activities": [
+                                    {
+                                      "type": "WORKOUT",
+                                      "workoutType": "RUNNING",
+                                      "durationMinutes": 20,
+                                      "startedAt": "2026-06-17T08:30:00Z",
+                                      "endedAt": "2026-06-17T08:00:00Z"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("활동 종료 시간은 시작 시간 이후여야 합니다.")));
+    }
+}
