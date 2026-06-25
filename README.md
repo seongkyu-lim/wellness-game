@@ -47,8 +47,9 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 요구 사항:
 
 - Java 17 이상
-- Maven 3.6.3 이상
 - MySQL 8.4 LTS 또는 Docker
+
+> Gradle은 프로젝트에 포함된 Wrapper(`./gradlew`)를 사용하므로 별도 설치가 필요 없습니다.
 
 가장 간단한 실행 방법:
 
@@ -60,7 +61,7 @@ docker compose up --build
 - MySQL host port: `13306`
 - DB/user/password: `wellness_game` / `wellness` / `wellness`
 
-로컬 Maven 실행:
+로컬 Gradle 실행:
 
 ```bash
 docker compose up -d mysql
@@ -68,14 +69,14 @@ cd backend
 DATABASE_URL='jdbc:mysql://localhost:13306/wellness_game?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC' \
 DATABASE_USERNAME=wellness \
 DATABASE_PASSWORD=wellness \
-mvn spring-boot:run
+./gradlew bootRun
 ```
 
 테스트:
 
 ```bash
 cd backend
-mvn test
+./gradlew test
 ```
 
 테스트는 MySQL 호환 모드의 인메모리 H2를 사용합니다.

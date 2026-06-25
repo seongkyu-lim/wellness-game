@@ -3,7 +3,8 @@
 .vscode/
 *.iml
 
-backend/target/
+backend/build/
+backend/.gradle/
 backend/.classpath
 backend/.project
 backend/.settings/
