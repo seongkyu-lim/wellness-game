@@ -1,12 +1,12 @@
 import Foundation
 
-enum HealthActivityType: String, Codable {
+enum HealthActivityType: String, Encodable {
     case steps = "STEPS"
     case workout = "WORKOUT"
     case sleep = "SLEEP"
 }
 
-enum WorkoutType: String, Codable {
+enum WorkoutType: String, Encodable {
     case swimming = "SWIMMING"
     case running = "RUNNING"
     case walking = "WALKING"
@@ -15,7 +15,7 @@ enum WorkoutType: String, Codable {
     case other = "OTHER"
 }
 
-struct HealthActivityDTO: Identifiable, Codable {
+struct HealthActivityDTO: Identifiable, Encodable {
     let id: UUID
     let type: HealthActivityType
     var workoutType: WorkoutType?
@@ -89,4 +89,3 @@ struct HealthActivitySyncRequest: Encodable {
     let date: String
     let activities: [HealthActivityDTO]
 }
-
