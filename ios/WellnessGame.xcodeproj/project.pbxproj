@@ -26,6 +26,7 @@
 		A10000000000000000000011 /* KakaoSDKUser in Frameworks */ = {isa = PBXBuildFile; productRef = H10000000000000000000004 /* KakaoSDKUser */; };
 		A10000000000000000000012 /* NidThirdPartyLogin in Frameworks */ = {isa = PBXBuildFile; productRef = H10000000000000000000005 /* NidThirdPartyLogin */; };
 		A10000000000000000000013 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* Theme.swift */; };
+		A10000000000000000000014 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* Components.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +47,7 @@
 		B1000000000000000000000F /* UserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSession.swift; sourceTree = "<group>"; };
 		B10000000000000000000010 /* SocialLoginService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialLoginService.swift; sourceTree = "<group>"; };
 		B10000000000000000000011 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		B10000000000000000000012 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -130,6 +132,7 @@
 			children = (
 				B10000000000000000000002 /* ContentView.swift */,
 				B10000000000000000000011 /* Theme.swift */,
+				B10000000000000000000012 /* Components.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -261,6 +264,7 @@
 				A1000000000000000000000C /* UserSession.swift in Sources */,
 				A1000000000000000000000D /* SocialLoginService.swift in Sources */,
 				A10000000000000000000013 /* Theme.swift in Sources */,
+				A10000000000000000000014 /* Components.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
