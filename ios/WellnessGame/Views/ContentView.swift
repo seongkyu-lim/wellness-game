@@ -69,10 +69,7 @@ struct ContentView: View {
             if let response = viewModel.syncResponse {
                 let character = response.character
                 HStack(spacing: 20) {
-                    XPRingView(
-                        level: character.level,
-                        progress: Double(character.currentXp) / Double(max(character.nextLevelXp, 1))
-                    )
+                    XPRingView(level: character.level, progress: character.xpProgress)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("내 캐릭터")
                             .font(.caption.weight(.semibold))
@@ -167,7 +164,7 @@ struct ContentView: View {
                     )
                     MetricCard(
                         title: "수면",
-                        value: snapshot.sleep.map { "\(($0.sleepMinutes ?? 0) / 60)시간 \(($0.sleepMinutes ?? 0) % 60)분" } ?? "기록 없음",
+                        value: snapshot.sleepDurationText,
                         icon: "moon.zzz.fill",
                         color: Theme.statRecovery
                     )

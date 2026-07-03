@@ -41,12 +41,17 @@ struct XPRingView: View {
     var size: CGFloat = 108
     var lineWidth: CGFloat = 11
 
+    /// 링에 그릴 트림 값 — 진행률 0이어도 살짝 보이도록 최소 호(弧)를 유지하고 1을 넘지 않게 자른다.
+    static func ringFraction(_ progress: Double) -> Double {
+        max(0.015, min(progress, 1))
+    }
+
     var body: some View {
         ZStack {
             Circle()
                 .stroke(Theme.surfaceTint, lineWidth: lineWidth)
             Circle()
-                .trim(from: 0, to: max(0.015, min(progress, 1)))
+                .trim(from: 0, to: Self.ringFraction(progress))
                 .stroke(Theme.xpGradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .animation(.easeOut(duration: 0.8), value: progress)
@@ -170,6 +175,24 @@ struct SecondaryActionButtonStyle: ButtonStyle {
             .background(Theme.surfaceTint, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .opacity(configuration.isPressed ? 0.7 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Display logic
+
+extension CharacterState {
+    /// 현재 레벨에서의 XP 진행률 (0...1). nextLevelXp가 0 이하이면 0.
+    var xpProgress: Double {
+        guard nextLevelXp > 0 else { return 0 }
+        return min(max(Double(currentXp) / Double(nextLevelXp), 0), 1)
+    }
+}
+
+extension DailyHealthSnapshot {
+    /// 수면 시간 표시 문자열. 수면 기록이나 분 데이터가 없으면 "기록 없음".
+    var sleepDurationText: String {
+        guard let minutes = sleep?.sleepMinutes else { return "기록 없음" }
+        return "\(minutes / 60)시간 \(minutes % 60)분"
     }
 }
 
