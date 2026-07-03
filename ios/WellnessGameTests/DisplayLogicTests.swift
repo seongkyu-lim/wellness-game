@@ -1,0 +1,92 @@
+import XCTest
+
+final class CharacterXpProgressTests: XCTestCase {
+    private func makeCharacter(currentXp: Int, nextLevelXp: Int) -> CharacterState {
+        CharacterState(
+            level: 3,
+            currentXp: currentXp,
+            totalXp: 500,
+            nextLevelXp: nextLevelXp,
+            stats: CharacterStats(str: 1, vit: 2, intStat: 3, discipline: 4, recovery: 5)
+        )
+    }
+
+    func test_xpProgress_returnsFractionOfNextLevelXp() {
+        let character = makeCharacter(currentXp: 50, nextLevelXp: 200)
+        XCTAssertEqual(character.xpProgress, 0.25, accuracy: 0.0001)
+    }
+
+    func test_xpProgress_returnsZeroWhenNextLevelXpIsZero() {
+        let character = makeCharacter(currentXp: 50, nextLevelXp: 0)
+        XCTAssertEqual(character.xpProgress, 0)
+    }
+
+    func test_xpProgress_clampsToOneWhenXpExceedsNextLevel() {
+        let character = makeCharacter(currentXp: 300, nextLevelXp: 200)
+        XCTAssertEqual(character.xpProgress, 1.0)
+    }
+
+    func test_xpProgress_clampsToZeroForNegativeXp() {
+        let character = makeCharacter(currentXp: -10, nextLevelXp: 200)
+        XCTAssertEqual(character.xpProgress, 0)
+    }
+}
+
+final class SleepDurationTextTests: XCTestCase {
+    private func makeSnapshot(sleep: HealthActivityDTO?) -> DailyHealthSnapshot {
+        DailyHealthSnapshot(date: Date(timeIntervalSince1970: 0), steps: 1000, workouts: [], sleep: sleep)
+    }
+
+    func test_sleepDurationText_formatsHoursAndMinutes() {
+        let snapshot = makeSnapshot(sleep: HealthActivityDTO(type: .sleep, sleepMinutes: 450))
+        XCTAssertEqual(snapshot.sleepDurationText, "7시간 30분")
+    }
+
+    func test_sleepDurationText_formatsUnderOneHour() {
+        let snapshot = makeSnapshot(sleep: HealthActivityDTO(type: .sleep, sleepMinutes: 45))
+        XCTAssertEqual(snapshot.sleepDurationText, "0시간 45분")
+    }
+
+    func test_sleepDurationText_returnsPlaceholderWhenNoSleepRecord() {
+        let snapshot = makeSnapshot(sleep: nil)
+        XCTAssertEqual(snapshot.sleepDurationText, "기록 없음")
+    }
+
+    func test_sleepDurationText_returnsPlaceholderWhenSleepMinutesMissing() {
+        let snapshot = makeSnapshot(sleep: HealthActivityDTO(type: .sleep, sleepMinutes: nil))
+        XCTAssertEqual(snapshot.sleepDurationText, "기록 없음")
+    }
+}
+
+final class XPRingFractionTests: XCTestCase {
+    func test_ringFraction_keepsMinimumVisibleArcAtZeroProgress() {
+        XCTAssertEqual(XPRingView.ringFraction(0), 0.015, accuracy: 0.0001)
+    }
+
+    func test_ringFraction_passesThroughMidRangeProgress() {
+        XCTAssertEqual(XPRingView.ringFraction(0.5), 0.5, accuracy: 0.0001)
+    }
+
+    func test_ringFraction_clampsToOneAboveFullProgress() {
+        XCTAssertEqual(XPRingView.ringFraction(1.2), 1.0, accuracy: 0.0001)
+    }
+}
+
+final class WorkoutTypePresentationTests: XCTestCase {
+    func test_displayName_mapsEveryWorkoutTypeToKorean() {
+        XCTAssertEqual(WorkoutType.swimming.displayName, "수영")
+        XCTAssertEqual(WorkoutType.running.displayName, "달리기")
+        XCTAssertEqual(WorkoutType.walking.displayName, "걷기")
+        XCTAssertEqual(WorkoutType.cycling.displayName, "자전거")
+        XCTAssertEqual(WorkoutType.strengthTraining.displayName, "근력 운동")
+        XCTAssertEqual(WorkoutType.other.displayName, "운동")
+    }
+
+    func test_iconName_mapsEveryWorkoutTypeToValidSFSymbol() {
+        let types: [WorkoutType] = [.swimming, .running, .walking, .cycling, .strengthTraining, .other]
+        for type in types {
+            let name = type.iconName
+            XCTAssertNotNil(UIImage(systemName: name), "'\(name)' is not a valid SF Symbol for \(type)")
+        }
+    }
+}
