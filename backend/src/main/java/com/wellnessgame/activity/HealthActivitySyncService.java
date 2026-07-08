@@ -5,7 +5,6 @@ import com.wellnessgame.api.HealthActivitySyncRequest.ActivityPayload;
 import com.wellnessgame.api.HealthActivitySyncResponse;
 import com.wellnessgame.api.HealthActivitySyncResponse.ActivityResultResponse;
 import com.wellnessgame.api.HealthActivitySyncResponse.CharacterResponse;
-import com.wellnessgame.api.HealthActivitySyncResponse.StatsResponse;
 import com.wellnessgame.character.CharacterStats;
 import com.wellnessgame.character.UserCharacter;
 import com.wellnessgame.character.UserCharacterRepository;
@@ -77,25 +76,12 @@ public class HealthActivitySyncService {
         }
 
         UserCharacter saved = characterRepository.save(character);
-        CharacterStats stats = saved.getStats();
         return new HealthActivitySyncResponse(
                 request.userId(),
                 request.date(),
                 gainedXp,
                 levelUp,
-                new CharacterResponse(
-                        saved.getLevel(),
-                        saved.getCurrentXp(),
-                        saved.getTotalXp(),
-                        saved.nextLevelXp(),
-                        new StatsResponse(
-                                stats.getStr(),
-                                stats.getVit(),
-                                stats.getIntStat(),
-                                stats.getDiscipline(),
-                                stats.getRecovery()
-                        )
-                ),
+                CharacterResponse.from(saved),
                 results
         );
     }
