@@ -255,6 +255,67 @@ body {
   color: var(--primary);
 }
 
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.section-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-tools input[type='date'] {
+  border: 1px solid color-mix(in srgb, var(--text-secondary) 30%, transparent);
+  border-radius: var(--chip-radius);
+  background: var(--surface);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.btn-compact {
+  width: auto;
+  padding: 9px 14px;
+  font-size: 13px;
+  border-radius: var(--chip-radius);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: color-mix(in srgb, var(--surface-tint) 55%, transparent);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.metric-card .metric-icon {
+  font-size: 20px;
+}
+
+.metric-card .metric-value {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.metric-card .metric-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .result-row {
   display: flex;
   align-items: center;

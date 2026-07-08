@@ -1,4 +1,4 @@
-import type { CharacterSummary, SyncRequest, SyncResponse } from './types'
+import type { CharacterSummary, DailyActivitiesResponse } from './types'
 
 const BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
 
@@ -24,13 +24,10 @@ export async function fetchCharacter(userId: string): Promise<CharacterSummary |
   return res.json()
 }
 
-/** 활동 기록을 동기화하고 획득 XP와 갱신된 캐릭터를 받는다. */
-export async function syncActivities(request: SyncRequest): Promise<SyncResponse> {
-  const res = await fetch(`${BASE_URL}/api/health-activities/sync`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  })
+/** iOS 앱이 동기화해둔 하루치 활동 기록을 조회한다. */
+export async function fetchDailyActivities(userId: string, date: string): Promise<DailyActivitiesResponse> {
+  const params = new URLSearchParams({ userId, date })
+  const res = await fetch(`${BASE_URL}/api/health-activities?${params}`)
   if (!res.ok) {
     throw new ApiError(res.status, await errorMessage(res))
   }

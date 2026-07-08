@@ -2,33 +2,6 @@
 
 export type ActivityType = 'STEPS' | 'WORKOUT' | 'SLEEP'
 
-export type WorkoutType =
-  | 'SWIMMING'
-  | 'RUNNING'
-  | 'WALKING'
-  | 'CYCLING'
-  | 'STRENGTH_TRAINING'
-  | 'OTHER'
-
-export interface ActivityPayload {
-  type: ActivityType
-  workoutType?: WorkoutType
-  durationMinutes?: number
-  calories?: number
-  distanceMeters?: number
-  steps?: number
-  sleepMinutes?: number
-  sleepScore?: number
-  startedAt?: string
-  endedAt?: string
-}
-
-export interface SyncRequest {
-  userId: string
-  date: string
-  activities: ActivityPayload[]
-}
-
 export interface CharacterStats {
   str: number
   vit: number
@@ -45,24 +18,27 @@ export interface Character {
   stats: CharacterStats
 }
 
-export interface ActivityResult {
-  type: ActivityType
-  source: string
-  gainedXp: number
-  message: string
-  duplicate: boolean
-}
-
-export interface SyncResponse {
-  userId: string
-  date: string
-  gainedXp: number
-  levelUp: boolean
-  character: Character
-  activityResults: ActivityResult[]
-}
-
 export interface CharacterSummary {
   userId: string
   character: Character
+}
+
+export interface ActivityEntry {
+  type: ActivityType
+  source: string
+  durationMinutes: number | null
+  calories: number | null
+  distanceMeters: number | null
+  steps: number | null
+  sleepMinutes: number | null
+  sleepScore: number | null
+  gainedXp: number
+  startedAt: string | null
+  endedAt: string | null
+}
+
+export interface DailyActivitiesResponse {
+  userId: string
+  date: string
+  activities: ActivityEntry[]
 }

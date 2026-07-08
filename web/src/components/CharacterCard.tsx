@@ -1,4 +1,4 @@
-import type { Character, SyncResponse } from '../api/types'
+import type { Character } from '../api/types'
 
 const RADIUS = 45
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
@@ -24,10 +24,9 @@ const STATS = [
 
 interface Props {
   character: Character | null
-  lastSync: SyncResponse | null
 }
 
-export function CharacterCard({ character, lastSync }: Props) {
+export function CharacterCard({ character }: Props) {
   if (!character) {
     return (
       <section className="hero-card">
@@ -82,10 +81,7 @@ export function CharacterCard({ character, lastSync }: Props) {
           <span className="xp">
             {character.currentXp.toLocaleString()} / {character.nextLevelXp.toLocaleString()} XP
           </span>
-          <div>
-            {lastSync && lastSync.gainedXp > 0 && <span className="pill lime">+{lastSync.gainedXp} XP</span>}{' '}
-            {lastSync?.levelUp && <span className="pill amber">레벨업! ✨</span>}
-          </div>
+          <span className="pill lime">총 {character.totalXp.toLocaleString()} XP</span>
         </div>
       </div>
       <div className="stat-grid">
