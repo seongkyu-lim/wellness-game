@@ -10,7 +10,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -50,6 +52,53 @@ class HealthActivityControllerTest {
                 .andExpect(jsonPath("$.gainedXp", is(42)))
                 .andExpect(jsonPath("$.character.level", is(1)))
                 .andExpect(jsonPath("$.activityResults[0].message", is("걸음 수 보상 +42 XP")));
+    }
+
+    @Test
+    void listsDailyActivitiesSyncedFromApp() throws Exception {
+        mockMvc.perform(post("/api/health-activities/sync")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": "test-user",
+                                  "date": "2026-06-17",
+                                  "activities": [
+                                    {"type": "STEPS", "steps": 8500},
+                                    {
+                                      "type": "WORKOUT",
+                                      "workoutType": "RUNNING",
+                                      "durationMinutes": 30,
+                                      "calories": 250,
+                                      "startedAt": "2026-06-17T08:00:00Z",
+                                      "endedAt": "2026-06-17T08:30:00Z"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/health-activities")
+                        .param("userId", "test-user")
+                        .param("date", "2026-06-17"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId", is("test-user")))
+                .andExpect(jsonPath("$.date", is("2026-06-17")))
+                .andExpect(jsonPath("$.activities", hasSize(2)))
+                .andExpect(jsonPath("$.activities[0].type", is("STEPS")))
+                .andExpect(jsonPath("$.activities[0].steps", is(8500)))
+                .andExpect(jsonPath("$.activities[0].gainedXp", is(42)))
+                .andExpect(jsonPath("$.activities[1].type", is("WORKOUT")))
+                .andExpect(jsonPath("$.activities[1].source", is("RUNNING")))
+                .andExpect(jsonPath("$.activities[1].durationMinutes", is(30)));
+    }
+
+    @Test
+    void returnsEmptyActivityListWhenNothingSynced() throws Exception {
+        mockMvc.perform(get("/api/health-activities")
+                        .param("userId", "test-user")
+                        .param("date", "2026-06-17"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activities", hasSize(0)));
     }
 
     @Test
