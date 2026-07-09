@@ -33,6 +33,26 @@ VITE_API_BASE_URL=http://192.168.0.10:8080 npm run dev
 - 캐릭터 상태는 서버(DB)에만 존재하므로, **같은 userId를 쓰면 앱과 웹이 같은 캐릭터를 공유**합니다.
 - 프로덕션 배포 시 백엔드 `CORS_ALLOWED_ORIGINS` 환경변수에 웹 오리진을 추가해야 합니다.
 
+## 소셜 로그인 설정 (앱-웹 자동 연동)
+
+웹에서 iPhone 앱과 같은 계정(구글/카카오/네이버)으로 로그인하면 같은 `{provider}:{식별자}` userId가 만들어져
+캐릭터가 자동으로 연동됩니다. 게스트 ID를 수동으로 옮길 필요가 없습니다.
+
+- **반드시 iOS 앱과 같은 provider 애플리케이션**에 웹 플랫폼을 추가해야 동일한 식별자가 발급됩니다.
+- 각 provider 콘솔에 Redirect URI `http://localhost:5173/` (배포 시 실제 도메인)을 등록하세요.
+- 키가 없으면 해당 로그인 버튼이 자동으로 비활성화됩니다.
+
+| Provider | 웹 `.env` | 백엔드 환경변수 |
+|---|---|---|
+| Kakao | `VITE_KAKAO_CLIENT_ID` (REST API 키) | `OAUTH_KAKAO_CLIENT_ID`, `OAUTH_KAKAO_CLIENT_SECRET`(선택) |
+| Naver | `VITE_NAVER_CLIENT_ID` | `OAUTH_NAVER_CLIENT_ID`, `OAUTH_NAVER_CLIENT_SECRET` |
+| Google | `VITE_GOOGLE_CLIENT_ID` | `OAUTH_GOOGLE_CLIENT_ID`, `OAUTH_GOOGLE_CLIENT_SECRET` |
+
+인증 흐름: 웹 → provider 로그인 → code와 함께 리다이렉트 → `POST /api/auth/{provider}` →
+백엔드가 토큰 교환·프로필 조회(client secret은 서버에만 보관) → userId 반환 → 세션 저장.
+
+Apple 로그인은 Apple Developer 유료 계정 + HTTPS 도메인 + Services ID 등록이 선행돼야 해서 웹에서는 아직 지원하지 않습니다.
+
 ## 빌드
 
 ```bash

@@ -34,6 +34,24 @@ export async function fetchDailyActivities(userId: string, date: string): Promis
   return res.json()
 }
 
+export interface SocialLoginResponse {
+  userId: string
+  displayName: string | null
+}
+
+/** authorization code를 백엔드에서 provider 토큰·프로필로 교환한다. */
+export async function postSocialLogin(provider: string, code: string, redirectUri: string): Promise<SocialLoginResponse> {
+  const res = await fetch(`${BASE_URL}/api/auth/${encodeURIComponent(provider)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, redirectUri }),
+  })
+  if (!res.ok) {
+    throw new ApiError(res.status, await errorMessage(res))
+  }
+  return res.json()
+}
+
 async function errorMessage(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { message?: string }
