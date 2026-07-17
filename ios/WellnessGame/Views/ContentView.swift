@@ -16,297 +16,340 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 18) {
+                VStack(spacing: Theme.sectionSpacing) {
                     header
-                    account
-                    controls
+                    characterHero
+                    actions
                     healthSummary
-                    characterSummary
                     activityResults
+                    account
+                    developerOptions
                 }
-                .padding()
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("Wellness Game")
+            .background(Theme.background)
+            .toolbar(.hidden, for: .navigationBar)
             .task {
                 socialLogin.restoreSessionIfNeeded(userSession)
             }
             .overlay {
                 if viewModel.isLoading || socialLogin.isLoading {
                     ProgressView()
+                        .tint(Theme.primary)
                         .padding(24)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
             }
         }
     }
+
+    // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("건강 데이터가 캐릭터 성장으로 이어집니다.")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(Date.now.formatted(.dateTime.locale(Locale(identifier: "ko_KR")).month(.wide).day().weekday(.wide)))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.textSecondary)
+            Text("오늘도 한 뼘 성장해요 🌱")
+                .font(.system(.title2, design: .rounded).weight(.bold))
+                .foregroundStyle(Theme.textPrimary)
             Text(viewModel.statusMessage)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Toggle("Mock 데이터 사용", isOn: $viewModel.useMockData)
-                .font(.subheadline)
+                .font(.footnote)
+                .foregroundStyle(Theme.textSecondary)
         }
-        .cardStyle()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
     }
 
-    private var account: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label(userSession.accountLabel, systemImage: userSession.isSignedIn ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle")
-                    .font(.headline)
-                Spacer()
-                Text(userSession.provider?.displayName ?? "비로그인")
-                    .font(.caption.bold())
-                    .foregroundStyle(userSession.isSignedIn ? .green : .secondary)
-            }
+    // MARK: - Character hero
 
-            Text(userSession.statusMessage)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            if userSession.isSignedIn {
-                Button("로그아웃") {
-                    socialLogin.signOut(userSession)
+    private var characterHero: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let response = viewModel.syncResponse {
+                let character = response.character
+                HStack(spacing: 20) {
+                    XPRingView(level: character.level, progress: character.xpProgress)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("내 캐릭터")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                        Text("\(character.currentXp.formatted()) / \(character.nextLevelXp.formatted()) XP")
+                            .font(.system(.headline, design: .rounded).weight(.bold))
+                            .foregroundStyle(Theme.textPrimary)
+                        HStack(spacing: 8) {
+                            if response.gainedXp > 0 {
+                                PillBadge(text: "+\(response.gainedXp) XP")
+                            }
+                            if response.levelUp {
+                                PillBadge(text: "레벨업! ✨", color: Theme.amber)
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.bordered)
-                .disabled(viewModel.isLoading || socialLogin.isLoading)
+                HStack(spacing: 8) {
+                    StatTile(title: "STR", subtitle: "근력", value: character.stats.str, icon: "dumbbell.fill", color: Theme.statStrength)
+                    StatTile(title: "VIT", subtitle: "활력", value: character.stats.vit, icon: "heart.fill", color: Theme.statVitality)
+                    StatTile(title: "DISC", subtitle: "절제", value: character.stats.discipline, icon: "target", color: Theme.statDiscipline)
+                    StatTile(title: "REC", subtitle: "회복", value: character.stats.recovery, icon: "moon.zzz.fill", color: Theme.statRecovery)
+                }
             } else {
-                SignInWithAppleButton(.signIn) { request in
-                    userSession.configureAppleRequest(request)
-                } onCompletion: { result in
-                    userSession.handleAppleResult(result)
-                }
-                .signInWithAppleButtonStyle(.black)
-                .frame(height: 48)
-                .disabled(viewModel.isLoading || socialLogin.isLoading)
-
-                Button {
-                    socialLogin.signInWithGoogle(userSession)
-                } label: {
-                    HStack {
-                        Text("G")
-                            .font(.headline.bold())
-                        Text("Google로 로그인")
+                HStack(spacing: 16) {
+                    Image(systemName: "leaf.circle.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(Theme.primary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("캐릭터가 기다리고 있어요")
+                            .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
+                        Text("건강 데이터를 동기화하면 XP를 얻고 캐릭터가 성장해요.")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.textSecondary)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
                 }
-                .buttonStyle(.bordered)
-                .tint(.primary)
-                .disabled(viewModel.isLoading || socialLogin.isLoading)
-
-                Button {
-                    socialLogin.signInWithKakao(userSession)
-                } label: {
-                    Text("Kakao로 로그인")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Color(red: 0.12, green: 0.09, blue: 0.08))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(
-                            Color(red: 1.0, green: 0.90, blue: 0.0),
-                            in: RoundedRectangle(cornerRadius: 10)
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isLoading || socialLogin.isLoading)
-
-                Button {
-                    socialLogin.signInWithNaver(userSession)
-                } label: {
-                    HStack {
-                        Text("N")
-                            .font(.headline.bold())
-                        Text("Naver로 로그인")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(
-                        Color(red: 0.01, green: 0.78, blue: 0.35),
-                        in: RoundedRectangle(cornerRadius: 10)
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isLoading || socialLogin.isLoading)
-
-                Text("소셜 로그인은 선택 사항입니다. 게스트도 건강 데이터 조회와 XP 동기화를 이용할 수 있습니다.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
-        .cardStyle()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(Theme.heroGradient, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
     }
 
-    private var controls: some View {
+    // MARK: - Actions
+
+    private var actions: some View {
         VStack(spacing: 10) {
-            actionButton("HealthKit 권한 요청", systemImage: "heart.text.square") {
-                await viewModel.requestAuthorization()
+            Button {
+                Task { await viewModel.sync() }
+            } label: {
+                Label("서버에 동기화", systemImage: "icloud.and.arrow.up")
             }
-            actionButton("오늘 데이터 불러오기", systemImage: "arrow.clockwise") {
-                await viewModel.loadToday()
-            }
-            actionButton("서버에 동기화", systemImage: "icloud.and.arrow.up") {
-                await viewModel.sync()
+            .buttonStyle(PrimaryActionButtonStyle())
+            .disabled(viewModel.isLoading)
+
+            HStack(spacing: 10) {
+                Button {
+                    Task { await viewModel.requestAuthorization() }
+                } label: {
+                    Label("HealthKit 권한", systemImage: "heart.text.square")
+                }
+                .buttonStyle(SecondaryActionButtonStyle())
+                .disabled(viewModel.isLoading)
+
+                Button {
+                    Task { await viewModel.loadToday() }
+                } label: {
+                    Label("오늘 데이터", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(SecondaryActionButtonStyle())
+                .disabled(viewModel.isLoading)
             }
         }
     }
+
+    // MARK: - Health summary
 
     @ViewBuilder
     private var healthSummary: some View {
         if let snapshot = viewModel.snapshot {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("오늘의 활동")
-                    .font(.headline)
-                metric("걸음 수", value: snapshot.steps.formatted(), icon: "figure.walk")
-                metric(
-                    "수면",
-                    value: snapshot.sleep.map { "\(($0.sleepMinutes ?? 0) / 60)시간 \(($0.sleepMinutes ?? 0) % 60)분" } ?? "기록 없음",
-                    icon: "bed.double"
-                )
-                Divider()
-                if snapshot.workouts.isEmpty {
-                    Text("오늘 운동 기록이 없습니다.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(snapshot.workouts) { workout in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(workout.workoutType?.displayName ?? "운동")
-                                    .font(.subheadline.bold())
-                                Text("\(workout.durationMinutes ?? 0)분")
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text("\(Int(workout.calories ?? 0)) kcal")
-                                .font(.subheadline)
-                        }
-                    }
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(title: "오늘의 활동", icon: "sun.max.fill")
+                HStack(spacing: 12) {
+                    MetricCard(
+                        title: "걸음 수",
+                        value: snapshot.steps.formatted(),
+                        icon: "figure.walk",
+                        color: Theme.statVitality
+                    )
+                    MetricCard(
+                        title: "수면",
+                        value: snapshot.sleepDurationText,
+                        icon: "moon.zzz.fill",
+                        color: Theme.statRecovery
+                    )
                 }
+                workoutList
             }
-            .cardStyle()
         }
     }
 
     @ViewBuilder
-    private var characterSummary: some View {
-        if let response = viewModel.syncResponse {
-            let character = response.character
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("레벨 \(character.level)")
-                        .font(.title2.bold())
-                    Spacer()
-                    Text("+\(response.gainedXp) XP")
-                        .font(.headline)
-                        .foregroundStyle(.green)
+    private var workoutList: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if let workouts = viewModel.snapshot?.workouts, !workouts.isEmpty {
+                ForEach(workouts) { workout in
+                    HStack(spacing: 12) {
+                        Image(systemName: workout.workoutType?.iconName ?? "figure.mixed.cardio")
+                            .font(.headline)
+                            .foregroundStyle(Theme.primary)
+                            .frame(width: 38, height: 38)
+                            .background(Theme.surfaceTint, in: RoundedRectangle(cornerRadius: Theme.chipRadius, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(workout.workoutType?.displayName ?? "운동")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                            Text("\(workout.durationMinutes ?? 0)분")
+                                .font(.caption)
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                        Spacer()
+                        PillBadge(text: "\(Int(workout.calories ?? 0)) kcal", color: Theme.statStrength)
+                    }
                 }
-                ProgressView(
-                    value: Double(character.currentXp),
-                    total: Double(max(character.nextLevelXp, 1))
-                )
-                Text("\(character.currentXp) / \(character.nextLevelXp) XP")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if response.levelUp {
-                    Label("레벨업", systemImage: "sparkles")
-                        .font(.headline)
-                        .foregroundStyle(.orange)
-                }
-                HStack {
-                    stat("STR", character.stats.str)
-                    stat("VIT", character.stats.vit)
-                    stat("DISC", character.stats.discipline)
-                    stat("REC", character.stats.recovery)
+            } else {
+                HStack(spacing: 10) {
+                    Image(systemName: "figure.walk.motion")
+                        .foregroundStyle(Theme.textSecondary)
+                    Text("오늘 운동 기록이 없어요. 가볍게 몸을 움직여 볼까요?")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
-            .cardStyle()
         }
+        .wellnessCard()
     }
+
+    // MARK: - Activity results
 
     @ViewBuilder
     private var activityResults: some View {
         if let results = viewModel.syncResponse?.activityResults, !results.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("획득 내역")
-                    .font(.headline)
-                ForEach(results) { result in
-                    HStack {
-                        Image(systemName: result.duplicate ? "checkmark.circle" : "plus.circle.fill")
-                        Text(result.message)
-                        Spacer()
-                        Text(result.duplicate ? "반영됨" : "+\(result.gainedXp)")
-                            .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(title: "획득 내역", icon: "sparkles")
+                VStack(spacing: 12) {
+                    ForEach(results) { result in
+                        HStack(spacing: 10) {
+                            Image(systemName: result.duplicate ? "checkmark.circle.fill" : "plus.circle.fill")
+                                .foregroundStyle(result.duplicate ? Theme.textSecondary : Theme.lime)
+                            Text(result.message)
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.textPrimary)
+                            Spacer()
+                            if result.duplicate {
+                                Text("반영됨")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.textSecondary)
+                            } else {
+                                PillBadge(text: "+\(result.gainedXp) XP")
+                            }
+                        }
                     }
-                    .font(.subheadline)
+                }
+                .wellnessCard()
+            }
+        }
+    }
+
+    // MARK: - Account
+
+    private var account: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "계정", icon: "person.crop.circle")
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label(userSession.accountLabel, systemImage: userSession.isSignedIn ? "person.crop.circle.fill.badge.checkmark" : "person.crop.circle")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                    PillBadge(
+                        text: userSession.provider?.displayName ?? "비로그인",
+                        color: userSession.isSignedIn ? Theme.primary : Theme.textSecondary
+                    )
+                }
+
+                Text(userSession.statusMessage)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+
+                if userSession.isSignedIn {
+                    Button("로그아웃") {
+                        socialLogin.signOut(userSession)
+                    }
+                    .buttonStyle(SecondaryActionButtonStyle())
+                    .disabled(viewModel.isLoading || socialLogin.isLoading)
+                } else {
+                    SignInWithAppleButton(.signIn) { request in
+                        userSession.configureAppleRequest(request)
+                    } onCompletion: { result in
+                        userSession.handleAppleResult(result)
+                    }
+                    .signInWithAppleButtonStyle(.black)
+                    .frame(height: 48)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .disabled(viewModel.isLoading || socialLogin.isLoading)
+
+                    socialButton(
+                        text: "Google로 로그인",
+                        prefix: "G",
+                        textColor: Theme.textPrimary,
+                        background: Theme.surfaceTint
+                    ) {
+                        socialLogin.signInWithGoogle(userSession)
+                    }
+
+                    socialButton(
+                        text: "Kakao로 로그인",
+                        textColor: Color(red: 0.12, green: 0.09, blue: 0.08),
+                        background: Color(red: 1.0, green: 0.90, blue: 0.0)
+                    ) {
+                        socialLogin.signInWithKakao(userSession)
+                    }
+
+                    socialButton(
+                        text: "Naver로 로그인",
+                        prefix: "N",
+                        textColor: .white,
+                        background: Color(red: 0.01, green: 0.78, blue: 0.35)
+                    ) {
+                        socialLogin.signInWithNaver(userSession)
+                    }
+
+                    Text("소셜 로그인은 선택 사항입니다. 게스트도 건강 데이터 조회와 XP 동기화를 이용할 수 있습니다.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
-            .cardStyle()
+            .wellnessCard()
         }
     }
 
-    private func actionButton(
-        _ title: String,
-        systemImage: String,
-        action: @escaping () async -> Void
+    private func socialButton(
+        text: String,
+        prefix: String? = nil,
+        textColor: Color,
+        background: Color,
+        action: @escaping () -> Void
     ) -> some View {
-        Button {
-            Task { await action() }
-        } label: {
-            Label(title, systemImage: systemImage)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let prefix {
+                    Text(prefix)
+                        .font(.headline.bold())
+                }
+                Text(text)
+                    .fontWeight(.semibold)
+            }
+            .foregroundStyle(textColor)
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .buttonStyle(.borderedProminent)
-        .disabled(viewModel.isLoading)
+        .buttonStyle(.plain)
+        .disabled(viewModel.isLoading || socialLogin.isLoading)
     }
 
-    private func metric(_ title: String, value: String, icon: String) -> some View {
-        HStack {
-            Label(title, systemImage: icon)
-            Spacer()
-            Text(value)
-                .fontWeight(.semibold)
-        }
-    }
+    // MARK: - Developer options
 
-    private func stat(_ title: String, _ value: Int) -> some View {
-        VStack {
-            Text(value.formatted())
-                .font(.headline)
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+    private var developerOptions: some View {
+        Toggle(isOn: $viewModel.useMockData) {
+            Label("Mock 데이터 사용", systemImage: "wrench.and.screwdriver")
+                .font(.footnote)
+                .foregroundStyle(Theme.textSecondary)
         }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-private extension View {
-    func cardStyle() -> some View {
-        self
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
-    }
-}
-
-private extension WorkoutType {
-    var displayName: String {
-        switch self {
-        case .swimming: "수영"
-        case .running: "달리기"
-        case .walking: "걷기"
-        case .cycling: "자전거"
-        case .strengthTraining: "근력 운동"
-        case .other: "운동"
-        }
+        .tint(Theme.primary)
+        .padding(.horizontal, 4)
+        .padding(.bottom, 8)
     }
 }
 
