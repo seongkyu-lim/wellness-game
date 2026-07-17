@@ -118,9 +118,19 @@ body {
   font-weight: 800;
 }
 
-.ring-level {
-  font-weight: 800;
-  fill: var(--text-primary);
+.ring-wrap {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  flex-shrink: 0;
+}
+
+.ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .pill {
