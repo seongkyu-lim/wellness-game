@@ -73,7 +73,7 @@ final class DashboardViewModel: ObservableObject {
         do {
             try await operation()
         } catch {
-            statusMessage = error.localizedDescription
+            statusMessage = "동기화하지 못했어요. 당겨서 다시 시도할 수 있어요. (\(error.localizedDescription))"
         }
     }
 }
