@@ -363,6 +363,29 @@ body {
   font-weight: 600;
 }
 
+.social-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.btn-kakao {
+  background: #fee500;
+  color: #191919;
+}
+
+.btn-naver {
+  background: #03c75a;
+  color: #ffffff;
+}
+
+.btn-google {
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid color-mix(in srgb, var(--text-secondary) 35%, transparent);
+}
+
 .userid-row {
   display: flex;
   gap: 8px;

@@ -1,20 +1,36 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchCharacter, fetchDailyActivities } from './api/client'
 import type { ActivityEntry, Character } from './api/types'
+import { AccountSection } from './components/AccountSection'
 import { CharacterCard } from './components/CharacterCard'
 import { TodayActivities } from './components/TodayActivities'
+import { clearSession, completeLoginFromRedirect, loadSession, type Session } from './lib/auth'
 import { loadUserId, saveUserId } from './lib/userId'
 
 const REFRESH_INTERVAL_MS = 30_000
 
 export default function App() {
-  const [userId, setUserId] = useState(loadUserId)
-  const [userIdDraft, setUserIdDraft] = useState('')
+  const [session, setSession] = useState<Session | null>(loadSession)
+  const [guestId, setGuestId] = useState(loadUserId)
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [character, setCharacter] = useState<Character | null>(null)
   const [activities, setActivities] = useState<ActivityEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // 로그인하면 provider 계정 ID, 아니면 게스트(또는 수동 입력) ID
+  const userId = session?.userId ?? guestId
+
+  // 소셜 로그인 리다이렉트로 돌아온 경우 code를 세션으로 교환한다.
+  useEffect(() => {
+    completeLoginFromRedirect()
+      .then((newSession) => {
+        if (newSession) {
+          setSession(newSession)
+        }
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : '로그인에 실패했습니다.'))
+  }, [])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -37,14 +53,18 @@ export default function App() {
     return () => clearInterval(timer)
   }, [refresh])
 
-  function applyUserId() {
-    const next = userIdDraft.trim()
+  function handleLogout() {
+    clearSession()
+    setSession(null)
+    // iOS와 동일하게 기존 게스트 캐릭터로 복귀한다.
+  }
+
+  function handleApplyManualId(next: string) {
     if (!next) {
       return
     }
     saveUserId(next)
-    setUserId(next)
-    setUserIdDraft('')
+    setGuestId(next)
   }
 
   const dateLabel = new Date().toLocaleDateString('ko-KR', {
@@ -74,30 +94,7 @@ export default function App() {
         onRefresh={() => void refresh()}
         loading={loading}
       />
-
-      <section className="card" aria-label="계정">
-        <h2 className="section-title">👤 계정</h2>
-        <p className="hint">
-          데이터 수집은 iPhone 앱이 HealthKit에서 자동으로 처리하고, 웹은 같은 서버의 캐릭터를 보여줍니다. 앱과 같은
-          캐릭터를 보려면 동일한 사용자 ID를 사용해야 해요.
-        </p>
-        <p className="mono">{userId}</p>
-        <div className="userid-row">
-          <input
-            placeholder="앱과 같은 사용자 ID 붙여넣기 (예: guest:...)"
-            value={userIdDraft}
-            onChange={(e) => setUserIdDraft(e.target.value)}
-          />
-          <button
-            className="btn btn-secondary"
-            style={{ width: 'auto' }}
-            onClick={applyUserId}
-            disabled={!userIdDraft.trim()}
-          >
-            적용
-          </button>
-        </div>
-      </section>
+      <AccountSection session={session} userId={userId} onLogout={handleLogout} onApplyManualId={handleApplyManualId} />
     </main>
   )
 }
