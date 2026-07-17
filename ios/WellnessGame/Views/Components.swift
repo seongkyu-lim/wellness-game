@@ -55,15 +55,7 @@ struct XPRingView: View {
                 .stroke(Theme.xpGradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .animation(.easeOut(duration: 0.8), value: progress)
-            VStack(spacing: 0) {
-                Text("Lv.")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.textSecondary)
-                Text("\(level)")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(Theme.textPrimary)
-                    .contentTransition(.numericText())
-            }
+            CharacterAvatarView(level: level, size: size * 0.66)
         }
         .frame(width: size, height: size)
     }

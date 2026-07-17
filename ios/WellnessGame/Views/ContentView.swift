@@ -71,12 +71,17 @@ struct ContentView: View {
                 HStack(spacing: 20) {
                     XPRingView(level: character.level, progress: character.xpProgress)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("내 캐릭터")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Theme.textSecondary)
+                        PillBadge(text: "Lv.\(character.level) · \(GrowthStage.stage(for: character.level).displayName) 단계")
                         Text("\(character.currentXp.formatted()) / \(character.nextLevelXp.formatted()) XP")
                             .font(.system(.headline, design: .rounded).weight(.bold))
                             .foregroundStyle(Theme.textPrimary)
+                        Text(
+                            GrowthStage.next(after: character.level).map {
+                                "Lv.\($0.minLevel)이 되면 \($0.displayName) 단계로 자라나요"
+                            } ?? "마지막 단계까지 모두 자랐어요 🌸"
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(Theme.textSecondary)
                         HStack(spacing: 8) {
                             if response.gainedXp > 0 {
                                 PillBadge(text: "+\(response.gainedXp) XP")
@@ -96,14 +101,12 @@ struct ContentView: View {
                 }
             } else {
                 HStack(spacing: 16) {
-                    Image(systemName: "leaf.circle.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(Theme.primary)
+                    CharacterAvatarView(level: 1, size: 56)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("캐릭터가 기다리고 있어요")
+                        Text("새싹이가 기다리고 있어요")
                             .font(.headline)
                             .foregroundStyle(Theme.textPrimary)
-                        Text("건강 데이터를 동기화하면 XP를 얻고 캐릭터가 성장해요.")
+                        Text("건강 데이터를 동기화하면 XP를 얻고 씨앗이 자라나요.")
                             .font(.footnote)
                             .foregroundStyle(Theme.textSecondary)
                     }
