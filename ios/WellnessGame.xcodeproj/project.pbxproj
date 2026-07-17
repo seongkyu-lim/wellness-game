@@ -29,6 +29,7 @@
 		A10000000000000000000014 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* Components.swift */; };
 		A10000000000000000000015 /* CharacterAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* CharacterAvatarView.swift */; };
 		A10000000000000000000016 /* AutoSyncPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* AutoSyncPolicy.swift */; };
+		A10000000000000000000017 /* LoginSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* LoginSheetView.swift */; };
 		A2000000000000000000000A /* AutoSyncPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* AutoSyncPolicy.swift */; };
 		A20000000000000000000007 /* CharacterAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* CharacterAvatarView.swift */; };
 		A20000000000000000000001 /* DisplayLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* DisplayLogicTests.swift */; };
@@ -62,6 +63,7 @@
 		B10000000000000000000012 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		B10000000000000000000013 /* CharacterAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterAvatarView.swift; sourceTree = "<group>"; };
 		B10000000000000000000014 /* AutoSyncPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSyncPolicy.swift; sourceTree = "<group>"; };
+		B10000000000000000000015 /* LoginSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginSheetView.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* DisplayLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayLogicTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* ThemeColorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeColorTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000004 /* GrowthStageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthStageTests.swift; sourceTree = "<group>"; };
@@ -162,6 +164,7 @@
 				B10000000000000000000011 /* Theme.swift */,
 				B10000000000000000000012 /* Components.swift */,
 				B10000000000000000000013 /* CharacterAvatarView.swift */,
+				B10000000000000000000015 /* LoginSheetView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -325,6 +328,7 @@
 				A10000000000000000000014 /* Components.swift in Sources */,
 				A10000000000000000000015 /* CharacterAvatarView.swift in Sources */,
 				A10000000000000000000016 /* AutoSyncPolicy.swift in Sources */,
+				A10000000000000000000017 /* LoginSheetView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
