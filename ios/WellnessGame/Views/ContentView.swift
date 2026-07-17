@@ -2,6 +2,7 @@ import AuthenticationServices
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var userSession: UserSession
     @StateObject private var socialLogin: SocialLoginService
     @StateObject private var viewModel: DashboardViewModel
@@ -19,7 +20,6 @@ struct ContentView: View {
                 VStack(spacing: Theme.sectionSpacing) {
                     header
                     characterHero
-                    actions
                     healthSummary
                     activityResults
                     account
@@ -30,8 +30,20 @@ struct ContentView: View {
             }
             .background(Theme.background)
             .toolbar(.hidden, for: .navigationBar)
+            .refreshable {
+                await viewModel.autoSync(force: true)
+            }
             .task {
                 socialLogin.restoreSessionIfNeeded(userSession)
+                await viewModel.autoSync()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task { await viewModel.autoSync() }
+                }
+            }
+            .onChange(of: viewModel.useMockData) {
+                Task { await viewModel.autoSync(force: true) }
             }
             .overlay {
                 if viewModel.isLoading || socialLogin.isLoading {
@@ -117,38 +129,6 @@ struct ContentView: View {
         .padding(18)
         .background(Theme.heroGradient, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
         .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
-    }
-
-    // MARK: - Actions
-
-    private var actions: some View {
-        VStack(spacing: 10) {
-            Button {
-                Task { await viewModel.sync() }
-            } label: {
-                Label("서버에 동기화", systemImage: "icloud.and.arrow.up")
-            }
-            .buttonStyle(PrimaryActionButtonStyle())
-            .disabled(viewModel.isLoading)
-
-            HStack(spacing: 10) {
-                Button {
-                    Task { await viewModel.requestAuthorization() }
-                } label: {
-                    Label("HealthKit 권한", systemImage: "heart.text.square")
-                }
-                .buttonStyle(SecondaryActionButtonStyle())
-                .disabled(viewModel.isLoading)
-
-                Button {
-                    Task { await viewModel.loadToday() }
-                } label: {
-                    Label("오늘 데이터", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(SecondaryActionButtonStyle())
-                .disabled(viewModel.isLoading)
-            }
-        }
     }
 
     // MARK: - Health summary
