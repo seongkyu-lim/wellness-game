@@ -115,5 +115,43 @@ public class HealthActivity {
     public int getGainedXp() {
         return gainedXp;
     }
-}
+    public ActivityType getType() {
+        return type;
+    }
 
+    public String getSourceType() {
+        return sourceType;
+    }
+
+    public Integer getDurationMinutes() {
+        return durationMinutes;
+    }
+
+    public BigDecimal getCalories() {
+        return calories;
+    }
+
+    public BigDecimal getDistanceMeters() {
+        return distanceMeters;
+    }
+
+    public Integer getSteps() {
+        return steps;
+    }
+
+    public Integer getSleepMinutes() {
+        return sleepMinutes;
+    }
+
+    public Integer getSleepScore() {
+        return sleepScore;
+    }
+
+    public Instant getStartedAt() {
+        return startedAt;
+    }
+
+    public Instant getEndedAt() {
+        return endedAt;
+    }
+}
