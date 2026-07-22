@@ -69,6 +69,7 @@ struct LoginSheetView: View {
                 .font(.footnote)
                 .foregroundStyle(Theme.textSecondary)
 
+            // 현재 Google 로그인만 지원 — 나머지 제공자는 준비되면 isEnabled를 되돌린다.
             SignInWithAppleButton(.signIn) { request in
                 userSession.configureAppleRequest(request)
             } onCompletion: { result in
@@ -77,7 +78,8 @@ struct LoginSheetView: View {
             .signInWithAppleButtonStyle(.black)
             .frame(height: 48)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .disabled(socialLogin.isLoading)
+            .disabled(true)
+            .opacity(Self.disabledOpacity)
 
             socialButton(text: "Google로 로그인", prefix: "G", textColor: Theme.textPrimary, background: Theme.surface) {
                 socialLogin.signInWithGoogle(userSession)
@@ -85,7 +87,8 @@ struct LoginSheetView: View {
             socialButton(
                 text: "Kakao로 로그인",
                 textColor: Color(red: 0.12, green: 0.09, blue: 0.08),
-                background: Color(red: 1.0, green: 0.90, blue: 0.0)
+                background: Color(red: 1.0, green: 0.90, blue: 0.0),
+                isEnabled: false
             ) {
                 socialLogin.signInWithKakao(userSession)
             }
@@ -93,18 +96,22 @@ struct LoginSheetView: View {
                 text: "Naver로 로그인",
                 prefix: "N",
                 textColor: .white,
-                background: Color(red: 0.01, green: 0.78, blue: 0.35)
+                background: Color(red: 0.01, green: 0.78, blue: 0.35),
+                isEnabled: false
             ) {
                 socialLogin.signInWithNaver(userSession)
             }
         }
     }
 
+    private static let disabledOpacity = 0.4
+
     private func socialButton(
         text: String,
         prefix: String? = nil,
         textColor: Color,
         background: Color,
+        isEnabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -122,6 +129,7 @@ struct LoginSheetView: View {
             .background(background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
-        .disabled(socialLogin.isLoading)
+        .disabled(!isEnabled || socialLogin.isLoading)
+        .opacity(isEnabled ? 1 : Self.disabledOpacity)
     }
 }
