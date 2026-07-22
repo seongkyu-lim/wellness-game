@@ -65,7 +65,8 @@ final class SocialLoginService: ObservableObject {
             restoreKakaoSession(session)
         case .naver:
             restoreNaverSession(session)
-        case .apple, .none:
+        case .apple, .password, .none:
+            // Apple은 UserSession.init에서, 아이디/비밀번호는 UserDefaults에서 이미 복원된다.
             break
         }
     }
@@ -170,7 +171,7 @@ final class SocialLoginService: ObservableObject {
         case .naver:
             NidOAuth.shared.logout()
             session.signOut()
-        case .apple, .none:
+        case .apple, .password, .none:
             session.signOut()
         }
     }
