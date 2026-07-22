@@ -28,10 +28,14 @@
 		A10000000000000000000013 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* Theme.swift */; };
 		A10000000000000000000014 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* Components.swift */; };
 		A10000000000000000000015 /* CharacterAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* CharacterAvatarView.swift */; };
+		A10000000000000000000016 /* AutoSyncPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* AutoSyncPolicy.swift */; };
+		A10000000000000000000017 /* LoginSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* LoginSheetView.swift */; };
+		A2000000000000000000000A /* AutoSyncPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* AutoSyncPolicy.swift */; };
 		A20000000000000000000007 /* CharacterAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* CharacterAvatarView.swift */; };
 		A20000000000000000000001 /* DisplayLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* DisplayLogicTests.swift */; };
 		A20000000000000000000002 /* ThemeColorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* ThemeColorTests.swift */; };
 		A20000000000000000000008 /* GrowthStageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* GrowthStageTests.swift */; };
+		A20000000000000000000009 /* AutoSyncPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* AutoSyncPolicyTests.swift */; };
 		A20000000000000000000003 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* Theme.swift */; };
 		A20000000000000000000004 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* Components.swift */; };
 		A20000000000000000000005 /* HealthActivityDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* HealthActivityDTO.swift */; };
@@ -58,9 +62,12 @@
 		B10000000000000000000011 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		B10000000000000000000012 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		B10000000000000000000013 /* CharacterAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterAvatarView.swift; sourceTree = "<group>"; };
+		B10000000000000000000014 /* AutoSyncPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSyncPolicy.swift; sourceTree = "<group>"; };
+		B10000000000000000000015 /* LoginSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginSheetView.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* DisplayLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayLogicTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000002 /* ThemeColorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeColorTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000004 /* GrowthStageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthStageTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000005 /* AutoSyncPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSyncPolicyTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000003 /* WellnessGameTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WellnessGameTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -145,6 +152,7 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000003 /* DashboardViewModel.swift */,
+				B10000000000000000000014 /* AutoSyncPolicy.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -156,6 +164,7 @@
 				B10000000000000000000011 /* Theme.swift */,
 				B10000000000000000000012 /* Components.swift */,
 				B10000000000000000000013 /* CharacterAvatarView.swift */,
+				B10000000000000000000015 /* LoginSheetView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -183,6 +192,7 @@
 				B20000000000000000000001 /* DisplayLogicTests.swift */,
 				B20000000000000000000002 /* ThemeColorTests.swift */,
 				B20000000000000000000004 /* GrowthStageTests.swift */,
+				B20000000000000000000005 /* AutoSyncPolicyTests.swift */,
 			);
 			path = WellnessGameTests;
 			sourceTree = "<group>";
@@ -317,6 +327,8 @@
 				A10000000000000000000013 /* Theme.swift in Sources */,
 				A10000000000000000000014 /* Components.swift in Sources */,
 				A10000000000000000000015 /* CharacterAvatarView.swift in Sources */,
+				A10000000000000000000016 /* AutoSyncPolicy.swift in Sources */,
+				A10000000000000000000017 /* LoginSheetView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -327,9 +339,11 @@
 				A20000000000000000000001 /* DisplayLogicTests.swift in Sources */,
 				A20000000000000000000002 /* ThemeColorTests.swift in Sources */,
 				A20000000000000000000008 /* GrowthStageTests.swift in Sources */,
+				A20000000000000000000009 /* AutoSyncPolicyTests.swift in Sources */,
 				A20000000000000000000003 /* Theme.swift in Sources */,
 				A20000000000000000000004 /* Components.swift in Sources */,
 				A20000000000000000000007 /* CharacterAvatarView.swift in Sources */,
+				A2000000000000000000000A /* AutoSyncPolicy.swift in Sources */,
 				A20000000000000000000005 /* HealthActivityDTO.swift in Sources */,
 				A20000000000000000000006 /* CharacterResponse.swift in Sources */,
 			);
