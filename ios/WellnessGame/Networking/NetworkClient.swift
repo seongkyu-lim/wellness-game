@@ -27,14 +27,29 @@ struct NetworkClient {
     }
 
     func sync(_ requestBody: HealthActivitySyncRequest) async throws -> HealthActivitySyncResponse {
-        let endpoint = baseURL.appending(path: "api/health-activities/sync")
+        try await post(path: "api/health-activities/sync", body: requestBody)
+    }
+
+    func signUp(_ requestBody: SignUpRequest) async throws -> PasswordAuthResponse {
+        try await post(path: "api/auth/signup", body: requestBody)
+    }
+
+    func logIn(_ requestBody: LoginRequest) async throws -> PasswordAuthResponse {
+        try await post(path: "api/auth/login", body: requestBody)
+    }
+
+    private func post<Body: Encodable, Response: Decodable>(
+        path: String,
+        body: Body
+    ) async throws -> Response {
+        let endpoint = baseURL.appending(path: path)
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        request.httpBody = try encoder.encode(requestBody)
+        request.httpBody = try encoder.encode(body)
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -46,8 +61,24 @@ struct NetworkClient {
                 ?? "알 수 없는 오류"
             throw NetworkError.server(status: httpResponse.statusCode, message: message)
         }
-        return try JSONDecoder().decode(HealthActivitySyncResponse.self, from: data)
+        return try JSONDecoder().decode(Response.self, from: data)
     }
+}
+
+struct SignUpRequest: Encodable {
+    let username: String
+    let password: String
+    let displayName: String?
+}
+
+struct LoginRequest: Encodable {
+    let username: String
+    let password: String
+}
+
+struct PasswordAuthResponse: Decodable {
+    let userIdentifier: String
+    let displayName: String?
 }
 
 private struct ServerError: Decodable {

@@ -4,6 +4,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var userSession: UserSession
     @StateObject private var socialLogin: SocialLoginService
+    @StateObject private var credentialLogin: CredentialAuthService
     @StateObject private var viewModel: DashboardViewModel
     @State private var showLoginSheet = false
 
@@ -11,6 +12,7 @@ struct ContentView: View {
         let userSession = UserSession()
         _userSession = StateObject(wrappedValue: userSession)
         _socialLogin = StateObject(wrappedValue: SocialLoginService())
+        _credentialLogin = StateObject(wrappedValue: CredentialAuthService())
         _viewModel = StateObject(wrappedValue: DashboardViewModel(userSession: userSession))
     }
 
@@ -45,10 +47,10 @@ struct ContentView: View {
                 Task { await viewModel.autoSync(force: true) }
             }
             .sheet(isPresented: $showLoginSheet) {
-                LoginSheetView(userSession: userSession, socialLogin: socialLogin)
+                LoginSheetView(userSession: userSession, socialLogin: socialLogin, credentialLogin: credentialLogin)
             }
             .overlay {
-                if viewModel.isLoading || socialLogin.isLoading {
+                if viewModel.isLoading || socialLogin.isLoading || credentialLogin.isLoading {
                     ProgressView()
                         .tint(Theme.primary)
                         .padding(24)

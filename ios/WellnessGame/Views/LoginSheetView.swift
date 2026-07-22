@@ -7,27 +7,41 @@ struct LoginSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var userSession: UserSession
     @ObservedObject var socialLogin: SocialLoginService
+    @ObservedObject var credentialLogin: CredentialAuthService
+
+    @State private var username = ""
+    @State private var password = ""
+
+    private var isBusy: Bool {
+        socialLogin.isLoading || credentialLogin.isLoading
+    }
+
+    private var canSubmitCredentials: Bool {
+        !username.trimmingCharacters(in: .whitespaces).isEmpty
+            && password.count >= 8
+            && !isBusy
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Capsule()
-                .fill(Theme.surfaceTint)
-                .frame(width: 44, height: 5)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 10)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Capsule()
+                    .fill(Theme.surfaceTint)
+                    .frame(width: 44, height: 5)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 10)
 
-            if userSession.isSignedIn {
-                signedIn
-            } else {
-                signedOut
+                if userSession.isSignedIn {
+                    signedIn
+                } else {
+                    signedOut
+                }
             }
-
-            Spacer(minLength: 0)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 24)
         }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
         .background(Theme.background)
-        .presentationDetents([.medium])
+        .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
         .onChange(of: userSession.isSignedIn) { _, isSignedIn in
             if isSignedIn {
@@ -56,19 +70,104 @@ struct LoginSheetView: View {
                 dismiss()
             }
             .buttonStyle(SecondaryActionButtonStyle())
-            .disabled(socialLogin.isLoading)
+            .disabled(isBusy)
         }
     }
 
     private var signedOut: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("로그인")
-                .font(.system(.title3, design: .rounded).weight(.bold))
-                .foregroundStyle(Theme.textPrimary)
-            Text("로그인하면 여러 기기에서 같은 캐릭터를 키울 수 있어요. 로그인 없이도 모든 기능을 쓸 수 있습니다.")
-                .font(.footnote)
-                .foregroundStyle(Theme.textSecondary)
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("로그인")
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("로그인하면 여러 기기에서 같은 캐릭터를 키울 수 있어요. 로그인 없이도 모든 기능을 쓸 수 있습니다.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+            }
 
+            credentialForm
+            divider
+            socialButtons
+        }
+    }
+
+    private var credentialForm: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            credentialField(
+                title: "아이디",
+                text: $username,
+                prompt: "영문·숫자 4~32자",
+                isSecure: false
+            )
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+
+            credentialField(
+                title: "비밀번호",
+                text: $password,
+                prompt: "8자 이상",
+                isSecure: true
+            )
+
+            if let errorMessage = credentialLogin.errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(Theme.statStrength)
+            }
+
+            Button("로그인") {
+                Task { await credentialLogin.logIn(username: username, password: password, into: userSession) }
+            }
+            .buttonStyle(PrimaryActionButtonStyle())
+            .disabled(!canSubmitCredentials)
+            .opacity(canSubmitCredentials ? 1 : 0.5)
+
+            Button("회원가입") {
+                Task { await credentialLogin.signUp(username: username, password: password, into: userSession) }
+            }
+            .buttonStyle(SecondaryActionButtonStyle())
+            .disabled(!canSubmitCredentials)
+            .opacity(canSubmitCredentials ? 1 : 0.5)
+        }
+    }
+
+    private func credentialField(
+        title: String,
+        text: Binding<String>,
+        prompt: String,
+        isSecure: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.textSecondary)
+            Group {
+                if isSecure {
+                    SecureField(prompt, text: text)
+                } else {
+                    TextField(prompt, text: text)
+                }
+            }
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    private var divider: some View {
+        HStack(spacing: 12) {
+            Rectangle().fill(Theme.surfaceTint).frame(height: 1)
+            Text("또는 소셜 계정")
+                .font(.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .fixedSize()
+            Rectangle().fill(Theme.surfaceTint).frame(height: 1)
+        }
+    }
+
+    private var socialButtons: some View {
+        VStack(alignment: .leading, spacing: 12) {
             // 현재 Google 로그인만 지원 — 나머지 제공자는 준비되면 isEnabled를 되돌린다.
             SignInWithAppleButton(.signIn) { request in
                 userSession.configureAppleRequest(request)
@@ -129,7 +228,7 @@ struct LoginSheetView: View {
             .background(background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
-        .disabled(!isEnabled || socialLogin.isLoading)
+        .disabled(!isEnabled || isBusy)
         .opacity(isEnabled ? 1 : Self.disabledOpacity)
     }
 }
