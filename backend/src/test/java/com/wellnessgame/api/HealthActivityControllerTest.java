@@ -49,9 +49,10 @@ class HealthActivityControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.gainedXp", is(42)))
+                .andExpect(jsonPath("$.gainedXp", is(70)))
                 .andExpect(jsonPath("$.character.level", is(1)))
-                .andExpect(jsonPath("$.activityResults[0].message", is("걸음 수 보상 +42 XP")));
+                .andExpect(jsonPath("$.activityResults[0].message", is("걸음 수 보상 +70 XP")))
+                .andExpect(jsonPath("$.goals", hasSize(3)));
     }
 
     @Test
@@ -86,7 +87,7 @@ class HealthActivityControllerTest {
                 .andExpect(jsonPath("$.activities", hasSize(2)))
                 .andExpect(jsonPath("$.activities[0].type", is("STEPS")))
                 .andExpect(jsonPath("$.activities[0].steps", is(8500)))
-                .andExpect(jsonPath("$.activities[0].gainedXp", is(42)))
+                .andExpect(jsonPath("$.activities[0].gainedXp", is(70)))
                 .andExpect(jsonPath("$.activities[1].type", is("WORKOUT")))
                 .andExpect(jsonPath("$.activities[1].source", is("RUNNING")))
                 .andExpect(jsonPath("$.activities[1].durationMinutes", is(30)));

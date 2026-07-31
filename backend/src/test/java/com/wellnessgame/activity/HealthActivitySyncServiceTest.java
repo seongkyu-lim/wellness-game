@@ -54,12 +54,12 @@ class HealthActivitySyncServiceTest {
         HealthActivitySyncResponse first = syncService.sync(request);
         HealthActivitySyncResponse second = syncService.sync(request);
 
-        assertThat(first.gainedXp()).isEqualTo(70);
+        assertThat(first.gainedXp()).isEqualTo(105); // 30*3 + 15(RUNNING)
         assertThat(second.gainedXp()).isZero();
         assertThat(second.activityResults().get(0).duplicate()).isTrue();
-        assertThat(second.character().totalXp()).isEqualTo(70);
-        assertThat(second.character().stats().str()).isEqualTo(1);
-        assertThat(second.character().stats().vit()).isEqualTo(1);
+        assertThat(second.character().totalXp()).isEqualTo(105);
+        assertThat(second.character().stats().str()).isEqualTo(1); // 유산소: STR +1
+        assertThat(second.character().stats().vit()).isEqualTo(2); // 유산소: VIT +2
         assertThat(activityRepository.count()).isEqualTo(1);
     }
 
@@ -80,13 +80,47 @@ class HealthActivitySyncServiceTest {
 
         HealthActivitySyncResponse response = syncService.sync(request);
 
-        assertThat(response.gainedXp()).isEqualTo(200);
+        assertThat(response.gainedXp()).isEqualTo(180); // STEPS 100(상한) + SLEEP 80
         assertThat(response.levelUp()).isTrue();
         assertThat(response.character().level()).isEqualTo(2);
-        assertThat(response.character().currentXp()).isEqualTo(100);
-        assertThat(response.character().stats().discipline()).isEqualTo(1);
+        assertThat(response.character().currentXp()).isEqualTo(80);   // 180 - 100
+        assertThat(response.character().stats().discipline()).isEqualTo(2); // 걸음 +1, 목표 달성 +1
         assertThat(response.character().stats().recovery()).isEqualTo(1);
-        assertThat(response.character().stats().vit()).isEqualTo(1);
+        assertThat(response.character().stats().intStat()).isEqualTo(2); // 수면 품질 90 → INT +2
+    }
+
+    @Test
+    void reportsDailyGoalStatus() {
+        HealthActivitySyncResponse response = syncService.sync(new HealthActivitySyncRequest(
+                "test-user",
+                LocalDate.of(2026, 6, 17),
+                List.of(
+                        new ActivityPayload(ActivityType.STEPS, null, null, null, null, 8_500,
+                                null, null, null, null),
+                        new ActivityPayload(ActivityType.WORKOUT, WorkoutType.RUNNING, 20,
+                                null, null, null, null, null,
+                                Instant.parse("2026-06-17T08:00:00Z"),
+                                Instant.parse("2026-06-17T08:20:00Z"))
+                )
+        ));
+
+        assertThat(response.goals()).hasSize(3);
+        assertThat(response.goals())
+                .anySatisfy(goal -> {
+                    assertThat(goal.type()).isEqualTo(ActivityType.STEPS);
+                    assertThat(goal.current()).isEqualTo(8_500);
+                    assertThat(goal.achieved()).isTrue();
+                })
+                .anySatisfy(goal -> {
+                    assertThat(goal.type()).isEqualTo(ActivityType.WORKOUT);
+                    assertThat(goal.current()).isEqualTo(20);
+                    assertThat(goal.achieved()).isFalse(); // 목표 30분 미달
+                })
+                .anySatisfy(goal -> {
+                    assertThat(goal.type()).isEqualTo(ActivityType.SLEEP);
+                    assertThat(goal.current()).isZero();
+                    assertThat(goal.achieved()).isFalse();
+                });
     }
 
     @Test

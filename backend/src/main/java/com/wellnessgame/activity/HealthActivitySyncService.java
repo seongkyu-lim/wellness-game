@@ -5,6 +5,7 @@ import com.wellnessgame.api.HealthActivitySyncRequest.ActivityPayload;
 import com.wellnessgame.api.HealthActivitySyncResponse;
 import com.wellnessgame.api.HealthActivitySyncResponse.ActivityResultResponse;
 import com.wellnessgame.api.HealthActivitySyncResponse.CharacterResponse;
+import com.wellnessgame.api.HealthActivitySyncResponse.GoalResponse;
 import com.wellnessgame.character.CharacterStats;
 import com.wellnessgame.character.UserCharacter;
 import com.wellnessgame.character.UserCharacterRepository;
@@ -82,7 +83,26 @@ public class HealthActivitySyncService {
                 gainedXp,
                 levelUp,
                 CharacterResponse.from(saved),
-                results
+                results,
+                dailyGoals(request.activities())
+        );
+    }
+
+    private List<GoalResponse> dailyGoals(List<ActivityPayload> activities) {
+        int steps = 0;
+        int workoutMinutes = 0;
+        int sleepMinutes = 0;
+        for (ActivityPayload activity : activities) {
+            switch (activity.type()) {
+                case STEPS -> steps += value(activity.steps());
+                case WORKOUT -> workoutMinutes += value(activity.durationMinutes());
+                case SLEEP -> sleepMinutes = Math.max(sleepMinutes, value(activity.sleepMinutes()));
+            }
+        }
+        return List.of(
+                GoalResponse.of(ActivityType.STEPS, ActivityXpCalculator.STEPS_GOAL, steps, "steps"),
+                GoalResponse.of(ActivityType.WORKOUT, ActivityXpCalculator.WORKOUT_GOAL_MINUTES, workoutMinutes, "minutes"),
+                GoalResponse.of(ActivityType.SLEEP, ActivityXpCalculator.SLEEP_GOAL_MINUTES, sleepMinutes, "minutes")
         );
     }
 
@@ -137,21 +157,41 @@ public class HealthActivitySyncService {
 
     private void applyStats(CharacterStats stats, ActivityPayload activity) {
         switch (activity.type()) {
-            case STEPS -> stats.addDiscipline(1);
-            case WORKOUT -> {
-                stats.addStrength(1);
-                stats.addVitality(1);
-                if (activity.workoutType() == WorkoutType.SWIMMING) {
-                    stats.addVitality(2);
+            case STEPS -> {
+                stats.addDiscipline(1);
+                if (value(activity.steps()) >= ActivityXpCalculator.STEPS_GOAL) {
+                    stats.addDiscipline(1);
                 }
             }
+            case WORKOUT -> applyWorkoutStats(stats, activity.workoutType());
             case SLEEP -> {
                 stats.addRecovery(1);
-                if (activity.sleepMinutes() != null && activity.sleepMinutes() >= 420) {
-                    stats.addVitality(1);
-                }
+                int score = xpCalculator.resolvedSleepScore(value(activity.sleepMinutes()), activity.sleepScore());
+                stats.addIntelligence(score >= 80 ? 2 : 1);
             }
         }
+    }
+
+    private void applyWorkoutStats(CharacterStats stats, WorkoutType workoutType) {
+        WorkoutType type = workoutType == null ? WorkoutType.OTHER : workoutType;
+        switch (type) {
+            case STRENGTH_TRAINING -> {
+                stats.addStrength(2);
+                stats.addVitality(1);
+            }
+            case SWIMMING, RUNNING, CYCLING, WALKING -> {
+                stats.addVitality(2);
+                stats.addStrength(1);
+            }
+            case OTHER -> {
+                stats.addStrength(1);
+                stats.addVitality(1);
+            }
+        }
+    }
+
+    private int value(Integer value) {
+        return value == null ? 0 : value;
     }
 
     private HealthActivity toEntity(
