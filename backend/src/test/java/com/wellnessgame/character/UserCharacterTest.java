@@ -12,10 +12,10 @@ class UserCharacterTest {
         boolean levelUp = character.addXp(650);
 
         assertThat(levelUp).isTrue();
-        assertThat(character.getLevel()).isEqualTo(4);
-        assertThat(character.getCurrentXp()).isEqualTo(50);
+        assertThat(character.getLevel()).isEqualTo(4);        // 100 + 150 + 200 소진
+        assertThat(character.getCurrentXp()).isEqualTo(200);  // 잔여 이월
         assertThat(character.getTotalXp()).isEqualTo(650);
-        assertThat(character.nextLevelXp()).isEqualTo(400);
+        assertThat(character.nextLevelXp()).isEqualTo(250);   // 100 + (4-1)*50
     }
 }
 

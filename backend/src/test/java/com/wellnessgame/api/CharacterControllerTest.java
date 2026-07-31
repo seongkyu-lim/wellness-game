@@ -42,7 +42,7 @@ class CharacterControllerTest {
                 .andExpect(jsonPath("$.character.level", is(2)))
                 .andExpect(jsonPath("$.character.currentXp", is(50)))
                 .andExpect(jsonPath("$.character.totalXp", is(150)))
-                .andExpect(jsonPath("$.character.nextLevelXp", is(200)))
+                .andExpect(jsonPath("$.character.nextLevelXp", is(150)))
                 .andExpect(jsonPath("$.character.stats.str", is(0)));
     }
 

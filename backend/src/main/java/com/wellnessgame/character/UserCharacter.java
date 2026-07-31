@@ -67,7 +67,7 @@ public class UserCharacter {
     }
 
     public int nextLevelXp() {
-        return level * 100;
+        return 100 + (level - 1) * 50;
     }
 
     @PrePersist
