@@ -11,13 +11,14 @@ class ActivityXpCalculatorTest {
     private final ActivityXpCalculator calculator = new ActivityXpCalculator();
 
     @Test
-    void capsStepsXpAtEighty() {
-        assertThat(calculator.stepsXp(8_500)).isEqualTo(42);
-        assertThat(calculator.stepsXp(50_000)).isEqualTo(80);
+    void awardsStepsGoalBonusAndCapsAtHundred() {
+        assertThat(calculator.stepsXp(8_500)).isEqualTo(70);   // 8*5 + 30 목표 보너스
+        assertThat(calculator.stepsXp(2_000)).isEqualTo(10);   // 2*5, 목표 미달
+        assertThat(calculator.stepsXp(50_000)).isEqualTo(100); // 상한
     }
 
     @Test
-    void calculatesWorkoutXpWithActivityBonus() {
+    void calculatesWorkoutXpWithTypeBonusAndCap() {
         ActivityPayload swimming = new ActivityPayload(
                 ActivityType.WORKOUT,
                 WorkoutType.SWIMMING,
@@ -31,7 +32,7 @@ class ActivityXpCalculatorTest {
                 null
         );
 
-        assertThat(calculator.workoutXp(swimming)).isEqualTo(164);
+        assertThat(calculator.workoutXp(swimming)).isEqualTo(197); // 45*3 + 42 + 20
     }
 
     @Test
@@ -43,9 +44,9 @@ class ActivityXpCalculatorTest {
     }
 
     @Test
-    void appliesRecoveryBonusAndShortSleepPenalty() {
-        assertThat(calculator.sleepXp(450, 90)).isEqualTo(120);
-        assertThat(calculator.sleepXp(240, 30)).isEqualTo(15);
+    void appliesFixedSleepXpWithQualityBonus() {
+        assertThat(calculator.sleepXp(450, 90)).isEqualTo(80); // 60 정액 + 20 품질 보너스
+        assertThat(calculator.sleepXp(240, 30)).isEqualTo(10); // 10 정액, 보너스 없음
     }
 }
 
