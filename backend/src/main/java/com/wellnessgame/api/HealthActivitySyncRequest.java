@@ -1,6 +1,7 @@
 package com.wellnessgame.api;
 
 import com.wellnessgame.activity.ActivityType;
+import com.wellnessgame.activity.HealthActivitySyncValidator;
 import com.wellnessgame.activity.WorkoutType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -18,7 +19,8 @@ public record HealthActivitySyncRequest(
         @NotBlank String userId,
         @NotNull LocalDate date,
         @NotEmpty
-        @Size(max = 50, message = "한 번에 최대 50개의 활동까지 동기화할 수 있습니다.")
+        @Size(max = HealthActivitySyncValidator.MAX_ACTIVITIES_PER_REQUEST,
+                message = "한 번에 최대 {max}개의 활동까지 동기화할 수 있습니다.")
         List<@Valid ActivityPayload> activities
 ) {
     public record ActivityPayload(

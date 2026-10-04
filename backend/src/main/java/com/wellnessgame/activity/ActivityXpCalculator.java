@@ -25,7 +25,7 @@ public class ActivityXpCalculator {
 
     private static final int STEPS_XP_CAP = 100;
     private static final int WORKOUT_XP_CAP = 200;
-    private static final int SLEEP_QUALITY_BONUS_SCORE = 80;
+    public static final int SLEEP_QUALITY_BONUS_SCORE = 80;
 
     public int stepsXp(Integer steps) {
         int value = Math.max(value(steps), 0);
