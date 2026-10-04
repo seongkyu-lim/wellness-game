@@ -1,0 +1,5 @@
+# 로컬 개발 전용 설정. ./gradlew bootRun 이 기본으로 이 프로필을 활성화한다.
+auth:
+  jwt:
+    # 개발용 고정 키(32바이트 이상). 운영에서는 AUTH_JWT_SECRET 으로 별도 키를 주입한다.
+    secret: ${AUTH_JWT_SECRET:local-dev-only-jwt-secret-change-me-0123456789}

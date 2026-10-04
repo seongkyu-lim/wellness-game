@@ -17,6 +17,12 @@ server:
 app:
   timezone: ${APP_TIMEZONE:Asia/Seoul}
 
+auth:
+  jwt:
+    # HMAC-SHA256 서명 키. 32바이트 미만(또는 미설정)이면 기동에 실패한다. 로컬은 application-local.yml 참고.
+    secret: ${AUTH_JWT_SECRET:}
+    ttl: ${AUTH_JWT_TTL:30d}
+
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
 
@@ -36,3 +42,8 @@ oauth:
     client-secret: ${OAUTH_GOOGLE_CLIENT_SECRET:}
     token-uri: https://oauth2.googleapis.com/token
     profile-uri: https://openidconnect.googleapis.com/v1/userinfo
+  # iOS 구글 로그인 ID 토큰 검증(POST /api/auth/google/native).
+  # aud 는 아래 client-ids(iOS) 와 oauth.google.client-id(웹) 중 하나여야 한다.
+  google-native:
+    client-ids: ${OAUTH_GOOGLE_IOS_CLIENT_ID:}
+    tokeninfo-uri: https://oauth2.googleapis.com/tokeninfo
