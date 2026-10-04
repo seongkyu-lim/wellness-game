@@ -17,6 +17,12 @@ public class ActivityXpCalculator {
     public static final int WORKOUT_GOAL_MINUTES = 30;
     public static final int SLEEP_GOAL_MINUTES = 420;
 
+    /**
+     * 사용자·날짜별 지급 XP 합계 상한. 활동별 상한 기준 하루 정상 최대치
+     * (걸음 100 + 수면 80 + 최대치 운동 2회 400 = 580)를 넉넉히 반올림한 값.
+     */
+    public static final int DAILY_XP_CAP = 600;
+
     private static final int STEPS_XP_CAP = 100;
     private static final int WORKOUT_XP_CAP = 200;
     private static final int SLEEP_QUALITY_BONUS_SCORE = 80;

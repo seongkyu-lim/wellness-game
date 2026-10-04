@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -16,7 +17,9 @@ import java.util.List;
 public record HealthActivitySyncRequest(
         @NotBlank String userId,
         @NotNull LocalDate date,
-        @NotEmpty List<@Valid ActivityPayload> activities
+        @NotEmpty
+        @Size(max = 50, message = "한 번에 최대 50개의 활동까지 동기화할 수 있습니다.")
+        List<@Valid ActivityPayload> activities
 ) {
     public record ActivityPayload(
             @NotNull ActivityType type,
