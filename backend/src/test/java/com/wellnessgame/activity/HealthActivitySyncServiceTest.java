@@ -4,10 +4,13 @@ import com.wellnessgame.api.HealthActivitySyncRequest;
 import com.wellnessgame.api.HealthActivitySyncRequest.ActivityPayload;
 import com.wellnessgame.api.HealthActivitySyncResponse;
 import com.wellnessgame.character.UserCharacterRepository;
+import com.wellnessgame.support.MutableClock;
+import com.wellnessgame.support.TestClockConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -16,6 +19,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@Import(TestClockConfig.class)
 class HealthActivitySyncServiceTest {
     @Autowired
     private HealthActivitySyncService syncService;
@@ -26,10 +30,14 @@ class HealthActivitySyncServiceTest {
     @Autowired
     private UserCharacterRepository characterRepository;
 
+    @Autowired
+    private MutableClock clock;
+
     @BeforeEach
     void cleanDatabase() {
         activityRepository.deleteAll();
         characterRepository.deleteAll();
+        clock.setInstant(TestClockConfig.DEFAULT_NOW);
     }
 
     @Test
@@ -161,8 +169,10 @@ class HealthActivitySyncServiceTest {
 
     private static final String USER = "steps-user";
     private static final LocalDate DAY = LocalDate.of(2026, 6, 20);
+    private static final Instant DAY_NOW = Instant.parse("2026-06-20T23:00:00Z");
 
     private HealthActivitySyncResponse syncSteps(int... stepsValues) {
+        clock.setInstant(DAY_NOW);
         List<ActivityPayload> payloads = java.util.Arrays.stream(stepsValues)
                 .mapToObj(HealthActivitySyncServiceTest::steps)
                 .toList();
@@ -318,6 +328,7 @@ class HealthActivitySyncServiceTest {
 
     @Test
     void goalsReflectAccumulatedDatabaseValuesNotRequestPayload() {
+        clock.setInstant(DAY_NOW);
         syncService.sync(new HealthActivitySyncRequest(USER, DAY, List.of(
                 steps(9_000),
                 new ActivityPayload(ActivityType.WORKOUT, WorkoutType.RUNNING, 20,

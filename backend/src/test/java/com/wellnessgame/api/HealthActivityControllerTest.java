@@ -2,11 +2,14 @@ package com.wellnessgame.api;
 
 import com.wellnessgame.activity.HealthActivityRepository;
 import com.wellnessgame.character.UserCharacterRepository;
+import com.wellnessgame.support.MutableClock;
+import com.wellnessgame.support.TestClockConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -19,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(TestClockConfig.class)
 class HealthActivityControllerTest {
     @Autowired
     private MockMvc mockMvc;
@@ -29,10 +33,14 @@ class HealthActivityControllerTest {
     @Autowired
     private UserCharacterRepository characterRepository;
 
+    @Autowired
+    private MutableClock clock;
+
     @BeforeEach
     void cleanDatabase() {
         activityRepository.deleteAll();
         characterRepository.deleteAll();
+        clock.setInstant(TestClockConfig.DEFAULT_NOW);
     }
 
     @Test
@@ -140,5 +148,39 @@ class HealthActivityControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", is("활동 종료 시간은 시작 시간 이후여야 합니다.")));
+    }
+
+    @Test
+    void rejectsMoreThanFiftyActivities() throws Exception {
+        String steps = String.join(",", java.util.Collections.nCopies(51, "{\"type\": \"STEPS\", \"steps\": 1000}"));
+        mockMvc.perform(post("/api/health-activities/sync")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\": \"test-user\", \"date\": \"2026-06-17\", \"activities\": [" + steps + "]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("activities: 한 번에 최대 50개의 활동까지 동기화할 수 있습니다.")));
+    }
+
+    @Test
+    void acceptsExactlyFiftyActivities() throws Exception {
+        String steps = String.join(",", java.util.Collections.nCopies(50, "{\"type\": \"STEPS\", \"steps\": 1000}"));
+        mockMvc.perform(post("/api/health-activities/sync")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\": \"test-user\", \"date\": \"2026-06-17\", \"activities\": [" + steps + "]}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void rejectsSyncDateOutsideServerTodayWindow() throws Exception {
+        mockMvc.perform(post("/api/health-activities/sync")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": "test-user",
+                                  "date": "2026-06-19",
+                                  "activities": [{"type": "STEPS", "steps": 8500}]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("동기화 날짜는 오늘 기준 ±1일 이내여야 합니다.")));
     }
 }
