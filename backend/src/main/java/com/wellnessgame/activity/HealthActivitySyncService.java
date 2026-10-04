@@ -25,60 +25,76 @@ public class HealthActivitySyncService {
     private final UserCharacterRepository characterRepository;
     private final HealthActivityRepository activityRepository;
     private final ActivityXpCalculator xpCalculator;
+    private final HealthActivitySyncValidator validator;
 
     public HealthActivitySyncService(
             UserCharacterRepository characterRepository,
             HealthActivityRepository activityRepository,
-            ActivityXpCalculator xpCalculator
+            ActivityXpCalculator xpCalculator,
+            HealthActivitySyncValidator validator
     ) {
         this.characterRepository = characterRepository;
         this.activityRepository = activityRepository;
         this.xpCalculator = xpCalculator;
+        this.validator = validator;
     }
 
     @Transactional
     public HealthActivitySyncResponse sync(HealthActivitySyncRequest request) {
+        validator.validate(request);
+
         UserCharacter character = characterRepository.findByUserId(request.userId())
                 .orElseGet(() -> new UserCharacter(request.userId()));
 
-        request.activities().forEach(this::validatePayload);
         ActivityPayload effectiveSteps = maxStepsPayload(request.activities());
+        int remainingDailyXp = remainingDailyXp(request.userId(), request.date());
 
         int gainedXp = 0;
         boolean levelUp = false;
         List<ActivityResultResponse> results = new ArrayList<>();
         Set<String> requestKeys = new HashSet<>();
+        List<ActivityPayload> acceptedIntervals = new ArrayList<>();
 
         for (ActivityPayload activity : request.activities()) {
             String source = source(activity);
             String externalKey = externalKey(request, activity);
 
-            // 반영할 XP. null 이면 이미 반영된 활동(중복)이다.
-            Integer activityXp;
+            // 반영할 XP(일일 상한 적용 전). null 이면 반영하지 않는 활동이며 skipMessage 로 사유를 남긴다.
+            Integer activityXp = null;
+            String skipMessage = source + " 이미 반영됨";
             if (activity.type() == ActivityType.STEPS) {
                 // 같은 요청 내 STEPS 는 최대값 하나만 반영하고 나머지는 중복 처리한다.
                 activityXp = activity == effectiveSteps
-                        ? upsertSteps(request, activity, character, externalKey, source)
+                        ? upsertSteps(request, activity, character, externalKey, source, remainingDailyXp)
                         : null;
             } else if (!requestKeys.add(externalKey) || activityRepository.existsByExternalKey(externalKey)) {
-                activityXp = null;
+                // 동일 활동 재전송: 중복
+            } else if (overlapsAccepted(acceptedIntervals, activity) || overlapsStored(request, activity)) {
+                // 같은 유형의 다른 기록과 시간 구간이 겹치면 이 항목만 건너뛴다(먼저 반영된 기록 우선).
+                skipMessage = source + " 겹치는 기록이 이미 반영됨";
             } else {
                 activityXp = xpCalculator.calculate(activity);
                 applyStats(character.getStats(), activity);
-                activityRepository.save(toEntity(request, activity, activityXp, externalKey, source));
+                acceptedIntervals.add(activity);
             }
 
             if (activityXp == null) {
-                results.add(new ActivityResultResponse(activity.type(), source, 0, source + " 이미 반영됨", true));
+                results.add(new ActivityResultResponse(activity.type(), source, 0, skipMessage, true));
                 continue;
             }
-            levelUp = character.addXp(activityXp) || levelUp;
-            gainedXp += activityXp;
+            int awardedXp = capToDaily(activityXp, remainingDailyXp);
+            remainingDailyXp -= awardedXp;
+            if (activity.type() != ActivityType.STEPS) {
+                // STEPS 로그는 upsertSteps 에서 같은 규칙(capToDaily)으로 실제 지급액을 기록한다.
+                activityRepository.save(toEntity(request, activity, awardedXp, externalKey, source));
+            }
+            levelUp = character.addXp(awardedXp) || levelUp;
+            gainedXp += awardedXp;
             results.add(new ActivityResultResponse(
                     activity.type(),
                     source,
-                    activityXp,
-                    rewardMessage(activity, source, activityXp),
+                    awardedXp,
+                    rewardMessage(activity, source, awardedXp, awardedXp < activityXp),
                     false
             ));
         }
@@ -93,6 +109,29 @@ public class HealthActivitySyncService {
                 results,
                 dailyGoals(request.userId(), request.date())
         );
+    }
+
+    private boolean overlapsAccepted(List<ActivityPayload> accepted, ActivityPayload activity) {
+        return accepted.stream().anyMatch(other -> other.type() == activity.type()
+                && other.startedAt().isBefore(activity.endedAt())
+                && activity.startedAt().isBefore(other.endedAt()));
+    }
+
+    private boolean overlapsStored(HealthActivitySyncRequest request, ActivityPayload activity) {
+        return activityRepository.existsOverlapping(
+                request.userId(), activity.type(), activity.startedAt(), activity.endedAt());
+    }
+
+    private int remainingDailyXp(String userId, LocalDate date) {
+        long alreadyGained = activityRepository.sumGainedXpByUserIdAndActivityDate(userId, date);
+        return (int) Math.max(0, ActivityXpCalculator.DAILY_XP_CAP - alreadyGained);
+    }
+
+    /**
+     * 일일 XP 상한을 적용한 실제 지급 XP.
+     */
+    private static int capToDaily(int earnedXp, int remainingDailyXp) {
+        return Math.max(0, Math.min(earnedXp, remainingDailyXp));
     }
 
     /**
@@ -112,13 +151,15 @@ public class HealthActivitySyncService {
     /**
      * 그날의 STEPS 로그를 생성하거나 더 큰 걸음 수로 갱신하고, 새로 지급할 XP 차액을 반환한다.
      * 스탯(DISCIPLINE)도 여기서 반영한다. 걸음 수가 늘지 않았으면 null 을 반환한다.
+     * 반환값은 일일 상한 적용 전 차액이며, 로그 gainedXp 에는 상한 적용 후 실제 지급 누적액을 기록한다.
      */
     private Integer upsertSteps(
             HealthActivitySyncRequest request,
             ActivityPayload activity,
             UserCharacter character,
             String externalKey,
-            String source
+            String source,
+            int remainingDailyXp
     ) {
         int newSteps = Math.max(value(activity.steps()), 0);
         int newXp = xpCalculator.stepsXp(newSteps);
@@ -130,7 +171,7 @@ public class HealthActivitySyncService {
             if (crossesStepsGoal(0, newSteps)) {
                 stats.addDiscipline(1);
             }
-            activityRepository.save(toEntity(request, activity, newXp, externalKey, source));
+            activityRepository.save(toEntity(request, activity, capToDaily(newXp, remainingDailyXp), externalKey, source));
             return newXp;
         }
 
@@ -145,7 +186,7 @@ public class HealthActivitySyncService {
         }
         // 같은 1,000보 구간이거나 상한에 도달했으면 차액은 0 이다. 이미 지급한 XP 는 회수하지 않는다.
         int xpDelta = Math.max(newXp - log.getGainedXp(), 0);
-        log.updateSteps(newSteps, log.getGainedXp() + xpDelta);
+        log.updateSteps(newSteps, log.getGainedXp() + capToDaily(xpDelta, remainingDailyXp));
         return xpDelta;
     }
 
@@ -160,7 +201,7 @@ public class HealthActivitySyncService {
         for (HealthActivity activity : activityRepository.findByUserIdAndActivityDate(userId, date)) {
             switch (activity.getType()) {
                 case STEPS -> steps = Math.max(steps, value(activity.getSteps()));
-                case WORKOUT -> workoutMinutes += value(activity.getDurationMinutes());
+                case WORKOUT -> workoutMinutes = saturatedAdd(workoutMinutes, value(activity.getDurationMinutes()));
                 case SLEEP -> sleepMinutes = Math.max(sleepMinutes, value(activity.getSleepMinutes()));
             }
         }
@@ -169,33 +210,6 @@ public class HealthActivitySyncService {
                 GoalResponse.of(ActivityType.WORKOUT, ActivityXpCalculator.WORKOUT_GOAL_MINUTES, workoutMinutes, "minutes"),
                 GoalResponse.of(ActivityType.SLEEP, ActivityXpCalculator.SLEEP_GOAL_MINUTES, sleepMinutes, "minutes")
         );
-    }
-
-    private void validatePayload(ActivityPayload activity) {
-        switch (activity.type()) {
-            case STEPS -> require(activity.steps() != null, "STEPS 활동에는 steps가 필요합니다.");
-            case WORKOUT -> {
-                require(activity.startedAt() != null && activity.endedAt() != null,
-                        "WORKOUT 활동에는 startedAt과 endedAt이 필요합니다.");
-                requireValidTimeRange(activity);
-            }
-            case SLEEP -> {
-                require(activity.sleepMinutes() != null && activity.startedAt() != null && activity.endedAt() != null,
-                        "SLEEP 활동에는 sleepMinutes, startedAt, endedAt이 필요합니다.");
-                requireValidTimeRange(activity);
-            }
-        }
-    }
-
-    private void require(boolean condition, String message) {
-        if (!condition) {
-            throw new IllegalArgumentException(message);
-        }
-    }
-
-    private void requireValidTimeRange(ActivityPayload activity) {
-        require(!activity.endedAt().isBefore(activity.startedAt()),
-                "활동 종료 시간은 시작 시간 이후여야 합니다.");
     }
 
     private String externalKey(HealthActivitySyncRequest request, ActivityPayload activity) {
@@ -253,6 +267,14 @@ public class HealthActivitySyncService {
         return value == null ? 0 : value;
     }
 
+    private static int saturatedAdd(int a, int b) {
+        try {
+            return Math.addExact(a, b);
+        } catch (ArithmeticException overflow) {
+            return b > 0 ? Integer.MAX_VALUE : Integer.MIN_VALUE;
+        }
+    }
+
     private HealthActivity toEntity(
             HealthActivitySyncRequest request,
             ActivityPayload activity,
@@ -282,12 +304,13 @@ public class HealthActivitySyncService {
         return value == null ? BigDecimal.ZERO : value;
     }
 
-    private String rewardMessage(ActivityPayload activity, String source, int xp) {
-        return switch (activity.type()) {
+    private String rewardMessage(ActivityPayload activity, String source, int xp, boolean capped) {
+        String message = switch (activity.type()) {
             case STEPS -> "걸음 수 보상 +" + xp + " XP";
             case WORKOUT -> workoutName(source) + " 완료 +" + xp + " XP";
             case SLEEP -> "수면 회복 보너스 +" + xp + " XP";
         };
+        return capped ? message + " (일일 XP 상한 도달)" : message;
     }
 
     private String workoutName(String source) {
