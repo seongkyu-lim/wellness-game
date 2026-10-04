@@ -17,5 +17,18 @@ class UserCharacterTest {
         assertThat(character.getTotalXp()).isEqualTo(650);
         assertThat(character.nextLevelXp()).isEqualTo(250);   // 100 + (4-1)*50
     }
-}
 
+    @Test
+    void saturatesXpInsteadOfOverflowing() {
+        UserCharacter character = new UserCharacter("test-user");
+
+        character.addXp(Integer.MAX_VALUE);
+        int levelAfterFirst = character.getLevel();
+        character.addXp(Integer.MAX_VALUE);
+
+        assertThat(character.getTotalXp()).isEqualTo(Integer.MAX_VALUE);
+        assertThat(character.getCurrentXp()).isBetween(0, character.nextLevelXp() - 1);
+        assertThat(character.getLevel()).isGreaterThan(levelAfterFirst);
+        assertThat(character.nextLevelXp()).isPositive();
+    }
+}
