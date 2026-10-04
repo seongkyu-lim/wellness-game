@@ -158,4 +158,155 @@ class HealthActivitySyncServiceTest {
         assertThat(characterRepository.count()).isEqualTo(5);
         assertThat(activityRepository.count()).isEqualTo(5);
     }
+
+    private static final String USER = "steps-user";
+    private static final LocalDate DAY = LocalDate.of(2026, 6, 20);
+
+    private HealthActivitySyncResponse syncSteps(int... stepsValues) {
+        List<ActivityPayload> payloads = java.util.Arrays.stream(stepsValues)
+                .mapToObj(HealthActivitySyncServiceTest::steps)
+                .toList();
+        return syncService.sync(new HealthActivitySyncRequest(USER, DAY, payloads));
+    }
+
+    private static ActivityPayload steps(int value) {
+        return new ActivityPayload(ActivityType.STEPS, null, null, null, null, value,
+                null, null, null, null);
+    }
+
+    private static HealthActivitySyncResponse.GoalResponse stepsGoal(HealthActivitySyncResponse response) {
+        return response.goals().stream()
+                .filter(goal -> goal.type() == ActivityType.STEPS)
+                .findFirst()
+                .orElseThrow();
+    }
+
+    @Test
+    void resyncWithMoreStepsGrantsOnlyXpDifferenceAndGoalBonusOnce() {
+        HealthActivitySyncResponse morning = syncSteps(3_000);
+        HealthActivitySyncResponse evening = syncSteps(9_000);
+
+        assertThat(morning.gainedXp()).isEqualTo(15);              // 3*5
+        assertThat(morning.character().stats().discipline()).isEqualTo(1);
+
+        assertThat(evening.gainedXp()).isEqualTo(60);              // 75(9*5+30) - 15
+        assertThat(evening.activityResults()).singleElement().satisfies(result -> {
+            assertThat(result.duplicate()).isFalse();
+            assertThat(result.gainedXp()).isEqualTo(60);
+        });
+        assertThat(evening.character().totalXp()).isEqualTo(75);
+        assertThat(evening.character().stats().discipline()).isEqualTo(2); // 기본 +1, 목표 +1
+        assertThat(stepsGoal(evening).current()).isEqualTo(9_000);
+        assertThat(stepsGoal(evening).achieved()).isTrue();
+
+        assertThat(activityRepository.count()).isEqualTo(1);
+        HealthActivity log = activityRepository.findAll().get(0);
+        assertThat(log.getSteps()).isEqualTo(9_000);
+        assertThat(log.getGainedXp()).isEqualTo(75);
+
+        HealthActivitySyncResponse later = syncSteps(12_000);
+        assertThat(later.gainedXp()).isEqualTo(15);                // 90 - 75
+        assertThat(later.character().stats().discipline()).isEqualTo(2); // 보너스 재지급 없음
+    }
+
+    @Test
+    void resyncWithSameStepsIsDuplicate() {
+        syncSteps(5_000);
+        HealthActivitySyncResponse again = syncSteps(5_000);
+
+        assertThat(again.gainedXp()).isZero();
+        assertThat(again.activityResults()).singleElement().satisfies(result -> {
+            assertThat(result.duplicate()).isTrue();
+            assertThat(result.gainedXp()).isZero();
+        });
+        assertThat(again.character().totalXp()).isEqualTo(25);
+        assertThat(again.character().stats().discipline()).isEqualTo(1);
+    }
+
+    @Test
+    void resyncWithFewerStepsChangesNothing() {
+        syncSteps(9_000);
+        HealthActivitySyncResponse lower = syncSteps(4_000);
+
+        assertThat(lower.gainedXp()).isZero();
+        assertThat(lower.activityResults().get(0).duplicate()).isTrue();
+        assertThat(lower.character().totalXp()).isEqualTo(75);
+        assertThat(lower.character().stats().discipline()).isEqualTo(2);
+        assertThat(stepsGoal(lower).current()).isEqualTo(9_000);
+        assertThat(activityRepository.findAll().get(0).getSteps()).isEqualTo(9_000);
+    }
+
+    @Test
+    void goalBoundaryCrossingFrom7999To8000GrantsBonus() {
+        HealthActivitySyncResponse below = syncSteps(7_999);
+        assertThat(below.gainedXp()).isEqualTo(35);                // 7*5
+        assertThat(below.character().stats().discipline()).isEqualTo(1);
+        assertThat(stepsGoal(below).achieved()).isFalse();
+
+        HealthActivitySyncResponse reached = syncSteps(8_000);
+        assertThat(reached.gainedXp()).isEqualTo(35);              // 70(8*5+30) - 35
+        assertThat(reached.character().stats().discipline()).isEqualTo(2);
+        assertThat(stepsGoal(reached).current()).isEqualTo(8_000);
+        assertThat(stepsGoal(reached).achieved()).isTrue();
+    }
+
+    @Test
+    void firstSyncAtExactlyGoalGrantsBaseAndGoalDiscipline() {
+        HealthActivitySyncResponse response = syncSteps(8_000);
+
+        assertThat(response.gainedXp()).isEqualTo(70);
+        assertThat(response.character().stats().discipline()).isEqualTo(2);
+    }
+
+    @Test
+    void multipleStepsInOneRequestApplyOnlyTheLargest() {
+        HealthActivitySyncResponse response = syncSteps(3_000, 9_000, 5_000);
+
+        assertThat(response.gainedXp()).isEqualTo(75);
+        assertThat(response.activityResults()).extracting(r -> r.duplicate())
+                .containsExactly(true, false, true);
+        assertThat(response.character().stats().discipline()).isEqualTo(2);
+        assertThat(activityRepository.count()).isEqualTo(1);
+        assertThat(stepsGoal(response).current()).isEqualTo(9_000);
+    }
+
+    @Test
+    void goalsReflectAccumulatedDatabaseValuesNotRequestPayload() {
+        syncService.sync(new HealthActivitySyncRequest(USER, DAY, List.of(
+                steps(9_000),
+                new ActivityPayload(ActivityType.WORKOUT, WorkoutType.RUNNING, 20,
+                        null, null, null, null, null,
+                        Instant.parse("2026-06-20T08:00:00Z"),
+                        Instant.parse("2026-06-20T08:20:00Z")),
+                new ActivityPayload(ActivityType.SLEEP, null, null, null, null, null,
+                        450, 90,
+                        Instant.parse("2026-06-19T22:30:00Z"),
+                        Instant.parse("2026-06-20T06:00:00Z"))
+        )));
+
+        // 두 번째 요청에는 운동 15분만 포함 — goals 는 DB 누적값 기준이어야 한다.
+        HealthActivitySyncResponse second = syncService.sync(new HealthActivitySyncRequest(USER, DAY, List.of(
+                new ActivityPayload(ActivityType.WORKOUT, WorkoutType.CYCLING, 15,
+                        null, null, null, null, null,
+                        Instant.parse("2026-06-20T18:00:00Z"),
+                        Instant.parse("2026-06-20T18:15:00Z"))
+        )));
+
+        assertThat(second.goals())
+                .anySatisfy(goal -> {
+                    assertThat(goal.type()).isEqualTo(ActivityType.STEPS);
+                    assertThat(goal.current()).isEqualTo(9_000);
+                    assertThat(goal.achieved()).isTrue();
+                })
+                .anySatisfy(goal -> {
+                    assertThat(goal.type()).isEqualTo(ActivityType.WORKOUT);
+                    assertThat(goal.current()).isEqualTo(35);
+                    assertThat(goal.achieved()).isTrue();
+                })
+                .anySatisfy(goal -> {
+                    assertThat(goal.type()).isEqualTo(ActivityType.SLEEP);
+                    assertThat(goal.current()).isEqualTo(450);
+                    assertThat(goal.achieved()).isTrue();
+                });
+    }
 }
