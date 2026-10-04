@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
@@ -18,7 +19,11 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "health_activity_log",
-        uniqueConstraints = @UniqueConstraint(name = "uk_health_activity_external_key", columnNames = "external_key"))
+        uniqueConstraints = @UniqueConstraint(name = "uk_health_activity_external_key", columnNames = "external_key"),
+        indexes = {
+                @Index(name = "idx_health_activity_user_type_time", columnList = "user_id, type, started_at, ended_at"),
+                @Index(name = "idx_health_activity_user_date", columnList = "user_id, activity_date")
+        })
 public class HealthActivity {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -106,6 +111,31 @@ public class HealthActivity {
     @PrePersist
     void onCreate() {
         createdAt = Instant.now();
+    }
+
+    /**
+     * 같은 날 STEPS 재동기화 시 누적 걸음 수와 누적 지급 XP 를 갱신한다.
+     */
+    public void updateSteps(int steps, int gainedXp) {
+        if (type != ActivityType.STEPS) {
+            throw new IllegalStateException("STEPS 로그만 걸음 수를 갱신할 수 있습니다.");
+        }
+        this.steps = steps;
+        this.gainedXp = gainedXp;
+    }
+
+    /**
+     * 같은 날 SLEEP 재동기화 시 더 긴 수면 기록으로 갱신하고 누적 지급 XP 를 기록한다.
+     */
+    public void updateSleep(int sleepMinutes, Integer sleepScore, Instant startedAt, Instant endedAt, int gainedXp) {
+        if (type != ActivityType.SLEEP) {
+            throw new IllegalStateException("SLEEP 로그만 수면 기록을 갱신할 수 있습니다.");
+        }
+        this.sleepMinutes = sleepMinutes;
+        this.sleepScore = sleepScore;
+        this.startedAt = startedAt;
+        this.endedAt = endedAt;
+        this.gainedXp = gainedXp;
     }
 
     public String getExternalKey() {

@@ -55,8 +55,9 @@ public class UserCharacter {
         if (gainedXp <= 0) {
             return false;
         }
-        totalXp += gainedXp;
-        currentXp += gainedXp;
+        // 누적 XP 가 int 범위를 넘으면 오버플로 대신 Integer.MAX_VALUE 로 포화시킨다.
+        totalXp = saturatedAdd(totalXp, gainedXp);
+        currentXp = saturatedAdd(currentXp, gainedXp);
         boolean leveledUp = false;
         while (currentXp >= nextLevelXp()) {
             currentXp -= nextLevelXp();
@@ -67,7 +68,16 @@ public class UserCharacter {
     }
 
     public int nextLevelXp() {
-        return level * 100;
+        long next = 100L + (level - 1L) * 50L;
+        return (int) Math.min(next, Integer.MAX_VALUE);
+    }
+
+    private static int saturatedAdd(int current, int delta) {
+        try {
+            return Math.addExact(current, delta);
+        } catch (ArithmeticException overflow) {
+            return Integer.MAX_VALUE;
+        }
     }
 
     @PrePersist

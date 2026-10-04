@@ -13,7 +13,8 @@ public record HealthActivitySyncResponse(
         int gainedXp,
         boolean levelUp,
         CharacterResponse character,
-        List<ActivityResultResponse> activityResults
+        List<ActivityResultResponse> activityResults,
+        List<GoalResponse> goals
 ) {
     public record CharacterResponse(
             int level,
@@ -56,6 +57,18 @@ public record HealthActivitySyncResponse(
             String message,
             boolean duplicate
     ) {
+    }
+
+    public record GoalResponse(
+            ActivityType type,
+            int target,
+            int current,
+            String unit,
+            boolean achieved
+    ) {
+        public static GoalResponse of(ActivityType type, int target, int current, String unit) {
+            return new GoalResponse(type, target, current, unit, current >= target);
+        }
     }
 }
 
