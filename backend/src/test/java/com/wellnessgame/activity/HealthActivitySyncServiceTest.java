@@ -4,18 +4,27 @@ import com.wellnessgame.api.HealthActivitySyncRequest;
 import com.wellnessgame.api.HealthActivitySyncRequest.ActivityPayload;
 import com.wellnessgame.api.HealthActivitySyncResponse;
 import com.wellnessgame.character.UserCharacterRepository;
+import com.wellnessgame.support.ActivityPayloads;
+import com.wellnessgame.support.MutableClock;
+import com.wellnessgame.support.TestClockConfig;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
+import static com.wellnessgame.support.ActivityPayloads.sleep;
+import static com.wellnessgame.support.ActivityPayloads.steps;
+import static com.wellnessgame.support.ActivityPayloads.workout;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@Import(TestClockConfig.class)
 class HealthActivitySyncServiceTest {
     @Autowired
     private HealthActivitySyncService syncService;
@@ -26,10 +35,14 @@ class HealthActivitySyncServiceTest {
     @Autowired
     private UserCharacterRepository characterRepository;
 
+    @Autowired
+    private MutableClock clock;
+
     @BeforeEach
     void cleanDatabase() {
         activityRepository.deleteAll();
         characterRepository.deleteAll();
+        clock.setInstant(TestClockConfig.DEFAULT_NOW);
     }
 
     @Test
@@ -37,18 +50,7 @@ class HealthActivitySyncServiceTest {
         HealthActivitySyncRequest request = new HealthActivitySyncRequest(
                 "test-user",
                 LocalDate.of(2026, 6, 17),
-                List.of(new ActivityPayload(
-                        ActivityType.WORKOUT,
-                        WorkoutType.RUNNING,
-                        30,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        Instant.parse("2026-06-17T08:00:00Z"),
-                        Instant.parse("2026-06-17T08:30:00Z")
-                ))
+                List.of(workout(WorkoutType.RUNNING, 30, "2026-06-17T08:00:00Z", "2026-06-17T08:30:00Z"))
         );
 
         HealthActivitySyncResponse first = syncService.sync(request);
@@ -69,12 +71,8 @@ class HealthActivitySyncServiceTest {
                 "test-user",
                 LocalDate.of(2026, 6, 17),
                 List.of(
-                        new ActivityPayload(ActivityType.STEPS, null, null, null, null, 16_000,
-                                null, null, null, null),
-                        new ActivityPayload(ActivityType.SLEEP, null, null, null, null, null,
-                                450, 90,
-                                Instant.parse("2026-06-16T22:30:00Z"),
-                                Instant.parse("2026-06-17T06:00:00Z"))
+                        steps(16_000),
+                        sleep(450, 90, "2026-06-16T22:30:00Z", "2026-06-17T06:00:00Z")
                 )
         );
 
@@ -95,12 +93,8 @@ class HealthActivitySyncServiceTest {
                 "test-user",
                 LocalDate.of(2026, 6, 17),
                 List.of(
-                        new ActivityPayload(ActivityType.STEPS, null, null, null, null, 8_500,
-                                null, null, null, null),
-                        new ActivityPayload(ActivityType.WORKOUT, WorkoutType.RUNNING, 20,
-                                null, null, null, null, null,
-                                Instant.parse("2026-06-17T08:00:00Z"),
-                                Instant.parse("2026-06-17T08:20:00Z"))
+                        steps(8_500),
+                        workout(WorkoutType.RUNNING, 20, "2026-06-17T08:00:00Z", "2026-06-17T08:20:00Z")
                 )
         ));
 
@@ -137,18 +131,7 @@ class HealthActivitySyncServiceTest {
             HealthActivitySyncResponse response = syncService.sync(new HealthActivitySyncRequest(
                     userId,
                     LocalDate.of(2026, 6, 18),
-                    List.of(new ActivityPayload(
-                            ActivityType.STEPS,
-                            null,
-                            null,
-                            null,
-                            null,
-                            2_000,
-                            null,
-                            null,
-                            null,
-                            null
-                    ))
+                    List.of(steps(2_000))
             ));
 
             assertThat(response.userId()).isEqualTo(userId);
@@ -161,17 +144,14 @@ class HealthActivitySyncServiceTest {
 
     private static final String USER = "steps-user";
     private static final LocalDate DAY = LocalDate.of(2026, 6, 20);
+    private static final Instant DAY_NOW = Instant.parse("2026-06-20T23:00:00Z");
 
     private HealthActivitySyncResponse syncSteps(int... stepsValues) {
+        clock.setInstant(DAY_NOW);
         List<ActivityPayload> payloads = java.util.Arrays.stream(stepsValues)
-                .mapToObj(HealthActivitySyncServiceTest::steps)
+                .mapToObj(ActivityPayloads::steps)
                 .toList();
         return syncService.sync(new HealthActivitySyncRequest(USER, DAY, payloads));
-    }
-
-    private static ActivityPayload steps(int value) {
-        return new ActivityPayload(ActivityType.STEPS, null, null, null, null, value,
-                null, null, null, null);
     }
 
     private static HealthActivitySyncResponse.GoalResponse stepsGoal(HealthActivitySyncResponse response) {
@@ -318,24 +298,16 @@ class HealthActivitySyncServiceTest {
 
     @Test
     void goalsReflectAccumulatedDatabaseValuesNotRequestPayload() {
+        clock.setInstant(DAY_NOW);
         syncService.sync(new HealthActivitySyncRequest(USER, DAY, List.of(
                 steps(9_000),
-                new ActivityPayload(ActivityType.WORKOUT, WorkoutType.RUNNING, 20,
-                        null, null, null, null, null,
-                        Instant.parse("2026-06-20T08:00:00Z"),
-                        Instant.parse("2026-06-20T08:20:00Z")),
-                new ActivityPayload(ActivityType.SLEEP, null, null, null, null, null,
-                        450, 90,
-                        Instant.parse("2026-06-19T22:30:00Z"),
-                        Instant.parse("2026-06-20T06:00:00Z"))
+                workout(WorkoutType.RUNNING, 20, "2026-06-20T08:00:00Z", "2026-06-20T08:20:00Z"),
+                sleep(450, 90, "2026-06-19T22:30:00Z", "2026-06-20T06:00:00Z")
         )));
 
         // 두 번째 요청에는 운동 15분만 포함 — goals 는 DB 누적값 기준이어야 한다.
         HealthActivitySyncResponse second = syncService.sync(new HealthActivitySyncRequest(USER, DAY, List.of(
-                new ActivityPayload(ActivityType.WORKOUT, WorkoutType.CYCLING, 15,
-                        null, null, null, null, null,
-                        Instant.parse("2026-06-20T18:00:00Z"),
-                        Instant.parse("2026-06-20T18:15:00Z"))
+                workout(WorkoutType.CYCLING, 15, "2026-06-20T18:00:00Z", "2026-06-20T18:15:00Z")
         )));
 
         assertThat(second.goals())
