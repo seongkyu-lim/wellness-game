@@ -396,15 +396,6 @@ body {
   border: 1px solid color-mix(in srgb, var(--text-secondary) 35%, transparent);
 }
 
-.userid-row {
-  display: flex;
-  gap: 8px;
-}
-
-.userid-row input {
-  flex: 1;
-}
-
 .mono {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 12px;

@@ -7,10 +7,17 @@ export interface Session {
   provider: Provider
   userId: string
   displayName: string | null
+  /** 백엔드가 발급한 Bearer 토큰. 보호 API 호출에 사용한다. */
+  accessToken: string
+  /** 토큰 만료 시각 (epoch ms) */
+  expiresAt: number
 }
 
 const SESSION_KEY = 'wellness.session'
 const STATE_KEY = 'wellness.oauth-state'
+// 제거된 게스트 기능이 남긴 키. 더 이상 사용하지 않으므로 발견하면 지운다.
+const LEGACY_GUEST_ID_KEY = 'wellness.userId'
+const PROVIDERS: readonly Provider[] = ['google', 'kakao', 'naver']
 
 const CLIENT_IDS: Record<Provider, string | undefined> = {
   google: import.meta.env.VITE_GOOGLE_CLIENT_ID,
@@ -22,17 +29,42 @@ export function isConfigured(provider: Provider): boolean {
   return Boolean(CLIENT_IDS[provider])
 }
 
+/**
+ * 저장된 세션을 읽는다. 토큰이 없는 예전 형식이거나 만료됐거나 손상된 세션은
+ * 지우고 로그아웃 상태(null)로 처리한다.
+ */
 export function loadSession(): Session | null {
+  localStorage.removeItem(LEGACY_GUEST_ID_KEY)
   const raw = localStorage.getItem(SESSION_KEY)
   if (!raw) {
     return null
   }
   try {
-    return JSON.parse(raw) as Session
+    const parsed: unknown = JSON.parse(raw)
+    if (isValidSession(parsed) && parsed.expiresAt > Date.now()) {
+      return parsed
+    }
   } catch {
-    localStorage.removeItem(SESSION_KEY)
-    return null
+    // 손상된 값은 아래에서 제거한다.
   }
+  localStorage.removeItem(SESSION_KEY)
+  return null
+}
+
+function isValidSession(value: unknown): value is Session {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const v = value as Record<string, unknown>
+  return (
+    PROVIDERS.includes(v.provider as Provider) &&
+    typeof v.userId === 'string' &&
+    v.userId.length > 0 &&
+    typeof v.accessToken === 'string' &&
+    v.accessToken.length > 0 &&
+    typeof v.expiresAt === 'number' &&
+    (v.displayName === null || typeof v.displayName === 'string')
+  )
 }
 
 export function clearSession(): void {
@@ -67,11 +99,16 @@ export async function completeLoginFromRedirect(): Promise<Session | null> {
   }
 
   const provider = state.split(':')[0] as Provider
+  if (!PROVIDERS.includes(provider)) {
+    throw new Error('지원하지 않는 로그인 방식입니다.')
+  }
   const result = await postSocialLogin(provider, code, redirectUri())
   const session: Session = {
     provider,
     userId: result.userId,
-    displayName: result.displayName,
+    displayName: result.displayName ?? null,
+    accessToken: result.accessToken,
+    expiresAt: Date.now() + Math.max(0, result.expiresIn) * 1000,
   }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session))
   return session
