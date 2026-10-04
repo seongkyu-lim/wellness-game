@@ -51,37 +51,29 @@ public class HealthActivitySyncService {
 
         for (ActivityPayload activity : request.activities()) {
             String source = source(activity);
+            String externalKey = externalKey(request, activity);
 
+            // 반영할 XP. null 이면 이미 반영된 활동(중복)이다.
+            Integer activityXp;
             if (activity.type() == ActivityType.STEPS) {
                 // 같은 요청 내 STEPS 는 최대값 하나만 반영하고 나머지는 중복 처리한다.
-                int stepsXp = activity == effectiveSteps
-                        ? upsertSteps(request, activity, character)
-                        : 0;
-                if (stepsXp > 0) {
-                    levelUp = character.addXp(stepsXp) || levelUp;
-                    gainedXp += stepsXp;
-                    results.add(new ActivityResultResponse(
-                            activity.type(), source, stepsXp, rewardMessage(activity, source, stepsXp), false));
-                } else {
-                    results.add(duplicateResult(activity, source));
-                }
-                continue;
+                activityXp = activity == effectiveSteps
+                        ? upsertSteps(request, activity, character, externalKey, source)
+                        : null;
+            } else if (!requestKeys.add(externalKey) || activityRepository.existsByExternalKey(externalKey)) {
+                activityXp = null;
+            } else {
+                activityXp = xpCalculator.calculate(activity);
+                applyStats(character.getStats(), activity);
+                activityRepository.save(toEntity(request, activity, activityXp, externalKey, source));
             }
 
-            String externalKey = externalKey(request, activity);
-            boolean duplicate = !requestKeys.add(externalKey) || activityRepository.existsByExternalKey(externalKey);
-
-            if (duplicate) {
-                results.add(duplicateResult(activity, source));
+            if (activityXp == null) {
+                results.add(new ActivityResultResponse(activity.type(), source, 0, source + " 이미 반영됨", true));
                 continue;
             }
-
-            int activityXp = xpCalculator.calculate(activity);
-            applyStats(character.getStats(), activity);
             levelUp = character.addXp(activityXp) || levelUp;
             gainedXp += activityXp;
-
-            activityRepository.save(toEntity(request, activity, activityXp, externalKey, source));
             results.add(new ActivityResultResponse(
                     activity.type(),
                     source,
@@ -119,10 +111,15 @@ public class HealthActivitySyncService {
 
     /**
      * 그날의 STEPS 로그를 생성하거나 더 큰 걸음 수로 갱신하고, 새로 지급할 XP 차액을 반환한다.
-     * 스탯(DISCIPLINE)도 여기서 반영한다. 변화가 없으면 0 을 반환한다.
+     * 스탯(DISCIPLINE)도 여기서 반영한다. 걸음 수가 늘지 않았으면 null 을 반환한다.
      */
-    private int upsertSteps(HealthActivitySyncRequest request, ActivityPayload activity, UserCharacter character) {
-        String externalKey = externalKey(request, activity);
+    private Integer upsertSteps(
+            HealthActivitySyncRequest request,
+            ActivityPayload activity,
+            UserCharacter character,
+            String externalKey,
+            String source
+    ) {
         int newSteps = Math.max(value(activity.steps()), 0);
         int newXp = xpCalculator.stepsXp(newSteps);
         CharacterStats stats = character.getStats();
@@ -130,29 +127,30 @@ public class HealthActivitySyncService {
         Optional<HealthActivity> existing = activityRepository.findByExternalKey(externalKey);
         if (existing.isEmpty()) {
             stats.addDiscipline(1); // 걸음 활동 기본 보상: 그날 첫 STEPS 로그 생성 시 1회
-            if (newSteps >= ActivityXpCalculator.STEPS_GOAL) {
+            if (crossesStepsGoal(0, newSteps)) {
                 stats.addDiscipline(1);
             }
-            activityRepository.save(toEntity(request, activity, newXp, externalKey, source(activity)));
+            activityRepository.save(toEntity(request, activity, newXp, externalKey, source));
             return newXp;
         }
 
         HealthActivity log = existing.get();
         int previousSteps = value(log.getSteps());
         if (newSteps <= previousSteps) {
-            return 0;
+            return null;
         }
 
-        if (previousSteps < ActivityXpCalculator.STEPS_GOAL && newSteps >= ActivityXpCalculator.STEPS_GOAL) {
+        if (crossesStepsGoal(previousSteps, newSteps)) {
             stats.addDiscipline(1); // 목표 달성 보너스: 미달 → 달성 전환 시 1회
         }
+        // 같은 1,000보 구간이거나 상한에 도달했으면 차액은 0 이다. 이미 지급한 XP 는 회수하지 않는다.
         int xpDelta = Math.max(newXp - log.getGainedXp(), 0);
-        log.updateSteps(newSteps, Math.max(newXp, log.getGainedXp()));
+        log.updateSteps(newSteps, log.getGainedXp() + xpDelta);
         return xpDelta;
     }
 
-    private ActivityResultResponse duplicateResult(ActivityPayload activity, String source) {
-        return new ActivityResultResponse(activity.type(), source, 0, source + " 이미 반영됨", true);
+    private boolean crossesStepsGoal(int previousSteps, int newSteps) {
+        return previousSteps < ActivityXpCalculator.STEPS_GOAL && newSteps >= ActivityXpCalculator.STEPS_GOAL;
     }
 
     private List<GoalResponse> dailyGoals(String userId, LocalDate date) {
@@ -224,9 +222,6 @@ public class HealthActivitySyncService {
 
     private void applyStats(CharacterStats stats, ActivityPayload activity) {
         switch (activity.type()) {
-            case STEPS -> {
-                // STEPS 스탯은 upsertSteps 에서 생성/갱신 여부에 따라 반영한다.
-            }
             case WORKOUT -> applyWorkoutStats(stats, activity.workoutType());
             case SLEEP -> {
                 stats.addRecovery(1);

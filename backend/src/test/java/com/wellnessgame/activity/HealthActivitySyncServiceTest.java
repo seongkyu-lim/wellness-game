@@ -237,6 +237,52 @@ class HealthActivitySyncServiceTest {
     }
 
     @Test
+    void resyncWithinSameThousandStepBandUpdatesLogWithZeroXp() {
+        syncSteps(5_000);
+        HealthActivitySyncResponse more = syncSteps(5_500);
+
+        assertThat(more.gainedXp()).isZero();
+        assertThat(more.activityResults()).singleElement().satisfies(result -> {
+            assertThat(result.duplicate()).isFalse();
+            assertThat(result.gainedXp()).isZero();
+        });
+        assertThat(stepsGoal(more).current()).isEqualTo(5_500);
+        assertThat(activityRepository.findAll().get(0).getSteps()).isEqualTo(5_500);
+        assertThat(activityRepository.findAll().get(0).getGainedXp()).isEqualTo(25);
+    }
+
+    @Test
+    void resyncAfterXpCapUpdatesLogWithZeroXp() {
+        syncSteps(50_000);
+        HealthActivitySyncResponse more = syncSteps(60_000);
+
+        assertThat(more.gainedXp()).isZero();
+        assertThat(more.activityResults().get(0).duplicate()).isFalse();
+        assertThat(more.character().totalXp()).isEqualTo(100);
+        assertThat(more.character().stats().discipline()).isEqualTo(2);
+        assertThat(activityRepository.findAll().get(0).getSteps()).isEqualTo(60_000);
+    }
+
+    @Test
+    void firstSyncBelowThousandStepsIsNotReportedAsDuplicate() {
+        HealthActivitySyncResponse first = syncSteps(500);
+
+        assertThat(first.gainedXp()).isZero();
+        assertThat(first.activityResults().get(0).duplicate()).isFalse();
+        assertThat(first.character().stats().discipline()).isEqualTo(1);
+    }
+
+    @Test
+    void stepsXpDifferenceCanLevelUp() {
+        syncSteps(3_000);   // 15 XP, Lv.1 (다음 레벨 100)
+        HealthActivitySyncResponse evening = syncSteps(20_000); // 100 XP 상한 → 차액 85
+
+        assertThat(evening.gainedXp()).isEqualTo(85);
+        assertThat(evening.levelUp()).isTrue();
+        assertThat(evening.character().totalXp()).isEqualTo(100);
+    }
+
+    @Test
     void goalBoundaryCrossingFrom7999To8000GrantsBonus() {
         HealthActivitySyncResponse below = syncSteps(7_999);
         assertThat(below.gainedXp()).isEqualTo(35);                // 7*5
