@@ -25,18 +25,20 @@ VITE_API_BASE_URL=http://192.168.0.10:8080 npm run dev
 
 - 역할 분담: **iOS 앱 = HealthKit 자동 수집·동기화(쓰기), 웹 = 대시보드(읽기)**
   - 앱: `POST /api/health-activities/sync`
-  - 웹: `GET /api/characters/{userId}`, `GET /api/health-activities?userId=&date=`
+  - 웹: `GET /api/characters/me`, `GET /api/health-activities?userId=&date=`
   - 웹은 30초마다 자동 새로고침하므로 앱에서 동기화하면 곧바로 반영됩니다.
-- 사용자 식별은 양쪽 모두 `userId` 문자열 하나로 이루어집니다.
-  - 게스트: `guest:{uuid}` — 웹은 localStorage(`wellness.userId`), iOS는 UserDefaults에 보존
-  - 소셜 로그인: `{provider}:{식별자}` (예: `kakao:12345`)
-- 캐릭터 상태는 서버(DB)에만 존재하므로, **같은 userId를 쓰면 앱과 웹이 같은 캐릭터를 공유**합니다.
+- **웹은 로그인한 사용자만 이용할 수 있으며, 본인 데이터만 조회합니다.** 게스트 모드와 사용자 ID 직접 입력 기능은 없습니다.
+  - 사용자 식별자: `{provider}:{식별자}` (예: `kakao:12345`)
+  - 모든 조회 API는 서버가 발급한 토큰을 `Authorization: Bearer <accessToken>` 헤더로 보냅니다.
+    서버는 `userId` 쿼리를 토큰 주체와 대조하며, 토큰이 없거나 무효면 401, 다른 사용자 데이터면 403을 반환합니다.
+  - 401을 받으면 웹은 저장된 세션을 지우고 로그인 안내 화면으로 돌아갑니다.
+- 캐릭터 상태는 서버(DB)에만 존재하므로, **같은 계정으로 로그인하면 앱과 웹이 같은 캐릭터를 공유**합니다.
 - 프로덕션 배포 시 백엔드 `CORS_ALLOWED_ORIGINS` 환경변수에 웹 오리진을 추가해야 합니다.
 
 ## 소셜 로그인 설정 (앱-웹 자동 연동)
 
 웹에서 iPhone 앱과 같은 계정(구글/카카오/네이버)으로 로그인하면 같은 `{provider}:{식별자}` userId가 만들어져
-캐릭터가 자동으로 연동됩니다. 게스트 ID를 수동으로 옮길 필요가 없습니다.
+캐릭터가 자동으로 연동됩니다.
 
 - **반드시 iOS 앱과 같은 provider 애플리케이션**에 웹 플랫폼을 추가해야 동일한 식별자가 발급됩니다.
 - 각 provider 콘솔에 Redirect URI `http://localhost:5173/` (배포 시 실제 도메인)을 등록하세요.
@@ -49,7 +51,9 @@ VITE_API_BASE_URL=http://192.168.0.10:8080 npm run dev
 | Google | `VITE_GOOGLE_CLIENT_ID` | `OAUTH_GOOGLE_CLIENT_ID`, `OAUTH_GOOGLE_CLIENT_SECRET` |
 
 인증 흐름: 웹 → provider 로그인 → code와 함께 리다이렉트 → `POST /api/auth/{provider}` →
-백엔드가 토큰 교환·프로필 조회(client secret은 서버에만 보관) → userId 반환 → 세션 저장.
+백엔드가 토큰 교환·프로필 조회(client secret은 서버에만 보관) → `userId`, `displayName`,
+`accessToken`(Bearer, `expiresIn` 초 유효) 반환 → localStorage(`wellness.session`)에 세션 저장.
+토큰이 없는 예전 형식의 세션이나 만료된 세션은 로그아웃 상태로 처리됩니다.
 
 Apple 로그인은 Apple Developer 유료 계정 + HTTPS 도메인 + Services ID 등록이 선행돼야 해서 웹에서는 아직 지원하지 않습니다.
 
