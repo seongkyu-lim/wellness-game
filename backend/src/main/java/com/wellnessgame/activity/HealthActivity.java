@@ -108,6 +108,17 @@ public class HealthActivity {
         createdAt = Instant.now();
     }
 
+    /**
+     * 같은 날 STEPS 재동기화 시 누적 걸음 수와 누적 지급 XP 를 갱신한다.
+     */
+    public void updateSteps(int steps, int gainedXp) {
+        if (type != ActivityType.STEPS) {
+            throw new IllegalStateException("STEPS 로그만 걸음 수를 갱신할 수 있습니다.");
+        }
+        this.steps = steps;
+        this.gainedXp = gainedXp;
+    }
+
     public String getExternalKey() {
         return externalKey;
     }
