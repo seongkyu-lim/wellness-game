@@ -12,7 +12,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
+import java.util.Collections;
+
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -45,17 +50,7 @@ class HealthActivityControllerTest {
 
     @Test
     void syncsHealthActivities() throws Exception {
-        mockMvc.perform(post("/api/health-activities/sync")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "userId": "test-user",
-                                  "date": "2026-06-17",
-                                  "activities": [
-                                    {"type": "STEPS", "steps": 8500}
-                                  ]
-                                }
-                                """))
+        postSync(syncBody("2026-06-17", STEPS_8500))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.gainedXp", is(70)))
                 .andExpect(jsonPath("$.character.level", is(1)))
@@ -65,25 +60,16 @@ class HealthActivityControllerTest {
 
     @Test
     void listsDailyActivitiesSyncedFromApp() throws Exception {
-        mockMvc.perform(post("/api/health-activities/sync")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "userId": "test-user",
-                                  "date": "2026-06-17",
-                                  "activities": [
-                                    {"type": "STEPS", "steps": 8500},
-                                    {
-                                      "type": "WORKOUT",
-                                      "workoutType": "RUNNING",
-                                      "durationMinutes": 30,
-                                      "calories": 250,
-                                      "startedAt": "2026-06-17T08:00:00Z",
-                                      "endedAt": "2026-06-17T08:30:00Z"
-                                    }
-                                  ]
-                                }
-                                """))
+        postSync(syncBody("2026-06-17", STEPS_8500, """
+                {
+                  "type": "WORKOUT",
+                  "workoutType": "RUNNING",
+                  "durationMinutes": 30,
+                  "calories": 250,
+                  "startedAt": "2026-06-17T08:00:00Z",
+                  "endedAt": "2026-06-17T08:30:00Z"
+                }
+                """))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/health-activities")
@@ -112,75 +98,110 @@ class HealthActivityControllerTest {
 
     @Test
     void rejectsIncompleteWorkoutPayload() throws Exception {
-        mockMvc.perform(post("/api/health-activities/sync")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "userId": "test-user",
-                                  "date": "2026-06-17",
-                                  "activities": [
-                                    {"type": "WORKOUT", "workoutType": "RUNNING", "durationMinutes": 20}
-                                  ]
-                                }
-                                """))
+        postSync(syncBody("2026-06-17", """
+                {"type": "WORKOUT", "workoutType": "RUNNING", "durationMinutes": 20}
+                """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", is("WORKOUT 활동에는 startedAt과 endedAt이 필요합니다.")));
     }
 
     @Test
     void rejectsWorkoutThatEndsBeforeItStarts() throws Exception {
-        mockMvc.perform(post("/api/health-activities/sync")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "userId": "test-user",
-                                  "date": "2026-06-17",
-                                  "activities": [
-                                    {
-                                      "type": "WORKOUT",
-                                      "workoutType": "RUNNING",
-                                      "durationMinutes": 20,
-                                      "startedAt": "2026-06-17T08:30:00Z",
-                                      "endedAt": "2026-06-17T08:00:00Z"
-                                    }
-                                  ]
-                                }
-                                """))
+        postSync(syncBody("2026-06-17", """
+                {
+                  "type": "WORKOUT",
+                  "workoutType": "RUNNING",
+                  "durationMinutes": 20,
+                  "startedAt": "2026-06-17T08:30:00Z",
+                  "endedAt": "2026-06-17T08:00:00Z"
+                }
+                """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", is("활동 종료 시간은 시작 시간 이후여야 합니다.")));
     }
 
     @Test
     void rejectsMoreThanFiftyActivities() throws Exception {
-        String steps = String.join(",", java.util.Collections.nCopies(51, "{\"type\": \"STEPS\", \"steps\": 1000}"));
-        mockMvc.perform(post("/api/health-activities/sync")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"userId\": \"test-user\", \"date\": \"2026-06-17\", \"activities\": [" + steps + "]}"))
+        postSync(syncBody("2026-06-17", Collections.nCopies(51, STEPS_1000).toArray(String[]::new)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", is("activities: 한 번에 최대 50개의 활동까지 동기화할 수 있습니다.")));
     }
 
     @Test
     void acceptsExactlyFiftyActivities() throws Exception {
-        String steps = String.join(",", java.util.Collections.nCopies(50, "{\"type\": \"STEPS\", \"steps\": 1000}"));
-        mockMvc.perform(post("/api/health-activities/sync")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"userId\": \"test-user\", \"date\": \"2026-06-17\", \"activities\": [" + steps + "]}"))
+        postSync(syncBody("2026-06-17", Collections.nCopies(50, STEPS_1000).toArray(String[]::new)))
                 .andExpect(status().isOk());
     }
 
     @Test
     void rejectsSyncDateOutsideServerTodayWindow() throws Exception {
-        mockMvc.perform(post("/api/health-activities/sync")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "userId": "test-user",
-                                  "date": "2026-06-19",
-                                  "activities": [{"type": "STEPS", "steps": 8500}]
-                                }
-                                """))
+        postSync(syncBody("2026-06-19", STEPS_8500))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", is("동기화 날짜는 오늘 기준 ±1일 이내여야 합니다.")));
+    }
+
+    @Test
+    void valueViolationIsReportedPerItemWithOk() throws Exception {
+        postSync(syncBody("2026-06-17", STEPS_8500, """
+                {"type": "STEPS", "steps": 150000}
+                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gainedXp", is(70)))
+                .andExpect(jsonPath("$.activityResults[1].duplicate", is(true)))
+                .andExpect(jsonPath("$.activityResults[1].message",
+                        is("STEPS 기록을 반영하지 않았어요: 걸음 수는 0 이상 100000 이하여야 합니다.")));
+    }
+
+    /**
+     * iOS(AppleHealthKitProvider + JSONEncoder .iso8601) 가 실제로 보내는 형태 계약:
+     * 병합된 수면 구간(구간 길이 455분 > 실제 수면 431분), 반올림된 운동 분(30분 40초 → 31분),
+     * Double 칼로리/거리, 오늘 누적 걸음 수. 정상 요청은 하나도 건너뛰지 않아야 한다.
+     */
+    @Test
+    void acceptsRealisticIosPayload() throws Exception {
+        postSync(syncBody("2026-06-17",
+                """
+                {"type": "STEPS", "steps": 8732}
+                """,
+                """
+                {
+                  "type": "WORKOUT",
+                  "workoutType": "RUNNING",
+                  "durationMinutes": 31,
+                  "calories": 287.6,
+                  "distanceMeters": 5012.3,
+                  "startedAt": "2026-06-17T07:00:00Z",
+                  "endedAt": "2026-06-17T07:30:40Z"
+                }
+                """,
+                """
+                {
+                  "type": "SLEEP",
+                  "sleepMinutes": 431,
+                  "sleepScore": 90,
+                  "startedAt": "2026-06-16T14:10:00Z",
+                  "endedAt": "2026-06-16T21:45:00Z"
+                }
+                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activityResults[*].duplicate", everyItem(is(false))))
+                .andExpect(jsonPath("$.activityResults[*].gainedXp", contains(70, 136, 80))) // 136 = 31*3 + 28 + 15
+                .andExpect(jsonPath("$.gainedXp", is(286)));
+    }
+
+    // ---- helpers ----
+
+    private static final String STEPS_8500 = "{\"type\": \"STEPS\", \"steps\": 8500}";
+    private static final String STEPS_1000 = "{\"type\": \"STEPS\", \"steps\": 1000}";
+
+    private ResultActions postSync(String body) throws Exception {
+        return mockMvc.perform(post("/api/health-activities/sync")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
+    private static String syncBody(String date, String... activities) {
+        return "{\"userId\": \"test-user\", \"date\": \"" + date + "\", \"activities\": ["
+                + String.join(",", activities) + "]}";
     }
 }
