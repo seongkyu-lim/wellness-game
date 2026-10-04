@@ -34,29 +34,43 @@ final class DashboardViewModel: ObservableObject {
     /// 권한 확인 → 오늘 데이터 로드 → 서버 동기화를 한 번에 수행한다.
     /// 앱 실행·포그라운드 복귀 시 호출되며, 잦은 복귀로 서버를 반복 호출하지 않도록
     /// 최소 간격(AutoSyncPolicy)을 지킨다. 당겨서 새로고침은 force로 간격을 무시한다.
+    /// 로그인하지 않았으면 건강 데이터를 읽지도, 서버에 보내지도 않는다.
     func autoSync(force: Bool = false) async {
+        guard let userId = userSession.userId else {
+            statusMessage = userSession.reloginNotice ?? UserSession.signInPrompt
+            return
+        }
         guard force || AutoSyncPolicy.shouldSync(lastSyncedAt: lastSyncedAt, now: Date()) else {
             return
         }
         await perform {
             try await activeProvider.requestAuthorization()
-            snapshot = try await activeProvider.loadToday()
+            let loaded = try await activeProvider.loadToday()
+            guard userSession.userId == userId else { return }
+            snapshot = loaded
 
-            guard let snapshot else {
-                statusMessage = "오늘 건강 데이터가 아직 없습니다."
-                return
-            }
             let request = HealthActivitySyncRequest(
-                userId: userSession.userId,
-                date: Self.dateFormatter.string(from: snapshot.date),
-                activities: snapshot.activities
+                userId: userId,
+                date: Self.dateFormatter.string(from: loaded.date),
+                activities: loaded.activities
             )
-            syncResponse = try await networkClient.sync(request)
+            let response = try await networkClient.sync(request)
+            // 요청 중 로그아웃·계정 전환이 일어났으면 결과를 버린다.
+            guard userSession.userId == userId else { return }
+            syncResponse = response
             lastSyncedAt = Date()
-            statusMessage = syncResponse?.levelUp == true
+            statusMessage = response.levelUp
                 ? "레벨업! 성장 결과를 확인하세요."
                 : "자동 동기화 완료"
         }
+    }
+
+    /// 로그아웃·세션 만료 시 이전 사용자의 화면 데이터를 비운다.
+    func reset() {
+        snapshot = nil
+        syncResponse = nil
+        lastSyncedAt = nil
+        statusMessage = userSession.reloginNotice ?? UserSession.signInPrompt
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -72,6 +86,9 @@ final class DashboardViewModel: ObservableObject {
         defer { isLoading = false }
         do {
             try await operation()
+        } catch NetworkError.unauthorized {
+            userSession.handleUnauthorized()
+            reset()
         } catch {
             statusMessage = "동기화하지 못했어요. 당겨서 다시 시도할 수 있어요. (\(error.localizedDescription))"
         }
