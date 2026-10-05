@@ -1,5 +1,6 @@
 package com.wellnessgame.api;
 
+import com.wellnessgame.i18n.Messages;
 import com.wellnessgame.auth.ForbiddenException;
 import com.wellnessgame.auth.UnauthorizedException;
 import org.springframework.http.HttpHeaders;
@@ -42,7 +43,7 @@ public class ApiExceptionHandler {
         String message = exception.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .orElse("요청 값이 올바르지 않습니다.");
+                .orElse(Messages.get("validation.invalid-request"));
         return error(HttpStatus.BAD_REQUEST, message);
     }
 

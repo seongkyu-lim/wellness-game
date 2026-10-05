@@ -66,8 +66,8 @@ public class AuthController {
     }
 
     public record SignUpRequest(
-            @NotBlank @Pattern(regexp = "^[A-Za-z0-9_]{4,32}$", message = "아이디는 영문·숫자·밑줄 4~32자여야 합니다.") String username,
-            @NotBlank @Size(min = 8, max = 72, message = "비밀번호는 8자 이상이어야 합니다.") String password,
+            @NotBlank @Pattern(regexp = "^[A-Za-z0-9_]{4,32}$", message = "{validation.username.pattern}") String username,
+            @NotBlank @Size(min = 8, max = 72, message = "{validation.password.size}") String password,
             String displayName
     ) {
     }

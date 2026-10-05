@@ -9,6 +9,8 @@ import com.wellnessgame.api.HealthActivitySyncResponse.GoalResponse;
 import com.wellnessgame.character.CharacterStats;
 import com.wellnessgame.character.UserCharacter;
 import com.wellnessgame.character.UserCharacterRepository;
+import com.wellnessgame.i18n.LocalizedMessage;
+import com.wellnessgame.i18n.Messages;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,8 +53,8 @@ public class HealthActivitySyncService {
                 .orElseGet(() -> new UserCharacter(request.userId()));
         SyncState state = new SyncState(request, character, remainingDailyXp(request.userId(), request.date()));
 
-        List<String> rejections = activities.stream()
-                .map(activity -> validator.rejectionReason(request.date(), activity).orElse(null))
+        List<LocalizedMessage> rejections = activities.stream()
+                .map(activity -> validator.rejection(request.date(), activity).orElse(null))
                 .toList();
         // 같은 요청 내 STEPS/SLEEP 은 (값 범위를 통과한 것 중) 최대값 하나만 반영한다.
         state.effectiveSteps = maxPayload(activities, rejections, ActivityType.STEPS, ActivityPayload::steps);
@@ -124,7 +126,7 @@ public class HealthActivitySyncService {
     /**
      * 활동 하나의 처리 결과. APPLIED 일 때 earnedXp 는 일일 상한 적용 전 XP 다.
      */
-    private record Decision(Outcome outcome, int earnedXp, String reason) {
+    private record Decision(Outcome outcome, int earnedXp, LocalizedMessage reason) {
         enum Outcome { APPLIED, DUPLICATE, OVERLAP, REJECTED }
 
         static final Decision DUPLICATE = new Decision(Outcome.DUPLICATE, 0, null);
@@ -134,7 +136,7 @@ public class HealthActivitySyncService {
             return new Decision(Outcome.APPLIED, earnedXp, null);
         }
 
-        static Decision rejected(String reason) {
+        static Decision rejected(LocalizedMessage reason) {
             return new Decision(Outcome.REJECTED, 0, reason);
         }
 
@@ -144,7 +146,7 @@ public class HealthActivitySyncService {
         }
     }
 
-    private Decision decide(SyncState state, ActivityPayload activity, String rejection, String externalKey, String source) {
+    private Decision decide(SyncState state, ActivityPayload activity, LocalizedMessage rejection, String externalKey, String source) {
         if (rejection != null) {
             return Decision.rejected(rejection);
         }
@@ -175,9 +177,9 @@ public class HealthActivitySyncService {
 
     private String skipMessage(String source, Decision decision) {
         return switch (decision.outcome()) {
-            case OVERLAP -> source + " 겹치는 기록이 이미 반영됨";
-            case REJECTED -> source + " 기록을 반영하지 않았어요: " + decision.reason();
-            default -> source + " 이미 반영됨";
+            case OVERLAP -> Messages.get("activity.result.overlap", source);
+            case REJECTED -> Messages.get("activity.result.rejected", source, Messages.get(decision.reason()));
+            default -> Messages.get("activity.result.duplicate", source);
         };
     }
 
@@ -217,7 +219,7 @@ public class HealthActivitySyncService {
      */
     private ActivityPayload maxPayload(
             List<ActivityPayload> activities,
-            List<String> rejections,
+            List<LocalizedMessage> rejections,
             ActivityType type,
             Function<ActivityPayload, Integer> valueOf
     ) {
@@ -412,21 +414,11 @@ public class HealthActivitySyncService {
 
     private String rewardMessage(ActivityPayload activity, String source, int xp, boolean capped) {
         String message = switch (activity.type()) {
-            case STEPS -> "걸음 수 보상 +" + xp + " XP";
-            case WORKOUT -> workoutName(source) + " 완료 +" + xp + " XP";
-            case SLEEP -> "수면 회복 보너스 +" + xp + " XP";
+            case STEPS -> Messages.get("activity.reward.steps", xp);
+            // WORKOUT 의 source 는 WorkoutType 이름이다(source() 참고).
+            case WORKOUT -> Messages.get("activity.reward.workout", Messages.get("workout.name." + source), xp);
+            case SLEEP -> Messages.get("activity.reward.sleep", xp);
         };
-        return capped ? message + " (일일 XP 상한 도달)" : message;
-    }
-
-    private String workoutName(String source) {
-        return switch (source) {
-            case "SWIMMING" -> "수영";
-            case "RUNNING" -> "달리기";
-            case "WALKING" -> "걷기";
-            case "CYCLING" -> "자전거";
-            case "STRENGTH_TRAINING" -> "근력 운동";
-            default -> "운동";
-        };
+        return capped ? Messages.get("activity.reward.capped", message) : message;
     }
 }
