@@ -77,6 +77,32 @@ export const IconBike = ({ size }: IconProps) => (
   </StrokeIcon>
 )
 
+export const IconPhone = ({ size }: IconProps) => (
+  <StrokeIcon size={size}>
+    <rect x="6" y="2" width="12" height="20" rx="3" />
+    <path d="M11 18h2" />
+  </StrokeIcon>
+)
+
+export const IconSprout = ({ size }: IconProps) => (
+  <StrokeIcon size={size}>
+    <path d="M12 21v-9M12 12c0-4-3-6-7-6 0 4 3 6 7 6zM12 10c0-4 3-6 7-6 0 4-3 6-7 6z" />
+  </StrokeIcon>
+)
+
+export const IconLock = ({ size }: IconProps) => (
+  <StrokeIcon size={size}>
+    <rect x="5" y="11" width="14" height="10" rx="2" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </StrokeIcon>
+)
+
+export const IconChart = ({ size }: IconProps) => (
+  <StrokeIcon size={size}>
+    <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+  </StrokeIcon>
+)
+
 const SPARKLE_PATH = 'M12 0 L14.5 9.5 L24 12 L14.5 14.5 L12 24 L9.5 14.5 L0 12 L9.5 9.5Z'
 
 interface SparkleProps {
