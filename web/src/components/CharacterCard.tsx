@@ -48,9 +48,7 @@ export function CharacterCard({ character }: Props) {
         </div>
         <div className="nameplate">
           <span className="name-tag">새싹이</span>
-          <span className="level-chip">
-            Lv.{level} · {stage.name} 단계
-          </span>
+          <span className="level-chip">{character ? `Lv.${level} · ${stage.name} 단계` : '아직 동기화 전'}</span>
         </div>
       </section>
 
@@ -88,8 +86,9 @@ function XpCard({ character, nextLabel }: { character: Character; nextLabel: str
         role="progressbar"
         aria-label="다음 레벨까지 경험치"
         aria-valuemin={0}
-        aria-valuemax={character.nextLevelXp}
-        aria-valuenow={character.currentXp}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(percent)}
+        aria-valuetext={`${character.currentXp.toLocaleString()} / ${character.nextLevelXp.toLocaleString()} XP`}
       >
         <div className="xp-fill" style={{ width: `${percent}%` }} />
       </div>

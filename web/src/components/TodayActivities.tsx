@@ -87,7 +87,7 @@ export function TodayActivities({ date, onDateChange, activities, onRefresh, loa
 
       {activities.length === 0 ? (
         <div className="empty-state">
-          <CharacterAvatar level={1} size={64} />
+          <CharacterAvatar level={1} size={64} decorative />
           <div>
             <h3>아직 동기화된 기록이 없어요</h3>
             <p className="hint">

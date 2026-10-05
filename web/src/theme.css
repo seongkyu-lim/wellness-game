@@ -14,6 +14,8 @@
   --brand-green: #3f8f3a;
   /* 채색 면 위의 글자색 — 라이트/다크 모두 잉크 */
   --on-pop: #1f2340;
+  /* 입력칸 테두리 — 다크 모드에서도 3:1 이상 보이게 한다 */
+  --field-border: #1f2340;
   --xp: #9be15d;
   --yellow: #ffe066;
   --pink: #ffb3cf;
@@ -50,6 +52,7 @@
     --brand-green: #8ed65a;
     --danger-bg: #5a2230;
     --danger-text: #ffd6d0;
+    --field-border: #8a90c8;
   }
 }
 
@@ -212,7 +215,7 @@ h2 {
   position: absolute;
   left: 16px;
   top: 16px;
-  max-width: 220px;
+  max-width: min(220px, 60%);
   margin: 0;
   background: var(--card);
   border: var(--line) solid var(--ink);
@@ -448,7 +451,7 @@ input {
 }
 
 .section-tools input[type='date'] {
-  border: 2.5px solid var(--ink);
+  border: 2.5px solid var(--field-border);
   border-radius: var(--chip-radius);
   background: var(--card);
   color: var(--text);
@@ -459,7 +462,7 @@ input {
 
 .section-tools input[type='date']:focus-visible,
 .btn:focus-visible {
-  outline: 3px solid var(--stat-disc);
+  outline: 3px solid var(--text);
   outline-offset: 2px;
 }
 

@@ -39,13 +39,20 @@ const FACE: Record<StageKey, Face> = {
 interface Props {
   level: number
   size?: number
+  /** 장식용으로 쓸 때 스크린 리더에서 숨긴다. */
+  decorative?: boolean
 }
 
 /** 레벨에 따라 씨앗 → 개화로 자라는 화분 마스코트 '새싹이'. */
-export function CharacterAvatar({ level, size = 76 }: Props) {
+export function CharacterAvatar({ level, size = 76, decorative = false }: Props) {
   const stage = growthStage(level)
   return (
-    <svg width={size} height={size} viewBox="0 0 120 120" role="img" aria-label={`${stage.name} 단계의 새싹이`}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 120 120"
+      {...(decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': `${stage.name} 단계의 새싹이` })}
+    >
       <ellipse cx="60" cy="112" rx="30" ry="4" fill={C.ink} opacity="0.18" />
       <g stroke={C.ink} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round">
         {/* 식물을 먼저 그려 줄기 아래쪽이 화분 테두리에 가려지게 한다 */}
