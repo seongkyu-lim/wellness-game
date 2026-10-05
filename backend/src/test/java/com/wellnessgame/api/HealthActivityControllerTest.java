@@ -1,6 +1,7 @@
 package com.wellnessgame.api;
 
 import com.wellnessgame.activity.HealthActivityRepository;
+import com.wellnessgame.auth.JwtTokenService;
 import com.wellnessgame.character.UserCharacterRepository;
 import com.wellnessgame.support.MutableClock;
 import com.wellnessgame.support.TestClockConfig;
@@ -16,12 +17,16 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.Collections;
 
+import static com.wellnessgame.support.TestAuth.bearer;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -40,6 +45,9 @@ class HealthActivityControllerTest {
 
     @Autowired
     private MutableClock clock;
+
+    @Autowired
+    private JwtTokenService tokenService;
 
     @BeforeEach
     void cleanDatabase() {
@@ -73,6 +81,7 @@ class HealthActivityControllerTest {
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/health-activities")
+                        .with(bearer(tokenService, "test-user"))
                         .param("userId", "test-user")
                         .param("date", "2026-06-17"))
                 .andExpect(status().isOk())
@@ -90,6 +99,7 @@ class HealthActivityControllerTest {
     @Test
     void returnsEmptyActivityListWhenNothingSynced() throws Exception {
         mockMvc.perform(get("/api/health-activities")
+                        .with(bearer(tokenService, "test-user"))
                         .param("userId", "test-user")
                         .param("date", "2026-06-17"))
                 .andExpect(status().isOk())
@@ -189,6 +199,94 @@ class HealthActivityControllerTest {
                 .andExpect(jsonPath("$.gainedXp", is(286)));
     }
 
+    // ---- 인증·인가 (#43) ----
+
+    @Test
+    void syncWithoutTokenIsUnauthorizedAndPersistsNothing() throws Exception {
+        mockMvc.perform(post("/api/health-activities/sync")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(syncBody("2026-06-17", STEPS_8500)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("WWW-Authenticate", "Bearer"))
+                .andExpect(jsonPath("$.status", is(401)));
+
+        assertThat(activityRepository.count()).isZero();
+    }
+
+    @Test
+    void syncForAnotherUserIsForbiddenAndPersistsNothing() throws Exception {
+        mockMvc.perform(post("/api/health-activities/sync")
+                        .with(bearer(tokenService, "google:intruder"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(syncBody("2026-06-17", STEPS_8500)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message", is("다른 사용자의 데이터입니다.")));
+
+        assertThat(activityRepository.count()).isZero();
+        assertThat(characterRepository.count()).isZero();
+    }
+
+    @Test
+    void syncWithoutUserIdUsesTokenSubject() throws Exception {
+        mockMvc.perform(post("/api/health-activities/sync")
+                        .with(bearer(tokenService, "google:123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"date\": \"2026-06-17\", \"activities\": [" + STEPS_8500 + "]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId", is("google:123")))
+                .andExpect(jsonPath("$.gainedXp", is(70)));
+
+        assertThat(characterRepository.findByUserId("google:123")).isPresent();
+    }
+
+    @Test
+    void dailyActivitiesWithoutTokenIsUnauthorized() throws Exception {
+        mockMvc.perform(get("/api/health-activities")
+                        .param("userId", "test-user")
+                        .param("date", "2026-06-17"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("WWW-Authenticate", "Bearer"));
+    }
+
+    @Test
+    void dailyActivitiesForAnotherUserIsForbidden() throws Exception {
+        postSync(syncBody("2026-06-17", STEPS_8500)).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/health-activities")
+                        .with(bearer(tokenService, "google:intruder"))
+                        .param("userId", "test-user")
+                        .param("date", "2026-06-17"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void dailyActivitiesWithoutUserIdUsesTokenSubject() throws Exception {
+        postSync(syncBody("2026-06-17", STEPS_8500)).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/health-activities")
+                        .with(bearer(tokenService, "test-user"))
+                        .param("date", "2026-06-17"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId", is("test-user")))
+                .andExpect(jsonPath("$.activities", hasSize(1)));
+    }
+
+    @Test
+    void allowsPreflightForProtectedEndpoints() throws Exception {
+        mockMvc.perform(options("/api/health-activities/sync")
+                        .header("Origin", "http://localhost:5173")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "authorization,content-type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
+        mockMvc.perform(options("/api/health-activities")
+                        .header("Origin", "http://localhost:5173")
+                        .header("Access-Control-Request-Method", "GET")
+                        .header("Access-Control-Request-Headers", "authorization"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
+    }
+
     // ---- helpers ----
 
     private static final String STEPS_8500 = "{\"type\": \"STEPS\", \"steps\": 8500}";
@@ -196,6 +294,7 @@ class HealthActivityControllerTest {
 
     private ResultActions postSync(String body) throws Exception {
         return mockMvc.perform(post("/api/health-activities/sync")
+                .with(bearer(tokenService, "test-user"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body));
     }

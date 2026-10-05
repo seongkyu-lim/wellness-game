@@ -3,15 +3,12 @@ import Foundation
 import GoogleSignIn
 import KakaoSDKAuth
 import KakaoSDKCommon
-import KakaoSDKUser
 import NidThirdPartyLogin
 import UIKit
 
 @MainActor
 final class SocialLoginService: ObservableObject {
     @Published private(set) var isLoading = false
-
-    private var didAttemptRestore = false
 
     static func initializeKakaoIfConfigured() {
         guard let appKey = configurationValue(for: "KAKAO_NATIVE_APP_KEY") else {
@@ -52,25 +49,14 @@ final class SocialLoginService: ObservableObject {
         return false
     }
 
-    func restoreSessionIfNeeded(_ session: UserSession) {
-        guard !didAttemptRestore else {
-            return
-        }
-        didAttemptRestore = true
+    private let networkClient: NetworkClient
 
-        switch session.provider {
-        case .google:
-            restoreGoogleSession(session)
-        case .kakao:
-            restoreKakaoSession(session)
-        case .naver:
-            restoreNaverSession(session)
-        case .apple, .password, .none:
-            // Apple은 UserSession.init에서, 아이디/비밀번호는 UserDefaults에서 이미 복원된다.
-            break
-        }
+    init(networkClient: NetworkClient = NetworkClient()) {
+        self.networkClient = networkClient
     }
 
+    /// Google SDK 로그인 → ID 토큰을 서버(`/api/auth/google/native`)에서 서버 토큰으로 교환한다.
+    /// 서버 교환에 실패하면 SDK 세션도 정리해 반쯤 로그인된 상태를 남기지 않는다.
     func signInWithGoogle(_ session: UserSession) {
         guard Self.configurationValue(for: "GIDClientID") != nil else {
             session.updateStatus("Google OAuth 클라이언트 ID를 먼저 설정해 주세요.")
@@ -85,193 +71,50 @@ final class SocialLoginService: ObservableObject {
         session.updateStatus("Google 로그인을 진행하고 있습니다.")
         GIDSignIn.sharedInstance.signIn(withPresenting: presenter) { [weak self] result, error in
             Task { @MainActor in
-                self?.isLoading = false
+                guard let self else { return }
                 if let error {
+                    self.isLoading = false
                     session.updateStatus("Google 로그인에 실패했습니다: \(error.localizedDescription)")
                     return
                 }
-                guard let user = result?.user, let identifier = user.userID else {
+                guard let idToken = result?.user.idToken?.tokenString else {
+                    self.isLoading = false
+                    GIDSignIn.sharedInstance.signOut()
                     session.updateStatus("Google 사용자 정보를 확인하지 못했습니다.")
                     return
                 }
-                let name = user.profile?.name ?? user.profile?.email
-                session.signIn(provider: .google, userIdentifier: identifier, displayName: name)
+                await self.exchangeGoogleToken(idToken, session: session)
             }
         }
     }
 
+    private func exchangeGoogleToken(_ idToken: String, session: UserSession) async {
+        defer { isLoading = false }
+        do {
+            let auth = try await networkClient.signInWithGoogle(idToken: idToken)
+            try session.signIn(provider: .google, auth: auth)
+        } catch {
+            GIDSignIn.sharedInstance.signOut()
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            session.updateStatus("Google 로그인에 실패했습니다: \(message)")
+        }
+    }
+
+    /// Kakao·Naver·Apple은 서버 토큰 발급이 준비되지 않아 비활성화돼 있다.
     func signInWithKakao(_ session: UserSession) {
-        guard Self.configurationValue(for: "KAKAO_NATIVE_APP_KEY") != nil else {
-            session.updateStatus("Kakao 네이티브 앱 키를 먼저 설정해 주세요.")
-            return
-        }
-
-        isLoading = true
-        session.updateStatus("Kakao 로그인을 진행하고 있습니다.")
-
-        let completion: (OAuthToken?, Error?) -> Void = { [weak self] _, error in
-            Task { @MainActor in
-                if let error {
-                    self?.isLoading = false
-                    session.updateStatus("Kakao 로그인에 실패했습니다: \(error.localizedDescription)")
-                    return
-                }
-                self?.loadKakaoProfile(session)
-            }
-        }
-
-        if UserApi.isKakaoTalkLoginAvailable() {
-            UserApi.shared.loginWithKakaoTalk(launchMethod: .CustomScheme, completion: completion)
-        } else {
-            UserApi.shared.loginWithKakaoAccount(completion: completion)
-        }
+        session.updateStatus("Kakao 로그인은 아직 지원하지 않습니다.")
     }
 
     func signInWithNaver(_ session: UserSession) {
-        guard Self.isNaverConfigured else {
-            session.updateStatus("Naver OAuth 앱 정보를 먼저 설정해 주세요.")
-            return
-        }
-
-        isLoading = true
-        session.updateStatus("Naver 로그인을 진행하고 있습니다.")
-        NidOAuth.shared.requestLogin { [weak self] result in
-            Task { @MainActor in
-                switch result {
-                case let .success(loginResult):
-                    self?.loadNaverProfile(
-                        accessToken: loginResult.accessToken.tokenString,
-                        session: session
-                    )
-                case let .failure(error):
-                    self?.isLoading = false
-                    session.updateStatus("Naver 로그인에 실패했습니다: \(error.localizedDescription)")
-                }
-            }
-        }
+        session.updateStatus("Naver 로그인은 아직 지원하지 않습니다.")
     }
 
+    /// 로그아웃: SDK 세션을 정리하고 Keychain 토큰을 포함한 앱 세션을 지운다.
     func signOut(_ session: UserSession) {
-        switch session.provider {
-        case .google:
+        if session.provider == .google {
             GIDSignIn.sharedInstance.signOut()
-            session.signOut()
-        case .kakao:
-            UserApi.shared.logout { error in
-                Task { @MainActor in
-                    if let error {
-                        session.signOut(
-                            message: "Kakao 로그아웃 요청은 실패했지만 기기 세션을 지우고 게스트로 전환했습니다. (\(error.localizedDescription))"
-                        )
-                    } else {
-                        session.signOut()
-                    }
-                }
-            }
-        case .naver:
-            NidOAuth.shared.logout()
-            session.signOut()
-        case .apple, .password, .none:
-            session.signOut()
         }
-    }
-
-    private func restoreGoogleSession(_ session: UserSession) {
-        guard Self.configurationValue(for: "GIDClientID") != nil else {
-            session.signOut(message: "Google 설정이 없어 게스트로 전환했습니다.")
-            return
-        }
-
-        isLoading = true
-        GIDSignIn.sharedInstance.restorePreviousSignIn { [weak self] user, error in
-            Task { @MainActor in
-                self?.isLoading = false
-                guard error == nil, let user, let identifier = user.userID else {
-                    session.signOut(message: "Google 로그인 상태가 만료되어 게스트로 전환했습니다.")
-                    return
-                }
-                let name = user.profile?.name ?? user.profile?.email
-                session.signIn(provider: .google, userIdentifier: identifier, displayName: name)
-            }
-        }
-    }
-
-    private func restoreKakaoSession(_ session: UserSession) {
-        guard Self.configurationValue(for: "KAKAO_NATIVE_APP_KEY") != nil, AuthApi.hasToken() else {
-            session.signOut(message: "Kakao 로그인 상태가 없어 게스트로 전환했습니다.")
-            return
-        }
-
-        isLoading = true
-        UserApi.shared.accessTokenInfo { [weak self] _, error in
-            Task { @MainActor in
-                if error != nil {
-                    self?.isLoading = false
-                    session.signOut(message: "Kakao 로그인 상태가 만료되어 게스트로 전환했습니다.")
-                    return
-                }
-                self?.loadKakaoProfile(session)
-            }
-        }
-    }
-
-    private func restoreNaverSession(_ session: UserSession) {
-        guard Self.isNaverConfigured,
-              let accessToken = NidOAuth.shared.accessToken,
-              !accessToken.isExpired else {
-            session.signOut(message: "Naver 로그인 상태가 없어 게스트로 전환했습니다.")
-            return
-        }
-
-        isLoading = true
-        NidOAuth.shared.verifyAccessToken(accessToken.tokenString) { [weak self] result in
-            Task { @MainActor in
-                switch result {
-                case .success(true):
-                    self?.loadNaverProfile(accessToken: accessToken.tokenString, session: session)
-                case .success(false), .failure:
-                    self?.isLoading = false
-                    session.signOut(message: "Naver 로그인 상태가 만료되어 게스트로 전환했습니다.")
-                }
-            }
-        }
-    }
-
-    private func loadKakaoProfile(_ session: UserSession) {
-        UserApi.shared.me { [weak self] user, error in
-            Task { @MainActor in
-                self?.isLoading = false
-                if let error {
-                    session.updateStatus("Kakao 사용자 정보 조회에 실패했습니다: \(error.localizedDescription)")
-                    return
-                }
-                guard let user, let identifier = user.id else {
-                    session.updateStatus("Kakao 사용자 정보를 확인하지 못했습니다.")
-                    return
-                }
-                let name = user.kakaoAccount?.profile?.nickname ?? user.kakaoAccount?.email
-                session.signIn(provider: .kakao, userIdentifier: String(identifier), displayName: name)
-            }
-        }
-    }
-
-    private func loadNaverProfile(accessToken: String, session: UserSession) {
-        NidOAuth.shared.getUserProfile(accessToken: accessToken) { [weak self] result in
-            Task { @MainActor in
-                self?.isLoading = false
-                switch result {
-                case let .success(profile):
-                    guard let identifier = profile["id"], !identifier.isEmpty else {
-                        session.updateStatus("Naver 사용자 정보를 확인하지 못했습니다.")
-                        return
-                    }
-                    let name = profile["nickname"] ?? profile["name"] ?? profile["email"]
-                    session.signIn(provider: .naver, userIdentifier: identifier, displayName: name)
-                case let .failure(error):
-                    session.updateStatus("Naver 사용자 정보 조회에 실패했습니다: \(error.localizedDescription)")
-                }
-            }
-        }
+        session.signOut()
     }
 
     private static var isNaverConfigured: Bool {

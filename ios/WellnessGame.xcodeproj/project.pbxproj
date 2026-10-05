@@ -41,6 +41,17 @@
 		A20000000000000000000004 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* Components.swift */; };
 		A20000000000000000000005 /* HealthActivityDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* HealthActivityDTO.swift */; };
 		A20000000000000000000006 /* CharacterResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* CharacterResponse.swift */; };
+		A100000000000000000CA02 /* KeychainTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB02 /* KeychainTokenStore.swift */; };
+		A2000000000000000000000B /* NetworkClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* NetworkClient.swift */; };
+		A2000000000000000000000C /* KeychainTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB02 /* KeychainTokenStore.swift */; };
+		A2000000000000000000000D /* UserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* UserSession.swift */; };
+		A2000000000000000000000E /* CredentialAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB01 /* CredentialAuthService.swift */; };
+		A2000000000000000000000F /* DashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* DashboardViewModel.swift */; };
+		A20000000000000000000010 /* HealthDataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* HealthDataProvider.swift */; };
+		A20000000000000000000011 /* MockHealthDataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* MockHealthDataProvider.swift */; };
+		A20000000000000000000012 /* AppleHealthKitProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* AppleHealthKitProvider.swift */; };
+		A20000000000000000000013 /* HealthKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* HealthKitManager.swift */; };
+		A20000000000000000000014 /* AuthNetworkingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* AuthNetworkingTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -71,6 +82,8 @@
 		B20000000000000000000004 /* GrowthStageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthStageTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000005 /* AutoSyncPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSyncPolicyTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000003 /* WellnessGameTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WellnessGameTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B100000000000000000CB02 /* KeychainTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainTokenStore.swift; sourceTree = "<group>"; };
+		B20000000000000000000006 /* AuthNetworkingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthNetworkingTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -195,6 +208,7 @@
 				B20000000000000000000002 /* ThemeColorTests.swift */,
 				B20000000000000000000004 /* GrowthStageTests.swift */,
 				B20000000000000000000005 /* AutoSyncPolicyTests.swift */,
+				B20000000000000000000006 /* AuthNetworkingTests.swift */,
 			);
 			path = WellnessGameTests;
 			sourceTree = "<group>";
@@ -214,6 +228,7 @@
 				B1000000000000000000000F /* UserSession.swift */,
 				B10000000000000000000010 /* SocialLoginService.swift */,
 				B100000000000000000CB01 /* CredentialAuthService.swift */,
+				B100000000000000000CB02 /* KeychainTokenStore.swift */,
 			);
 			path = Authentication;
 			sourceTree = "<group>";
@@ -328,6 +343,7 @@
 				A1000000000000000000000C /* UserSession.swift in Sources */,
 				A1000000000000000000000D /* SocialLoginService.swift in Sources */,
 				A100000000000000000CA01 /* CredentialAuthService.swift in Sources */,
+				A100000000000000000CA02 /* KeychainTokenStore.swift in Sources */,
 				A10000000000000000000013 /* Theme.swift in Sources */,
 				A10000000000000000000014 /* Components.swift in Sources */,
 				A10000000000000000000015 /* CharacterAvatarView.swift in Sources */,
@@ -350,6 +366,16 @@
 				A2000000000000000000000A /* AutoSyncPolicy.swift in Sources */,
 				A20000000000000000000005 /* HealthActivityDTO.swift in Sources */,
 				A20000000000000000000006 /* CharacterResponse.swift in Sources */,
+				A2000000000000000000000B /* NetworkClient.swift in Sources */,
+				A2000000000000000000000C /* KeychainTokenStore.swift in Sources */,
+				A2000000000000000000000D /* UserSession.swift in Sources */,
+				A2000000000000000000000E /* CredentialAuthService.swift in Sources */,
+				A2000000000000000000000F /* DashboardViewModel.swift in Sources */,
+				A20000000000000000000010 /* HealthDataProvider.swift in Sources */,
+				A20000000000000000000011 /* MockHealthDataProvider.swift in Sources */,
+				A20000000000000000000012 /* AppleHealthKitProvider.swift in Sources */,
+				A20000000000000000000013 /* HealthKitManager.swift in Sources */,
+				A20000000000000000000014 /* AuthNetworkingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

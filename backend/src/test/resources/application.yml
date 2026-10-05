@@ -8,3 +8,9 @@ spring:
     hibernate:
       ddl-auto: create-drop
     open-in-view: false
+
+auth:
+  jwt:
+    # 테스트 전용 고정 키(32바이트 이상). 운영에서 사용 금지.
+    secret: test-only-jwt-secret-0123456789abcdef
+    ttl: 30d
