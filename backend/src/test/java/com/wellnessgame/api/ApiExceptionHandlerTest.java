@@ -6,6 +6,7 @@ import com.wellnessgame.i18n.Messages;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -13,7 +14,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.i18n.AcceptHeaderLocaleResolver;
 
 import java.util.Map;
@@ -84,6 +87,10 @@ class ApiExceptionHandlerTest {
                 .andExpect(status().isBadRequest());
         mockMvc.perform(get("/throw/number/abc"))
                 .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/throw/response-status"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/throw/annotated"))
+                .andExpect(status().isConflict());
     }
 
     @RestController
@@ -120,5 +127,19 @@ class ApiExceptionHandlerTest {
         @GetMapping("/throw/number/{value}")
         void number(@PathVariable("value") int value) {
         }
+
+        @GetMapping("/throw/response-status")
+        void responseStatus() {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+
+        @GetMapping("/throw/annotated")
+        void annotated() {
+            throw new ConflictException();
+        }
+    }
+
+    @ResponseStatus(HttpStatus.CONFLICT)
+    static class ConflictException extends RuntimeException {
     }
 }

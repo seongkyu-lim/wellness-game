@@ -33,7 +33,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(UnauthorizedException.class)
     ResponseEntity<Map<String, Object>> handleUnauthorized(UnauthorizedException exception) {
-        ResponseEntity<Map<String, Object>> response = error(HttpStatus.UNAUTHORIZED, exception.getMessage());
+        ResponseEntity<Map<String, Object>> response = userFacing(HttpStatus.UNAUTHORIZED, exception);
         return ResponseEntity.status(response.getStatusCode())
                 .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
                 .body(response.getBody());
@@ -41,17 +41,17 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ForbiddenException.class)
     ResponseEntity<Map<String, Object>> handleForbidden(ForbiddenException exception) {
-        return error(HttpStatus.FORBIDDEN, exception.getMessage());
+        return userFacing(HttpStatus.FORBIDDEN, exception);
     }
 
     @ExceptionHandler(BadRequestException.class)
     ResponseEntity<Map<String, Object>> handleBadRequest(BadRequestException exception) {
-        return error(HttpStatus.BAD_REQUEST, exception.getMessage());
+        return userFacing(HttpStatus.BAD_REQUEST, exception);
     }
 
     @ExceptionHandler(ServiceUnavailableException.class)
     ResponseEntity<Map<String, Object>> handleServiceUnavailable(ServiceUnavailableException exception) {
-        return error(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage());
+        return userFacing(HttpStatus.SERVICE_UNAVAILABLE, exception);
     }
 
     /** 사용자용으로 만들지 않은 IllegalArgumentException: 상태 코드(400)는 유지하고 문구만 일반화한다. */
@@ -72,6 +72,7 @@ public class ApiExceptionHandler {
                 .findFirst()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .orElse(Messages.get("validation.invalid-request"));
+        logFor(HttpStatus.BAD_REQUEST, exception.getClass().getSimpleName() + ": " + message, exception);
         return error(HttpStatus.BAD_REQUEST, message);
     }
 
@@ -94,9 +95,29 @@ public class ApiExceptionHandler {
                 || AnnotatedElementUtils.hasAnnotation(exception.getClass(), ResponseStatus.class);
     }
 
+    /** 사용자용 예외: 메시지를 그대로 응답한다. */
+    private ResponseEntity<Map<String, Object>> userFacing(HttpStatus status, RuntimeException exception) {
+        logFor(status, describe(exception), exception);
+        return error(status, exception.getMessage());
+    }
+
+    /** 사용자용이 아닌 예외: 상태 코드는 유지하고 일반 문구로 응답한다. 상세는 로그에만 남긴다. */
     private ResponseEntity<Map<String, Object>> generic(HttpStatus status, Exception exception) {
-        log.error("처리하지 못한 예외로 {} 응답", status.value(), exception);
+        logFor(status, describe(exception), exception);
         return error(status, Messages.get("error.generic"));
+    }
+
+    /** 4xx 는 클라이언트 문제라 스택 없이 한 줄(warn), 5xx 는 스택과 함께 error 로 남긴다. */
+    private static void logFor(HttpStatus status, String summary, Exception exception) {
+        if (status.is5xxServerError()) {
+            log.error("{} 응답: {}", status.value(), summary, exception);
+        } else {
+            log.warn("{} 응답: {}", status.value(), summary);
+        }
+    }
+
+    private static String describe(Exception exception) {
+        return exception.getClass().getSimpleName() + ": " + exception.getMessage();
     }
 
     private ResponseEntity<Map<String, Object>> error(HttpStatus status, String message) {

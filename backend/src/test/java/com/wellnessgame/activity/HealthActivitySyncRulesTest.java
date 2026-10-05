@@ -400,6 +400,54 @@ class HealthActivitySyncRulesTest {
         assertThat(nextDay.gainedXp()).isEqualTo(200);
     }
 
+    @Test
+    void workoutCapCannotBeBypassedBySplittingSameDayWorkoutsAcrossRequestDates() {
+        // 모두 6/17(서버 시간대) 운동인데 요청 date 만 6/16·6/17·6/18 로 바꿔 보낸다.
+        HealthActivitySyncResponse asYesterday = syncService.sync(new HealthActivitySyncRequest(USER, DAY.minusDays(1),
+                List.of(workoutAt(WorkoutType.RUNNING, 70, "06:00", "07:10"))));
+        HealthActivitySyncResponse asToday = sync(workoutAt(WorkoutType.SWIMMING, 70, "08:00", "09:10"));
+        HealthActivitySyncResponse asTomorrow = syncService.sync(new HealthActivitySyncRequest(USER, DAY.plusDays(1),
+                List.of(workoutAt(WorkoutType.CYCLING, 70, "10:00", "11:10"))));
+
+        assertThat(asYesterday.gainedXp()).isEqualTo(200);
+        assertThat(asToday.gainedXp()).isEqualTo(200);
+        assertThat(asTomorrow.gainedXp()).isZero();
+        assertThat(asTomorrow.activityResults().get(0).message()).isEqualTo("자전거 완료 +0 XP (일일 XP 상한 도달)");
+        assertThat(activityRepository.findAll()).allSatisfy(log -> assertThat(log.getActivityDate()).isEqualTo(DAY));
+        assertThat(activityRepository.sumGainedXpByUserIdAndActivityDateAndType(USER, DAY, ActivityType.WORKOUT))
+                .isEqualTo(ActivityXpCalculator.DAILY_WORKOUT_XP_CAP);
+    }
+
+    @Test
+    void concurrentWorkoutSyncsDoNotExceedWorkoutCap() throws Exception {
+        sync(workoutAt(WorkoutType.RUNNING, 70, "06:00", "07:10")); // 운동 200 → 운동 상한 200 남음
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<HealthActivitySyncResponse> a = executor.submit(() -> {
+                start.await();
+                return sync(workoutAt(WorkoutType.SWIMMING, 70, "08:00", "09:10"),
+                        workoutAt(WorkoutType.WALKING, 30, "12:00", "12:30"));
+            });
+            Future<HealthActivitySyncResponse> b = executor.submit(() -> {
+                start.await();
+                return sync(workoutAt(WorkoutType.CYCLING, 70, "10:00", "11:10"),
+                        workoutAt(WorkoutType.STRENGTH_TRAINING, 30, "14:00", "14:30"));
+            });
+            start.countDown();
+            int gained = a.get(10, TimeUnit.SECONDS).gainedXp() + b.get(10, TimeUnit.SECONDS).gainedXp();
+
+            assertThat(gained).isEqualTo(200);
+        } finally {
+            executor.shutdownNow();
+        }
+        assertThat(activityRepository.sumGainedXpByUserIdAndActivityDateAndType(USER, DAY, ActivityType.WORKOUT))
+                .isEqualTo(ActivityXpCalculator.DAILY_WORKOUT_XP_CAP);
+        assertThat(characterRepository.findByUserId(USER).orElseThrow().getTotalXp())
+                .isEqualTo(ActivityXpCalculator.DAILY_WORKOUT_XP_CAP);
+    }
+
     // ---- 신규 사용자 동시 동기화 (#49) ----
 
     @Test

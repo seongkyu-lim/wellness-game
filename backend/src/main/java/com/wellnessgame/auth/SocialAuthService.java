@@ -5,6 +5,8 @@ import com.wellnessgame.error.ServiceUnavailableException;
 import com.wellnessgame.i18n.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.MissingNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,7 @@ import java.util.Set;
  */
 @Service
 public class SocialAuthService {
+    private static final Logger log = LoggerFactory.getLogger(SocialAuthService.class);
     private static final Set<String> SUPPORTED = Set.of("kakao", "naver", "google");
 
     private final RestClient restClient;
@@ -42,8 +45,9 @@ public class SocialAuthService {
             default -> properties.google();
         };
         if (provider == null || !provider.configured()) {
-            throw new ServiceUnavailableException(
-                    Messages.get("auth.social.not-configured", providerName, providerName.toUpperCase()));
+            // 환경변수 이름은 서버 로그에만 남기고, 응답에는 provider 이름도 넣지 않는 일반 문구를 쓴다.
+            log.error("{} 소셜 로그인 설정 없음: OAUTH_{}_* 환경변수를 확인하세요.", providerName, providerName.toUpperCase());
+            throw new ServiceUnavailableException(Messages.get("auth.social.not-configured"));
         }
 
         try {

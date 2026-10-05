@@ -13,14 +13,18 @@ import com.wellnessgame.character.UserCharacterRepository;
 import com.wellnessgame.i18n.LocalizedMessage;
 import com.wellnessgame.i18n.Messages;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -32,33 +36,51 @@ public class HealthActivitySyncService {
     private final HealthActivityRepository activityRepository;
     private final ActivityXpCalculator xpCalculator;
     private final HealthActivitySyncValidator validator;
+    private final Clock clock;
+    private final TransactionTemplate transaction;
 
     public HealthActivitySyncService(
             UserCharacterRepository characterRepository,
             UserCharacterProvisioner characterProvisioner,
             HealthActivityRepository activityRepository,
             ActivityXpCalculator xpCalculator,
-            HealthActivitySyncValidator validator
+            HealthActivitySyncValidator validator,
+            Clock clock,
+            PlatformTransactionManager transactionManager
     ) {
         this.characterRepository = characterRepository;
         this.characterProvisioner = characterProvisioner;
         this.activityRepository = activityRepository;
         this.xpCalculator = xpCalculator;
         this.validator = validator;
+        this.clock = clock;
+        this.transaction = new TransactionTemplate(transactionManager);
     }
 
-    @Transactional
+    /**
+     * 트랜잭션 밖에서 검증하고 신규 사용자 캐릭터를 먼저 만든 뒤(짧은 별도 트랜잭션), 나머지를 한 트랜잭션에서 처리한다.
+     * 요청 하나가 동시에 DB 연결 두 개를 잡지 않도록 캐릭터 생성 트랜잭션을 동기화 트랜잭션 안에 중첩하지 않는다.
+     */
     public HealthActivitySyncResponse sync(HealthActivitySyncRequest request) {
         validator.validate(request);
+        characterProvisioner.createIfAbsent(request.userId());
+        return transaction.execute(status -> syncInTransaction(request));
+    }
+
+    private HealthActivitySyncResponse syncInTransaction(HealthActivitySyncRequest request) {
         List<ActivityPayload> activities = request.activities().stream().map(this::withResolvedDuration).toList();
 
-        // 신규 사용자면 캐릭터를 별도 트랜잭션에서 먼저 만든다(동시 생성 경합은 제약 위반을 무시).
-        // 그 뒤 캐릭터 행을 잠가 같은 사용자의 동시 동기화를 직렬화하고, 남은 일일 XP 를 계산한다.
-        characterProvisioner.createIfAbsent(request.userId());
+        // 캐릭터 행을 잠가 같은 사용자의 동시 동기화를 직렬화한 뒤 남은 일일 XP 를 계산한다.
         UserCharacter character = characterRepository.findByUserIdForUpdate(request.userId()).orElseThrow();
-        SyncState state = new SyncState(request, character,
-                remainingDailyXp(request.userId(), request.date()),
-                remainingWorkoutXp(request.userId(), request.date()));
+        SyncState state = new SyncState(request, character);
+        // 이 요청이 로그를 쓰기 전에 관련 날짜의 남은 상한을 모두 읽어 둔다(이후 저장분이 합계에 이중 반영되지 않게).
+        remainingDailyXp(state, request.date());
+        for (ActivityPayload activity : activities) {
+            if (activity.type() == ActivityType.WORKOUT) {
+                remainingDailyXp(state, xpDate(request, activity));
+                remainingWorkoutXp(state, xpDate(request, activity));
+            }
+        }
 
         List<LocalizedMessage> rejections = activities.stream()
                 .map(activity -> validator.rejection(request.date(), activity).orElse(null))
@@ -82,15 +104,17 @@ public class HealthActivitySyncService {
                 continue;
             }
 
-            int awardedXp = capToDaily(decision.earnedXp(), state.remainingDailyXp);
+            // 운동 XP 는 운동 시작 시각의 현지 날짜 기준으로 상한을 적용한다(요청 date 를 바꿔 나눠 보내도 우회 불가).
+            LocalDate xpDate = xpDate(request, activity);
+            int awardedXp = capToDaily(decision.earnedXp(), remainingDailyXp(state, xpDate));
             if (activity.type() == ActivityType.WORKOUT) {
-                awardedXp = Math.min(awardedXp, state.remainingWorkoutXp);
-                state.remainingWorkoutXp -= awardedXp;
+                awardedXp = Math.min(awardedXp, remainingWorkoutXp(state, xpDate));
+                state.remainingWorkoutXp.merge(xpDate, -awardedXp, Integer::sum);
             }
-            state.remainingDailyXp -= awardedXp;
+            state.remainingDailyXp.merge(xpDate, -awardedXp, Integer::sum);
             if (activity.type() == ActivityType.WORKOUT) {
                 // STEPS/SLEEP 로그는 upsert 에서 같은 규칙(capToDaily)으로 실제 지급액을 기록한다.
-                activityRepository.save(toEntity(request, activity, awardedXp, externalKey, source));
+                activityRepository.save(toEntity(request, xpDate, activity, awardedXp, externalKey, source));
             }
             levelUp = character.addXp(awardedXp) || levelUp;
             gainedXp += awardedXp;
@@ -123,21 +147,15 @@ public class HealthActivitySyncService {
         private final UserCharacter character;
         private final Set<String> requestKeys = new HashSet<>();
         private final List<ActivityPayload> acceptedWorkouts = new ArrayList<>();
-        private int remainingDailyXp;
-        private int remainingWorkoutXp;
+        /** 날짜별 남은 총 상한·운동 상한. 처음 쓸 때 DB 합계로 채운다. */
+        private final Map<LocalDate, Integer> remainingDailyXp = new HashMap<>();
+        private final Map<LocalDate, Integer> remainingWorkoutXp = new HashMap<>();
         private ActivityPayload effectiveSteps;
         private ActivityPayload effectiveSleep;
 
-        private SyncState(
-                HealthActivitySyncRequest request,
-                UserCharacter character,
-                int remainingDailyXp,
-                int remainingWorkoutXp
-        ) {
+        private SyncState(HealthActivitySyncRequest request, UserCharacter character) {
             this.request = request;
             this.character = character;
-            this.remainingDailyXp = remainingDailyXp;
-            this.remainingWorkoutXp = remainingWorkoutXp;
         }
     }
 
@@ -220,14 +238,27 @@ public class HealthActivitySyncService {
                 activity.startedAt(), activity.endedAt());
     }
 
-    private int remainingDailyXp(String userId, LocalDate date) {
-        long alreadyGained = activityRepository.sumGainedXpByUserIdAndActivityDate(userId, date);
-        return (int) Math.max(0, ActivityXpCalculator.DAILY_XP_CAP - alreadyGained);
+    /**
+     * XP 상한을 적용할 날짜. WORKOUT 은 시작 시각의 서버 현지 날짜(로그 activityDate 도 같음), 나머지는 요청 date.
+     */
+    private LocalDate xpDate(HealthActivitySyncRequest request, ActivityPayload activity) {
+        return activity.type() == ActivityType.WORKOUT
+                ? LocalDate.ofInstant(activity.startedAt(), clock.getZone())
+                : request.date();
     }
 
-    private int remainingWorkoutXp(String userId, LocalDate date) {
-        long alreadyGained = activityRepository.sumGainedXpByUserIdAndActivityDateAndType(userId, date, ActivityType.WORKOUT);
-        return (int) Math.max(0, ActivityXpCalculator.DAILY_WORKOUT_XP_CAP - alreadyGained);
+    private int remainingDailyXp(SyncState state, LocalDate date) {
+        return state.remainingDailyXp.computeIfAbsent(date, d -> remainingUnder(ActivityXpCalculator.DAILY_XP_CAP,
+                activityRepository.sumGainedXpByUserIdAndActivityDate(state.request.userId(), d)));
+    }
+
+    private int remainingWorkoutXp(SyncState state, LocalDate date) {
+        return state.remainingWorkoutXp.computeIfAbsent(date, d -> remainingUnder(ActivityXpCalculator.DAILY_WORKOUT_XP_CAP,
+                activityRepository.sumGainedXpByUserIdAndActivityDateAndType(state.request.userId(), d, ActivityType.WORKOUT)));
+    }
+
+    private static int remainingUnder(int cap, long alreadyGained) {
+        return (int) Math.max(0, cap - alreadyGained);
     }
 
     /**
@@ -273,8 +304,8 @@ public class HealthActivitySyncService {
             if (crossesStepsGoal(0, newSteps)) {
                 stats.addDiscipline(1);
             }
-            activityRepository.save(toEntity(state.request, activity,
-                    capToDaily(newXp, state.remainingDailyXp), externalKey, source));
+            activityRepository.save(toEntity(state.request, state.request.date(), activity,
+                    capToDaily(newXp, remainingDailyXp(state, state.request.date())), externalKey, source));
             return newXp;
         }
 
@@ -289,7 +320,7 @@ public class HealthActivitySyncService {
         }
         // 같은 1,000보 구간이거나 상한에 도달했으면 차액은 0 이다. 이미 지급한 XP 는 회수하지 않는다.
         int xpDelta = Math.max(newXp - log.getGainedXp(), 0);
-        log.updateSteps(newSteps, log.getGainedXp() + capToDaily(xpDelta, state.remainingDailyXp));
+        log.updateSteps(newSteps, log.getGainedXp() + capToDaily(xpDelta, remainingDailyXp(state, state.request.date())));
         return xpDelta;
     }
 
@@ -315,8 +346,8 @@ public class HealthActivitySyncService {
             if (meetsSleepQuality(newScore)) {
                 stats.addIntelligence(1);
             }
-            activityRepository.save(toEntity(state.request, activity,
-                    capToDaily(newXp, state.remainingDailyXp), externalKey, source));
+            activityRepository.save(toEntity(state.request, state.request.date(), activity,
+                    capToDaily(newXp, remainingDailyXp(state, state.request.date())), externalKey, source));
             return newXp;
         }
 
@@ -332,7 +363,7 @@ public class HealthActivitySyncService {
         }
         int xpDelta = Math.max(newXp - log.getGainedXp(), 0);
         log.updateSleep(newMinutes, activity.sleepScore(), activity.startedAt(), activity.endedAt(),
-                log.getGainedXp() + capToDaily(xpDelta, state.remainingDailyXp));
+                log.getGainedXp() + capToDaily(xpDelta, remainingDailyXp(state, state.request.date())));
         return xpDelta;
     }
 
@@ -366,7 +397,7 @@ public class HealthActivitySyncService {
                     activity.startedAt().toString(),
                     activity.endedAt().toString(),
                     source(activity));
-            case SLEEP -> String.join("|", request.userId(), request.date().toString(), "SLEEP");
+            case SLEEP -> HealthActivity.sleepKey(request.userId(), request.date());
         };
     }
 
@@ -408,6 +439,7 @@ public class HealthActivitySyncService {
 
     private HealthActivity toEntity(
             HealthActivitySyncRequest request,
+            LocalDate activityDate,
             ActivityPayload activity,
             int xp,
             String externalKey,
@@ -415,7 +447,7 @@ public class HealthActivitySyncService {
     ) {
         return new HealthActivity(
                 request.userId(),
-                request.date(),
+                activityDate,
                 activity.type(),
                 source,
                 activity.durationMinutes(),
