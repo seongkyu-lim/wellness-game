@@ -47,7 +47,12 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authenticationInterceptor)
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/auth/**");
+                // 새 /api/auth/** 보호 API가 조용히 공개되지 않도록 공개 경로를 명시한다.
+                .excludePathPatterns(
+                        "/api/auth/signup",
+                        "/api/auth/login",
+                        "/api/auth/google/native",
+                        "/api/auth/{provider}");
     }
 
     @Override

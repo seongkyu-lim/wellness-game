@@ -1,6 +1,8 @@
 package com.wellnessgame.auth;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -17,6 +19,7 @@ import java.util.Set;
  */
 @Service
 public class GoogleNativeAuthService {
+    private static final Logger log = LoggerFactory.getLogger(GoogleNativeAuthService.class);
     private static final Set<String> GOOGLE_ISSUERS = Set.of("accounts.google.com", "https://accounts.google.com");
 
     private final RestClient restClient;
@@ -38,8 +41,8 @@ public class GoogleNativeAuthService {
 
     public SocialLoginResult authenticate(String idToken) {
         if (allowedAudiences.isEmpty()) {
-            throw new IllegalStateException(
-                    "구글 로그인이 서버에 설정되어 있지 않습니다. OAUTH_GOOGLE_IOS_CLIENT_ID 또는 OAUTH_GOOGLE_CLIENT_ID 환경변수를 확인하세요.");
+            log.error("구글 로그인 설정 없음: OAUTH_GOOGLE_IOS_CLIENT_ID 또는 OAUTH_GOOGLE_CLIENT_ID 환경변수를 확인하세요.");
+            throw new IllegalStateException("구글 로그인을 사용할 수 없습니다.");
         }
         if (idToken == null || idToken.isBlank()) {
             throw new IllegalArgumentException("idToken이 비어 있습니다.");

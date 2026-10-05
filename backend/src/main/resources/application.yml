@@ -3,6 +3,11 @@ spring:
     url: ${DATABASE_URL:jdbc:mysql://localhost:3306/wellness_game?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${DATABASE_USERNAME:wellness}
     password: ${DATABASE_PASSWORD:wellness}
+  http:
+    client:
+      # 외부 인증 서버(구글 tokeninfo 등) 지연으로 요청 스레드가 고갈되지 않도록 제한
+      connect-timeout: 3s
+      read-timeout: 5s
   jpa:
     hibernate:
       ddl-auto: update
