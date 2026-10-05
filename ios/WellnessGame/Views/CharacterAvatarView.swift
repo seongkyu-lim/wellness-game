@@ -268,16 +268,6 @@ struct CharacterAvatarView: View {
     }
 }
 
-private extension Color {
-    init(hex: UInt32) {
-        self.init(
-            red: Double((hex >> 16) & 0xFF) / 255,
-            green: Double((hex >> 8) & 0xFF) / 255,
-            blue: Double(hex & 0xFF) / 255
-        )
-    }
-}
-
 #Preview {
     HStack(spacing: 8) {
         ForEach([1, 3, 6, 10, 15, 20], id: \.self) { level in

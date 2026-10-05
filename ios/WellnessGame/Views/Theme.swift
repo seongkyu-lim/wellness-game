@@ -24,20 +24,20 @@ enum Theme {
     static let textPrimary = Color(light: 0x1F2340, dark: 0xF3F0FF)
     static let textSecondary = Color(light: 0x4A5080, dark: 0xB4B9E0)
     /// 채색 면(칩·밴드·노란 버튼) 위의 글자색 — 라이트/다크 모두 잉크
-    static let onPop = Color(light: 0x1F2340, dark: 0x1F2340)
+    static let onPop = Color(hex: 0x1F2340)
 
     // MARK: - Brand · accents
 
     /// 브랜드 그린 — 섹션 마크, 'Game' 글자, 강조
     static let primary = Color(light: 0x3F8F3A, dark: 0x8ED65A)
-    static let xp = Color(light: 0x9BE15D, dark: 0x9BE15D)
-    static let yellow = Color(light: 0xFFE066, dark: 0xFFE066)
-    static let pink = Color(light: 0xFFB3CF, dark: 0xFFB3CF)
-    static let mint = Color(light: 0xCFF3B5, dark: 0xCFF3B5)
-    static let peach = Color(light: 0xFFD9C7, dark: 0xFFD9C7)
-    static let lilac = Color(light: 0xE3D9FF, dark: 0xE3D9FF)
+    static let xp = Color(hex: 0x9BE15D)
+    static let yellow = Color(hex: 0xFFE066)
+    static let pink = Color(hex: 0xFFB3CF)
+    static let mint = Color(hex: 0xCFF3B5)
+    static let peach = Color(hex: 0xFFD9C7)
+    static let lilac = Color(hex: 0xE3D9FF)
     /// 반짝이 장식 분홍
-    static let sparklePink = Color(light: 0xFF9EC4, dark: 0xFF9EC4)
+    static let sparklePink = Color(hex: 0xFF9EC4)
 
     static let dangerBackground = Color(light: 0xFFD6D0, dark: 0x5A2230)
     static let dangerText = Color(light: 0x8A1F12, dark: 0xFFD6D0)
@@ -50,10 +50,10 @@ enum Theme {
 
     // MARK: - Stat colors (채색 밴드 — 위 글자/아이콘은 onPop)
 
-    static let statStrength = Color(light: 0xFF9A6C, dark: 0xFF9A6C)
-    static let statVitality = Color(light: 0x7DD484, dark: 0x7DD484)
-    static let statDiscipline = Color(light: 0x7FB8F7, dark: 0x7FB8F7)
-    static let statRecovery = Color(light: 0xB9A2F5, dark: 0xB9A2F5)
+    static let statStrength = Color(hex: 0xFF9A6C)
+    static let statVitality = Color(hex: 0x7DD484)
+    static let statDiscipline = Color(hex: 0x7FB8F7)
+    static let statRecovery = Color(hex: 0xB9A2F5)
 
     // MARK: - Metrics
 
@@ -82,18 +82,16 @@ extension Color {
     /// 라이트/다크 모드에 따라 다른 hex 값을 쓰는 색상.
     init(light: UInt32, dark: UInt32) {
         self.init(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light)
+            UIColor(Color(hex: traits.userInterfaceStyle == .dark ? dark : light))
         })
     }
-}
 
-private extension UIColor {
-    convenience init(hex: UInt32) {
+    /// 모드와 상관없이 같은 hex 색상.
+    init(hex: UInt32) {
         self.init(
-            red: CGFloat((hex >> 16) & 0xFF) / 255,
-            green: CGFloat((hex >> 8) & 0xFF) / 255,
-            blue: CGFloat(hex & 0xFF) / 255,
-            alpha: 1
+            red: Double((hex >> 16) & 0xFF) / 255,
+            green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255
         )
     }
 }

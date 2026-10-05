@@ -92,12 +92,7 @@ struct LoginSheetView: View {
             }
 
             if let notice = userSession.reloginNotice {
-                Label(notice, systemImage: "exclamationmark.circle.fill")
-                    .font(.rounded(.footnote))
-                    .foregroundStyle(Theme.dangerText)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .celOutline(radius: Theme.chipRadius, fill: Theme.dangerBackground)
+                DangerNotice(text: notice, systemImage: "exclamationmark.circle.fill")
             }
 
             credentialForm
@@ -125,13 +120,7 @@ struct LoginSheetView: View {
             )
 
             if let errorMessage = credentialLogin.errorMessage {
-                Text(errorMessage)
-                    .font(.rounded(.footnote))
-                    .foregroundStyle(Theme.dangerText)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .celOutline(radius: Theme.chipRadius, fill: Theme.dangerBackground, lineWidth: 2.5)
+                DangerNotice(text: errorMessage)
             }
 
             Button("로그인") {
@@ -214,7 +203,7 @@ struct LoginSheetView: View {
             socialButton(
                 text: "Kakao로 로그인",
                 textColor: Theme.onPop,
-                background: Color(light: 0xFEE500, dark: 0xFEE500),
+                background: Color(hex: 0xFEE500),
                 isEnabled: false
             ) {
                 socialLogin.signInWithKakao(userSession)
@@ -223,8 +212,8 @@ struct LoginSheetView: View {
                 text: "Naver로 로그인",
                 prefix: "N",
                 // 흰 글자는 초록 바탕에서 대비가 부족해 웹과 같이 남색 글자를 쓴다.
-                textColor: Color(light: 0x14172B, dark: 0x14172B),
-                background: Color(light: 0x03C75A, dark: 0x03C75A),
+                textColor: Color(hex: 0x14172B),
+                background: Color(hex: 0x03C75A),
                 isEnabled: false
             ) {
                 socialLogin.signInWithNaver(userSession)

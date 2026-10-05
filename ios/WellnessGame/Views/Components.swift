@@ -446,3 +446,26 @@ extension WorkoutType {
         }
     }
 }
+
+// MARK: - Danger notice
+
+/// 오류·재로그인 안내처럼 주의를 끄는 경고 박스.
+struct DangerNotice: View {
+    let text: String
+    var systemImage: String?
+
+    var body: some View {
+        Group {
+            if let systemImage {
+                Label(text, systemImage: systemImage)
+            } else {
+                Text(text)
+            }
+        }
+        .font(.rounded(.footnote))
+        .foregroundStyle(Theme.dangerText)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .celOutline(radius: Theme.chipRadius, fill: Theme.dangerBackground)
+    }
+}

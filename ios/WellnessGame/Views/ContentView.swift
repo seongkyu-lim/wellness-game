@@ -167,12 +167,7 @@ struct ContentView: View {
                 .font(.display(.title3))
                 .foregroundStyle(Theme.textPrimary)
             if let notice = userSession.reloginNotice {
-                Label(notice, systemImage: "exclamationmark.circle.fill")
-                    .font(.rounded(.footnote))
-                    .foregroundStyle(Theme.dangerText)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .celOutline(radius: Theme.chipRadius, fill: Theme.dangerBackground)
+                DangerNotice(text: notice, systemImage: "exclamationmark.circle.fill")
             } else {
                 Text("로그인하면 걸음 · 운동 · 수면이 자동으로 XP가 되어\n캐릭터가 자라나요")
                     .font(.rounded(.footnote, weight: .medium))
@@ -462,17 +457,15 @@ private struct BubbleTail: View {
         Canvas { context, _ in
             // 꼬리 좌표계의 y=0이 말풍선 테두리 선의 중심(캔버스 y=2)에 오도록 옮긴다.
             context.translateBy(x: 0, y: 2)
-            var cover = Path(CGRect(x: 3, y: -1.6, width: 18, height: 3.2))
-            cover.move(to: CGPoint(x: 2, y: 0))
-            cover.addLine(to: CGPoint(x: 12, y: 16))
-            cover.addLine(to: CGPoint(x: 22, y: 0))
-            cover.closeSubpath()
-            context.fill(cover, with: .color(Theme.surface))
-
             var edge = Path()
             edge.move(to: CGPoint(x: 2, y: 0))
             edge.addLine(to: CGPoint(x: 12, y: 16))
             edge.addLine(to: CGPoint(x: 22, y: 0))
+
+            var cover = edge
+            cover.closeSubpath()
+            cover.addRect(CGRect(x: 3, y: -1.6, width: 18, height: 3.2))
+            context.fill(cover, with: .color(Theme.surface))
             context.stroke(edge, with: .color(Theme.ink), style: StrokeStyle(lineWidth: Theme.line, lineCap: .round, lineJoin: .round))
         }
     }
@@ -515,7 +508,7 @@ private struct XPCard: View {
             .lineLimit(1)
             .minimumScaleFactor(0.8)
         }
-        .celCard(padding: 16, radius: 20)
+        .celCard(radius: 20)
     }
 }
 
