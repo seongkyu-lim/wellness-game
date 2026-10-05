@@ -55,6 +55,6 @@ final class LocalizationTests: XCTestCase {
     func test_formatStrings_keepPlaceholdersInEnglish() {
         let en = Bundle.localized("en")
         let value = en.localizedString(forKey: "Lv.%lld · %@ 단계", value: nil, table: nil)
-        XCTAssertEqual(String(format: value, 3, "Sprout"), "Lv.3 · Sprout")
+        XCTAssertEqual(String(format: value, 3, "Sprout"), "Lv.3 · Sprout stage")
     }
 }

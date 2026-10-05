@@ -158,7 +158,7 @@ struct ContentView: View {
                             .multilineTextAlignment(.center)
                     }
                     HStack(spacing: 8) {
-                        PillBadge(text: String(localized: "Lv.1 · \(GrowthStage.seed.displayName) 단계"))
+                        PillBadge(text: String(localized: "Lv.\(1) · \(GrowthStage.seed.displayName) 단계"))
                         if let next = GrowthStage.next(after: 1) {
                             PillBadge(text: String(localized: "다음 단계 · \(next.displayName) Lv.\(next.minLevel)"), color: Theme.textSecondary)
                         }

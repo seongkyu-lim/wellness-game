@@ -279,7 +279,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lv.%1$lld · %2$@"
+            "value" : "Lv.%1$lld · %2$@ stage"
           }
         },
         "ko" : {
@@ -687,7 +687,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Log Out"
+            "value" : "Sign Out"
           }
         },
         "ko" : {
@@ -721,7 +721,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Log In"
+            "value" : "Sign In"
           }
         },
         "ko" : {
@@ -806,7 +806,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your session expired. Please log in again."
+            "value" : "Your session expired. Please sign in again."
           }
         },
         "ko" : {
@@ -823,7 +823,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Log in and start growing Sprouty"
+            "value" : "Sign in and start growing Sprouty"
           }
         },
         "ko" : {
@@ -840,7 +840,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Log In"
+            "value" : "Sign In"
           }
         },
         "ko" : {
@@ -857,7 +857,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Log in to sync your health data and grow the same character on all your devices."
+            "value" : "Sign in to sync your health data and grow the same character on all your devices."
           }
         },
         "ko" : {
@@ -874,7 +874,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Log in to sync your health data and grow your character."
+            "value" : "Sign in to sync your health data and grow your character."
           }
         },
         "ko" : {
@@ -891,7 +891,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Log in and your steps, workouts, and sleep\nturn into XP automatically"
+            "value" : "Sign in and your steps, workouts, and sleep\nturn into XP automatically"
           }
         },
         "ko" : {
@@ -1214,7 +1214,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Authentication required. Please log in again."
+            "value" : "Authentication required. Please sign in again."
           }
         },
         "ko" : {
