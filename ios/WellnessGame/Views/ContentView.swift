@@ -219,7 +219,8 @@ struct ContentView: View {
                 if snapshot.workouts.isEmpty {
                     QuestCard(
                         icon: "figure.walk.motion",
-                        tint: Theme.surface,
+                        // 아이콘은 항상 잉크색이라 다크 모드 카드색 위에서는 안 보인다. 밝은 틴트를 쓴다.
+                        tint: Theme.mint,
                         title: String(localized: "오늘 운동 기록이 없어요"),
                         subtitle: String(localized: "가볍게 몸을 움직여 볼까요?")
                     )
@@ -249,7 +250,7 @@ struct ContentView: View {
                 ForEach(results) { result in
                     QuestCard(
                         icon: result.duplicate ? "checkmark" : "sparkles",
-                        tint: result.duplicate ? Theme.surface : Theme.yellow,
+                        tint: result.duplicate ? Theme.lilac : Theme.yellow,
                         title: result.message
                     ) {
                         if result.duplicate {
@@ -364,6 +365,8 @@ private struct CharacterHero: View {
             .clipShape(shape)
             .overlay(shape.strokeBorder(Theme.ink, lineWidth: Theme.line))
             .background(shape.fill(Theme.popShadow).offset(x: 6, y: 6))
+            // 고정 높이 장면 위에 글자가 겹쳐 놓이므로, 아주 큰 글자 크기에서 말풍선이 새싹이를 덮지 않게 상한을 둔다.
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             .accessibilityElement(children: .contain)
             .accessibilityLabel("내 캐릭터")
     }
@@ -462,10 +465,9 @@ private struct BubbleTail: View {
             edge.addLine(to: CGPoint(x: 12, y: 16))
             edge.addLine(to: CGPoint(x: 22, y: 0))
 
-            var cover = edge
-            cover.closeSubpath()
-            cover.addRect(CGRect(x: 3, y: -1.6, width: 18, height: 3.2))
-            context.fill(cover, with: .color(Theme.surface))
+            // 삼각형과 덮개 사각형은 감기는 방향이 달라 한 경로로 합치면 겹친 부분이 비므로 따로 채운다.
+            context.fill(edge, with: .color(Theme.surface))
+            context.fill(Path(CGRect(x: 3, y: -1.6, width: 18, height: 3.2)), with: .color(Theme.surface))
             context.stroke(edge, with: .color(Theme.ink), style: StrokeStyle(lineWidth: Theme.line, lineCap: .round, lineJoin: .round))
         }
     }
@@ -500,6 +502,8 @@ private struct XPCard: View {
                 Text(xpText)
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
+                    // 진행바의 accessibilityValue와 같은 내용이라 VoiceOver에서 두 번 읽지 않게 한다.
+                    .accessibilityHidden(true)
                 Spacer(minLength: 0)
                 Text(nextLabel)
                     .foregroundStyle(Theme.textSecondary)
