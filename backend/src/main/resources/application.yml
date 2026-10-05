@@ -25,12 +25,28 @@ app:
     sleep-keys:
       # 기동 시 구 형식 수면 로그 키(userId|start|end|SLEEP)를 새 형식으로 정리한다(#50, 멱등).
       enabled: ${APP_MIGRATIONS_SLEEP_KEYS_ENABLED:true}
+  # 요청 빈도 제한(#48). 1분 고정 윈도우, 단일 인스턴스 인메모리. 0 이하면 해당 제한을 끈다.
+  rate-limit:
+    sync-per-minute: ${APP_RATE_LIMIT_SYNC_PER_MINUTE:30}     # POST /api/health-activities/sync, userId별
+    auth-per-minute: ${APP_RATE_LIMIT_AUTH_PER_MINUTE:20}     # /api/auth/** 전체, IP별
+    login-per-minute: ${APP_RATE_LIMIT_LOGIN_PER_MINUTE:10}   # /api/auth/login·signup, IP별(위와 함께 적용)
+    # 신뢰하는 리버스 프록시 한 단 뒤에서만 true. X-Forwarded-For 의 마지막 주소를 클라이언트 IP 로 쓴다.
+    trust-forwarded-header: ${APP_RATE_LIMIT_TRUST_FORWARDED_HEADER:false}
+  # 아이디 로그인 잠금(#55). 같은 아이디로 연속 실패하면 잠금 시간 동안 거부한다. 0 이하면 끈다.
+  auth:
+    max-failed-logins: ${APP_AUTH_MAX_FAILED_LOGINS:5}
+    lockout-minutes: ${APP_AUTH_LOCKOUT_MINUTES:15}
 
 auth:
   jwt:
-    # HMAC-SHA256 서명 키. 32바이트 미만(또는 미설정)이면 기동에 실패한다. 로컬은 application-local.yml 참고.
+    # HMAC-SHA256 서명 키. 32바이트 미만(또는 미설정)이거나 같은 문자 반복처럼 단순하면 기동에 실패한다.
+    # 로컬은 application-local.yml 참고.
     secret: ${AUTH_JWT_SECRET:}
     ttl: ${AUTH_JWT_TTL:30d}
+    issuer: ${AUTH_JWT_ISSUER:wellness-game}
+    audience: ${AUTH_JWT_AUDIENCE:wellness-game-api}
+    # iss·aud 가 없는 #55 이전 토큰 허용. 배포 후 ttl(기본 30일)이 지나면 false 로 바꾼다(README 참고).
+    accept-legacy-tokens: ${AUTH_JWT_ACCEPT_LEGACY_TOKENS:true}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

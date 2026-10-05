@@ -4,6 +4,7 @@ import com.wellnessgame.auth.ForbiddenException;
 import com.wellnessgame.auth.UnauthorizedException;
 import com.wellnessgame.error.BadRequestException;
 import com.wellnessgame.error.ServiceUnavailableException;
+import com.wellnessgame.error.TooManyRequestsException;
 import com.wellnessgame.i18n.Messages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,7 +25,7 @@ import java.util.Map;
 
 /**
  * API 오류 응답. 사용자에게 보여 줄 의도로 던진 예외({@link BadRequestException}, {@link ServiceUnavailableException},
- * {@link UnauthorizedException}, {@link ForbiddenException})만 메시지를 그대로 내보낸다.
+ * {@link UnauthorizedException}, {@link ForbiddenException}, {@link TooManyRequestsException})만 메시지를 그대로 내보낸다.
  * 그 밖의 예외는 라이브러리 내부 문구가 새지 않도록 일반 문구({@code error.generic})로 응답하고 상세는 서버 로그에만 남긴다.
  */
 @RestControllerAdvice
@@ -42,6 +43,15 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ForbiddenException.class)
     ResponseEntity<Map<String, Object>> handleForbidden(ForbiddenException exception) {
         return userFacing(HttpStatus.FORBIDDEN, exception);
+    }
+
+    /** 레이트 리밋 초과(#48): 429 + {@code Retry-After}(초). */
+    @ExceptionHandler(TooManyRequestsException.class)
+    ResponseEntity<Map<String, Object>> handleTooManyRequests(TooManyRequestsException exception) {
+        ResponseEntity<Map<String, Object>> response = userFacing(HttpStatus.TOO_MANY_REQUESTS, exception);
+        return ResponseEntity.status(response.getStatusCode())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(exception.retryAfterSeconds()))
+                .body(response.getBody());
     }
 
     @ExceptionHandler(BadRequestException.class)
