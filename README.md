@@ -2,7 +2,7 @@
 
 Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송하고 XP·레벨·캐릭터 스탯으로 변환하는 iOS + Spring Boot MVP입니다.
 
-웹 프로토타입은 포함하지 않습니다. HealthKit은 서버나 브라우저에서 직접 읽을 수 없으므로 iOS 앱이 사용자의 명시적 권한을 받은 뒤 필요한 요약 데이터만 서버에 전송합니다.
+웹은 서버에 쌓인 결과를 보여 주는 조회 전용 대시보드입니다([`web/`](web/), [배포 페이지](https://seongkyu-lim.github.io/wellness-game/)). HealthKit은 서버나 브라우저에서 직접 읽을 수 없으므로 iOS 앱이 사용자의 명시적 권한을 받은 뒤 필요한 요약 데이터만 서버에 전송합니다.
 
 ## 구현 범위
 
@@ -39,8 +39,14 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 ├── ios/
 │   ├── WellnessGame.xcodeproj   Xcode 프로젝트
 │   └── WellnessGame/            SwiftUI·HealthKit 소스
+├── web/                         React 조회 전용 대시보드 (GitHub Pages 배포)
+├── docs/
+│   ├── DESIGN.md                디자인 가이드 (토큰·컴포넌트·새싹이·모션)
+│   └── design/                  디자인 시안 원본
 └── docker-compose.yml           MySQL + API
 ```
+
+웹과 iOS의 화면은 [디자인 가이드](docs/DESIGN.md)의 토큰과 규칙을 함께 따릅니다.
 
 ## 백엔드 실행
 
