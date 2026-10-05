@@ -3,7 +3,9 @@ import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/core'
 import { GROWTH_STAGES } from '../lib/growthStage'
 import { CharacterAvatar } from './CharacterAvatar'
-import { IconChart, IconLock, IconMoon, IconPhone, IconRun, IconSprout, IconWalk, Sparkle } from './Icons'
+import { HeroScene } from './HeroScene'
+import { IconChart, IconLock, IconMoon, IconPhone, IconRun, IconSprout, IconWalk } from './Icons'
+import { Quest } from './Quest'
 
 const STAGE_INTERVAL_MS = 2200
 
@@ -11,6 +13,11 @@ const STEPS: { icon: ReactNode; tint: string; title: MessageKey; body: MessageKe
   { icon: <IconPhone size={26} />, tint: 'var(--mint)', title: 'landing.step1Title', body: 'landing.step1Body' },
   { icon: <IconChart size={26} />, tint: 'var(--yellow)', title: 'landing.step2Title', body: 'landing.step2Body' },
   { icon: <IconSprout size={26} />, tint: 'var(--pink)', title: 'landing.step3Title', body: 'landing.step3Body' },
+]
+
+const NOTES: { icon: ReactNode; tint: string; title: MessageKey; body: MessageKey }[] = [
+  { icon: <IconChart size={24} />, tint: 'var(--mint)', title: 'landing.webTitle', body: 'landing.webBody' },
+  { icon: <IconLock size={24} />, tint: 'var(--lilac)', title: 'landing.privacyTitle', body: 'landing.privacyBody' },
 ]
 
 function prefersReducedMotion(): boolean {
@@ -57,25 +64,13 @@ export function Landing({ account }: Props) {
           </div>
         </div>
 
-        <div className="hero landing-scene" role="img" aria-label={t('landing.sceneLabel')}>
-          <svg className="hills" viewBox="0 0 390 110" preserveAspectRatio="none" aria-hidden>
-            <path className="hill" d="M0 52 Q70 24 150 46 T300 40 T390 50 V110 H0Z" />
-            <path className="hill-deep" d="M0 74 Q90 58 190 72 T390 70 V110 H0Z" />
-          </svg>
-          <p className="bubble" aria-hidden>
-            {t('landing.bubble')}
-          </p>
-          <Sparkle size={26} fill="#ffe066" style={{ right: 34, top: 26 }} />
-          <Sparkle size={16} fill="#ffffff" timing="slow" style={{ right: 78, top: 84 }} />
-          <Sparkle size={18} fill="#ff9ec4" timing="late" style={{ left: 48, top: 150 }} />
-          <div className="mascot bob">
-            <CharacterAvatar key={stage.key} level={stage.minLevel} size={210} decorative />
-          </div>
-          <div className="nameplate" aria-hidden>
-            <span className="name-tag">{t('character.name')}</span>
-            <span className="level-chip">{t('character.stageBadge', { level: stage.minLevel, stage: t(`stage.${stage.key}`) })}</span>
-          </div>
-        </div>
+        <HeroScene
+          asImage
+          level={stage.minLevel}
+          bubble={t('landing.bubble')}
+          badge={t('character.stageBadge', { level: stage.minLevel, stage: t(`stage.${stage.key}`) })}
+          label={t('landing.sceneLabel')}
+        />
       </section>
 
       <section id="how" className="landing-section" aria-labelledby="how-title">
@@ -103,23 +98,23 @@ export function Landing({ account }: Props) {
           {t('landing.statsTitle')}
         </h2>
         <div className="landing-stats">
-          <StatRow
+          <Quest
             icon={<IconWalk size={24} />}
             tint="var(--stat-disc)"
-            name={t('landing.activitySteps')}
-            text={t('landing.statSteps', { stat: `DISC ${t('stat.discipline')}` })}
+            title={t('landing.activitySteps')}
+            sub={t('landing.statSteps', { stat: `DISC ${t('stat.discipline')}` })}
           />
-          <StatRow
+          <Quest
             icon={<IconRun size={24} />}
             tint="var(--stat-str)"
-            name={t('landing.activityWorkout')}
-            text={t('landing.statWorkout', { stat1: `STR ${t('stat.str')}`, stat2: `VIT ${t('stat.vit')}` })}
+            title={t('landing.activityWorkout')}
+            sub={t('landing.statWorkout', { stat1: `STR ${t('stat.str')}`, stat2: `VIT ${t('stat.vit')}` })}
           />
-          <StatRow
+          <Quest
             icon={<IconMoon size={24} />}
             tint="var(--stat-rec)"
-            name={t('landing.activitySleep')}
-            text={t('landing.statSleep', { stat: `REC ${t('stat.recovery')}` })}
+            title={t('landing.activitySleep')}
+            sub={t('landing.statSleep', { stat: `REC ${t('stat.recovery')}` })}
           />
         </div>
       </section>
@@ -140,24 +135,17 @@ export function Landing({ account }: Props) {
       </section>
 
       <section className="landing-section landing-duo">
-        <div className="card landing-note">
-          <span className="quest-icon" style={{ background: 'var(--mint)' }}>
-            <IconChart size={24} />
-          </span>
-          <div>
-            <h3>{t('landing.webTitle')}</h3>
-            <p className="hint">{t('landing.webBody')}</p>
+        {NOTES.map((note) => (
+          <div className="card landing-note" key={note.title}>
+            <span className="quest-icon" style={{ background: note.tint }}>
+              {note.icon}
+            </span>
+            <div>
+              <h3>{t(note.title)}</h3>
+              <p className="hint">{t(note.body)}</p>
+            </div>
           </div>
-        </div>
-        <div className="card landing-note">
-          <span className="quest-icon" style={{ background: 'var(--lilac)' }}>
-            <IconLock size={24} />
-          </span>
-          <div>
-            <h3>{t('landing.privacyTitle')}</h3>
-            <p className="hint">{t('landing.privacyBody')}</p>
-          </div>
-        </div>
+        ))}
       </section>
 
       <section id="login" className="landing-section landing-login">
@@ -165,20 +153,6 @@ export function Landing({ account }: Props) {
       </section>
 
       <footer className="landing-footer hint">{t('landing.footer')}</footer>
-    </div>
-  )
-}
-
-function StatRow({ icon, tint, name, text }: { icon: ReactNode; tint: string; name: string; text: string }) {
-  return (
-    <div className="quest">
-      <span className="quest-icon" style={{ background: tint }}>
-        {icon}
-      </span>
-      <div className="quest-body">
-        <span className="quest-title">{name}</span>
-        <span className="quest-sub">{text}</span>
-      </div>
     </div>
   )
 }

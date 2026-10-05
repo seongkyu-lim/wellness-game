@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { ActivityEntry } from '../api/types'
 import { useI18n } from '../i18n/I18nProvider'
 import { CharacterAvatar } from './CharacterAvatar'
+import { Quest } from './Quest'
 import { IconBike, IconMoon, IconRun, IconStrength, IconWalk, IconWave } from './Icons'
 
 const WORKOUT_ICONS = {
@@ -28,29 +29,6 @@ function workoutDetail(workout: ActivityEntry, fallback: string): string {
     parts.push(`${(workout.distanceMeters / 1000).toFixed(1)} km`)
   }
   return parts.length > 0 ? parts.join(' · ') : fallback
-}
-
-interface QuestProps {
-  icon: ReactNode
-  tint: string
-  title: string
-  sub: string
-  xp?: number
-}
-
-function Quest({ icon, tint, title, sub, xp }: QuestProps) {
-  return (
-    <div className="quest">
-      <div className="quest-icon" style={{ background: tint }}>
-        {icon}
-      </div>
-      <div className="quest-body">
-        <span className="quest-title">{title}</span>
-        <span className="quest-sub">{sub}</span>
-      </div>
-      {xp != null && xp > 0 && <span className="chip">+{xp} XP</span>}
-    </div>
-  )
 }
 
 interface Props {
