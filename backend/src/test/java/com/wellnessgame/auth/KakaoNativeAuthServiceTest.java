@@ -107,6 +107,32 @@ class KakaoNativeAuthServiceTest {
     }
 
     @Test
+    void rejectsMalformedTokenReportedAsBadRequest() {
+        server.expect(requestTo(TOKEN_INFO)).andRespond(withStatus(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"msg\":\"invalid token\",\"code\":-2}"));
+
+        assertThatThrownBy(() -> service.authenticate("kakao-token")).isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void treatsRateLimitAsUnavailableNotUnauthorized() {
+        server.expect(requestTo(TOKEN_INFO)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+
+        assertThatIllegalStateException().isThrownBy(() -> service.authenticate("kakao-token"));
+    }
+
+    @Test
+    void treatsProfileRateLimitAsUnavailable() {
+        expectTokenInfo("""
+                {"id": 4242, "expires_in": 7199, "app_id": 1234567}
+                """);
+        server.expect(requestTo(PROFILE)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+
+        assertThatIllegalStateException().isThrownBy(() -> service.authenticate("kakao-token"));
+    }
+
+    @Test
     void reportsUnavailableWhenProfileFails() {
         expectTokenInfo("""
                 {"id": 4242, "expires_in": 7199, "app_id": 1234567}

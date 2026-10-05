@@ -42,12 +42,10 @@ public class GoogleNativeAuthService {
 
     public SocialLoginResult authenticate(String idToken) {
         if (allowedAudiences.isEmpty()) {
-            log.error("구글 로그인 설정 없음: OAUTH_GOOGLE_IOS_CLIENT_ID 또는 OAUTH_GOOGLE_CLIENT_ID 환경변수를 확인하세요.");
-            throw new IllegalStateException(Messages.get("auth.google.unavailable"));
+            throw NativeAuthSupport.unavailable(log, "구글",
+                    "OAUTH_GOOGLE_IOS_CLIENT_ID 또는 OAUTH_GOOGLE_CLIENT_ID 환경변수", "auth.google.unavailable");
         }
-        if (idToken == null || idToken.isBlank()) {
-            throw new IllegalArgumentException(Messages.get("auth.google.id-token-blank"));
-        }
+        NativeAuthSupport.requireToken(idToken, "auth.google.id-token-blank");
 
         JsonNode info;
         try {

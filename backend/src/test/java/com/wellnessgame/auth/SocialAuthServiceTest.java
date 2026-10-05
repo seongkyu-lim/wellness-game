@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClient;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -80,6 +81,23 @@ class SocialAuthServiceTest {
 
         assertThat(result.userId()).isEqualTo("google:109876");
         assertThat(result.displayName()).isEqualTo("SK Lim");
+    }
+
+    @Test
+    void rejectsProfilesWithoutIdentifierInsteadOfSharedUserId() {
+        for (String[] c : new String[][]{
+                {"kakao", "https://kauth.test/oauth/token", "https://kapi.test/v2/user/me", "{\"properties\":{}}"},
+                {"naver", "https://nid.test/oauth2.0/token", "https://openapi.test/v1/nid/me", "{\"response\":{}}"},
+                {"google", "https://google.test/token", "https://google.test/userinfo", "{\"name\":\"x\"}"}}) {
+            server.reset();
+            server.expect(requestTo(c[1]))
+                    .andRespond(withSuccess("{\"access_token\":\"t\"}", MediaType.APPLICATION_JSON));
+            server.expect(requestTo(c[2])).andRespond(withSuccess(c[3], MediaType.APPLICATION_JSON));
+
+            assertThatThrownBy(() -> service.authenticate(c[0], "auth-code", "http://localhost:5173"))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessageContaining(c[0]);
+        }
     }
 
     @Test

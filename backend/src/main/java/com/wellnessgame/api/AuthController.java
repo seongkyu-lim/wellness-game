@@ -31,6 +31,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+    /** 외부 토큰 길이 상한. JWT·OAuth 토큰은 이보다 훨씬 짧다. */
+    static final int MAX_TOKEN_LENGTH = 4096;
+
     private final SocialAuthService authService;
     private final PasswordAuthService passwordAuthService;
     private final GoogleNativeAuthService googleNativeAuthService;
@@ -81,10 +84,11 @@ public class AuthController {
         return SocialLoginResponse.of(kakaoNativeAuthService.authenticate(request.accessToken()), tokenService);
     }
 
-    /** iOS 네이버 SDK 액세스 토큰 교환. 앱 소유 검증 한계는 {@link NaverNativeAuthService} 참고. */
+    /** iOS 네이버 SDK 토큰 교환. refreshToken 갱신으로 앱 소유를 확인한다({@link NaverNativeAuthService}). */
     @PostMapping("/naver/native")
-    public SocialLoginResponse naverNative(@Valid @RequestBody AccessTokenLoginRequest request) {
-        return SocialLoginResponse.of(naverNativeAuthService.authenticate(request.accessToken()), tokenService);
+    public SocialLoginResponse naverNative(@Valid @RequestBody NaverNativeLoginRequest request) {
+        return SocialLoginResponse.of(
+                naverNativeAuthService.authenticate(request.accessToken(), request.refreshToken()), tokenService);
     }
 
     /** iOS Sign in with Apple identity token 교환. fullName 은 Apple 이 최초 로그인 때만 주는 이름이다. */
@@ -127,13 +131,24 @@ public class AuthController {
     public record SocialLoginRequest(@NotBlank String code, @NotBlank String redirectUri) {
     }
 
-    public record GoogleNativeLoginRequest(@NotBlank String idToken) {
+    public record GoogleNativeLoginRequest(@NotBlank @Size(max = MAX_TOKEN_LENGTH, message = "{validation.token.size}") String idToken) {
     }
 
-    public record AccessTokenLoginRequest(@NotBlank String accessToken) {
+    public record AccessTokenLoginRequest(@NotBlank @Size(max = MAX_TOKEN_LENGTH, message = "{validation.token.size}") String accessToken) {
     }
 
-    public record AppleNativeLoginRequest(@NotBlank String identityToken, @Size(max = 100) String fullName) {
+    /** refreshToken 은 서버 자격 증명으로 갱신해 이 앱에 발급된 토큰인지 확인하는 데 쓴다. */
+    public record NaverNativeLoginRequest(
+            @NotBlank @Size(max = MAX_TOKEN_LENGTH, message = "{validation.token.size}") String accessToken,
+            @NotBlank @Size(max = MAX_TOKEN_LENGTH, message = "{validation.token.size}") String refreshToken
+    ) {
+    }
+
+    /** fullName 은 길이 제한 없이 받고 서버가 100자로 잘라 쓴다. */
+    public record AppleNativeLoginRequest(
+            @NotBlank @Size(max = MAX_TOKEN_LENGTH, message = "{validation.token.size}") String identityToken,
+            String fullName
+    ) {
     }
 
     public record SocialLoginResponse(

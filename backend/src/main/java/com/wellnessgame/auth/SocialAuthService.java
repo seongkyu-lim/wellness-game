@@ -2,6 +2,7 @@ package com.wellnessgame.auth;
 
 import com.wellnessgame.i18n.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.MissingNode;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -101,23 +102,37 @@ public class SocialAuthService {
         return accessToken;
     }
 
-    /** provider 프로필을 iOS 앱과 같은 "{provider}:{식별자}" userId 규칙으로 변환한다. */
+    /**
+     * provider 프로필을 iOS 앱과 같은 "{provider}:{식별자}" userId 규칙으로 변환한다.
+     * 식별자가 비어 있으면 "kakao:0"·"google:" 같은 공용 userId 가 생기지 않도록 401 로 거부한다.
+     */
     static SocialLoginResult toResult(String providerName, JsonNode profile) {
+        JsonNode body = profile == null ? MissingNode.getInstance() : profile;
         return switch (providerName) {
             // iOS: user.id (회원번호)
-            case "kakao" -> new SocialLoginResult(
-                    "kakao:" + profile.path("id").asLong(),
-                    profile.path("properties").path("nickname").asText(null));
+            case "kakao" -> {
+                long id = body.path("id").asLong();
+                yield new SocialLoginResult(
+                        userId(providerName, id > 0 ? Long.toString(id) : ""),
+                        body.path("properties").path("nickname").asText(null));
+            }
             // iOS: profile["id"]
             case "naver" -> {
-                JsonNode response = profile.path("response");
+                JsonNode response = body.path("response");
                 String name = response.path("name").asText(response.path("nickname").asText(null));
-                yield new SocialLoginResult("naver:" + response.path("id").asText(), name);
+                yield new SocialLoginResult(userId(providerName, response.path("id").asText("")), name);
             }
             // iOS: GIDGoogleUser.userID == OIDC sub
             default -> new SocialLoginResult(
-                    "google:" + profile.path("sub").asText(),
-                    profile.path("name").asText(null));
+                    userId(providerName, body.path("sub").asText("")),
+                    body.path("name").asText(null));
         };
+    }
+
+    private static String userId(String providerName, String providerUserId) {
+        if (providerUserId == null || providerUserId.isBlank()) {
+            throw new UnauthorizedException(Messages.get("auth.social.failed", providerName));
+        }
+        return providerName + ":" + providerUserId;
     }
 }

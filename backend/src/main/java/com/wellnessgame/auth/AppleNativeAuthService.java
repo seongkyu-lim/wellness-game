@@ -27,6 +27,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * iOS Sign in with Apple 의 identity token(JWT)을 Apple JWKS 로 직접 검증해 "apple:{sub}" userId 를 만든다.
@@ -37,16 +38,26 @@ import java.util.Map;
  *   <li>식별: sub 만 쓴다. 이메일(릴레이 주소일 수 있고 바뀔 수 있음)은 식별에 쓰지 않는다.</li>
  * </ul>
  *
- * <p>JWKS 는 메모리에 {@link AppleNativeProperties#jwksCacheTtl()} 동안 캐시하고 만료되면 다시 받는다.
- * 모르는 kid(키 교체)면 한 번 다시 받되, 위조 kid 로 Apple 을 반복 호출하지 않도록
- * {@link #MIN_REFRESH_INTERVAL} 안에서는 재조회하지 않는다. HTTP 타임아웃은 주입받은 {@link RestClient.Builder}
- * 에 적용된 spring.http.client.connect-timeout / read-timeout 을 따른다.
+ * <p>JWKS 캐시 정책
+ * <ul>
+ *   <li>메모리에 {@link AppleNativeProperties#jwksCacheTtl()} 동안 캐시하고 만료되면 다시 받는다.</li>
+ *   <li>모르는 kid(키 교체)면 다시 받되, 위조 kid 로 Apple 을 반복 호출하지 않도록
+ *       {@link #MIN_REFRESH_INTERVAL} 안에서는 재조회하지 않는다.</li>
+ *   <li>장애 격리(stale-on-error): 받기에 실패하면 {@link #FAILURE_BACKOFF} 동안 재시도하지 않고
+ *       TTL 이 지난 기존 키를 계속 쓴다. 키가 하나도 없을 때만 503 이다.</li>
+ *   <li>재조회는 한 스레드만 한다. 기존 키가 있으면 다른 요청은 기다리지 않고 기존 키로 검증한다
+ *       (키가 전혀 없는 최초 조회 때만 대기).</li>
+ * </ul>
+ * HTTP 타임아웃은 주입받은 {@link RestClient.Builder} 에 적용된
+ * spring.http.client.connect-timeout / read-timeout 을 따른다.
  */
 @Service
 public class AppleNativeAuthService {
     private static final Logger log = LoggerFactory.getLogger(AppleNativeAuthService.class);
     static final String APPLE_ISSUER = "https://appleid.apple.com";
     static final Duration MIN_REFRESH_INTERVAL = Duration.ofMinutes(1);
+    static final Duration FAILURE_BACKOFF = Duration.ofSeconds(30);
+    static final int MAX_FULL_NAME_LENGTH = 100;
     private static final String RS256 = "RS256";
 
     private final RestClient restClient;
@@ -54,7 +65,9 @@ public class AppleNativeAuthService {
     private final Clock clock;
     private final JwtParser parser;
 
+    private final ReentrantLock refreshLock = new ReentrantLock();
     private volatile CachedKeys cachedKeys;
+    private volatile Instant retryNotBefore = Instant.MIN;
 
     public AppleNativeAuthService(RestClient.Builder restClientBuilder, AppleNativeProperties properties, Clock clock) {
         this.restClient = restClientBuilder.build();
@@ -65,12 +78,9 @@ public class AppleNativeAuthService {
 
     public SocialLoginResult authenticate(String identityToken, String fullName) {
         if (parser == null) {
-            log.error("애플 로그인 설정 없음: OAUTH_APPLE_BUNDLE_ID 환경변수를 확인하세요.");
-            throw new IllegalStateException(Messages.get("auth.apple.unavailable"));
+            throw NativeAuthSupport.unavailable(log, "애플", "OAUTH_APPLE_BUNDLE_ID 환경변수", "auth.apple.unavailable");
         }
-        if (identityToken == null || identityToken.isBlank()) {
-            throw new IllegalArgumentException(Messages.get("auth.apple.identity-token-blank"));
-        }
+        NativeAuthSupport.requireToken(identityToken, "auth.apple.identity-token-blank");
 
         Claims claims = verify(identityToken.trim());
         String sub = claims.getSubject();
@@ -136,24 +146,65 @@ public class AppleNativeAuthService {
         if (cached != null && clock.instant().isBefore(cached.fetchedAt().plus(properties.jwksCacheTtl()))) {
             return cached.keys();
         }
-        synchronized (this) {
-            cached = cachedKeys;
-            if (cached != null && clock.instant().isBefore(cached.fetchedAt().plus(properties.jwksCacheTtl()))) {
-                return cached.keys();
-            }
-            return fetchKeys().keys();
-        }
+        return refresh(cached);
     }
 
-    private synchronized Map<String, RSAPublicKey> refreshForUnknownKid() {
+    private Map<String, RSAPublicKey> refreshForUnknownKid() {
         CachedKeys cached = cachedKeys;
         if (cached != null && clock.instant().isBefore(cached.fetchedAt().plus(MIN_REFRESH_INTERVAL))) {
             return cached.keys();
         }
-        return fetchKeys().keys();
+        return refresh(cached);
     }
 
-    /** 호출자가 this 락을 잡고 있어야 한다. */
+    /**
+     * JWKS 를 다시 받는다. 실패하거나 다른 스레드가 받는 중이면 기존 키(stale)를 돌려준다.
+     * 기존 키가 없으면 실패 시 {@link JwksUnavailableException}.
+     */
+    private Map<String, RSAPublicKey> refresh(CachedKeys stale) {
+        if (inFailureBackoff()) {
+            return staleOrUnavailable(stale, null);
+        }
+        if (stale == null) {
+            refreshLock.lock();
+        } else if (!refreshLock.tryLock()) {
+            return stale.keys();
+        }
+        try {
+            CachedKeys latest = cachedKeys;
+            if (latest != stale) {
+                return latest.keys(); // 기다리는 동안 다른 스레드가 받았다
+            }
+            if (inFailureBackoff()) {
+                return staleOrUnavailable(stale, null);
+            }
+            try {
+                CachedKeys fetched = fetchKeys();
+                cachedKeys = fetched;
+                return fetched.keys();
+            } catch (JwksUnavailableException e) {
+                retryNotBefore = clock.instant().plus(FAILURE_BACKOFF);
+                log.warn("Apple JWKS 조회 실패. {} 동안 재시도하지 않고 기존 키({})를 사용합니다.",
+                        FAILURE_BACKOFF, stale == null ? "없음" : stale.keys().size() + "개", e.getCause());
+                return staleOrUnavailable(stale, e);
+            }
+        } finally {
+            refreshLock.unlock();
+        }
+    }
+
+    private boolean inFailureBackoff() {
+        return clock.instant().isBefore(retryNotBefore);
+    }
+
+    private static Map<String, RSAPublicKey> staleOrUnavailable(CachedKeys stale, JwksUnavailableException failure) {
+        if (stale != null) {
+            return stale.keys();
+        }
+        throw failure != null ? failure : new JwksUnavailableException(new IllegalStateException("Apple JWKS 재시도 대기 중"));
+    }
+
+    /** 호출자가 refreshLock 을 잡고 있어야 한다. 캐시는 호출자가 갱신한다. */
     private CachedKeys fetchKeys() {
         String body;
         try {
@@ -175,9 +226,7 @@ public class AppleNativeAuthService {
         if (keys.isEmpty()) {
             throw new JwksUnavailableException(new IllegalStateException("Apple JWKS 에 RSA 키가 없습니다."));
         }
-        CachedKeys fetched = new CachedKeys(Map.copyOf(keys), clock.instant());
-        cachedKeys = fetched;
-        return fetched;
+        return new CachedKeys(Map.copyOf(keys), clock.instant());
     }
 
     private static String displayName(String fullName) {
@@ -185,7 +234,12 @@ public class AppleNativeAuthService {
             // Apple 은 이름을 최초 로그인 때만 주므로 없을 때 기본 이름을 쓴다.
             return Messages.get("auth.apple.default-display-name");
         }
-        return fullName.trim();
+        String trimmed = fullName.trim();
+        if (trimmed.codePointCount(0, trimmed.length()) <= MAX_FULL_NAME_LENGTH) {
+            return trimmed;
+        }
+        // 거부 대신 잘라 쓴다. 서로게이트 쌍(이모지 등)이 깨지지 않게 코드 포인트 기준으로 자른다.
+        return trimmed.substring(0, trimmed.offsetByCodePoints(0, MAX_FULL_NAME_LENGTH));
     }
 
     private record CachedKeys(Map<String, RSAPublicKey> keys, Instant fetchedAt) {

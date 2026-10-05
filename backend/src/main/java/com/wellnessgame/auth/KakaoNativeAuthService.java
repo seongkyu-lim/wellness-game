@@ -5,6 +5,7 @@ import com.wellnessgame.i18n.Messages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -41,12 +42,9 @@ public class KakaoNativeAuthService {
 
     public SocialLoginResult authenticate(String accessToken) {
         if (!properties.configured()) {
-            log.error("카카오 네이티브 로그인 설정 없음: OAUTH_KAKAO_NATIVE_APP_ID 환경변수를 확인하세요.");
-            throw new IllegalStateException(Messages.get("auth.kakao.unavailable"));
+            throw NativeAuthSupport.unavailable(log, "카카오", "OAUTH_KAKAO_NATIVE_APP_ID 환경변수", "auth.kakao.unavailable");
         }
-        if (accessToken == null || accessToken.isBlank()) {
-            throw new IllegalArgumentException(Messages.get("auth.native.access-token-blank"));
-        }
+        NativeAuthSupport.requireToken(accessToken, "auth.native.access-token-blank");
 
         try {
             JsonNode tokenInfo = restClient.get()
@@ -62,9 +60,14 @@ public class KakaoNativeAuthService {
             }
             return SocialAuthService.toResult(PROVIDER, profile);
         } catch (HttpClientErrorException e) {
-            // 카카오는 무효·만료 토큰에 401(code -401)을 준다.
+            if (e.getStatusCode().isSameCodeAs(HttpStatus.TOO_MANY_REQUESTS)) {
+                // 쿼터 초과는 토큰 문제가 아니라 일시 장애다.
+                throw new IllegalStateException(Messages.get("auth.kakao.verification-failed"), e);
+            }
+            // 카카오는 무효·만료 토큰에 401(code -401)을, 형식 오류에 400 을 준다.
             throw new UnauthorizedException(Messages.get("auth.kakao.access-token-invalid"), e);
         } catch (RestClientException e) {
+            // 5xx(HttpServerErrorException)·타임아웃·연결 실패
             throw new IllegalStateException(Messages.get("auth.kakao.verification-failed"), e);
         }
     }

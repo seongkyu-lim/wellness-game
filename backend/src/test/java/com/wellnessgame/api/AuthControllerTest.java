@@ -231,10 +231,10 @@ class AuthControllerTest {
     @Test
     void naverNativeReturnsAccessToken() throws Exception {
         doReturn(new SocialLoginResult("naver:nv-abc", "네이버친구"))
-                .when(naverNativeAuthService).authenticate("naver-token");
+                .when(naverNativeAuthService).authenticate("naver-token", "naver-refresh");
 
         JsonNode body = postJson("/api/auth/naver/native", """
-                {"accessToken": "naver-token"}
+                {"accessToken": "naver-token", "refreshToken": "naver-refresh"}
                 """);
 
         assertThat(body.path("userId").asText()).isEqualTo("naver:nv-abc");
@@ -284,12 +284,12 @@ class AuthControllerTest {
     @Test
     void nativeEndpointsMapVerificationFailureToUnauthorized() throws Exception {
         doThrow(new UnauthorizedException("x")).when(kakaoNativeAuthService).authenticate("bad");
-        doThrow(new UnauthorizedException("x")).when(naverNativeAuthService).authenticate("bad");
+        doThrow(new UnauthorizedException("x")).when(naverNativeAuthService).authenticate("bad", "bad");
         doThrow(new UnauthorizedException("x")).when(appleNativeAuthService).authenticate("bad", null);
 
         for (String[] request : new String[][]{
                 {"/api/auth/kakao/native", "{\"accessToken\": \"bad\"}"},
-                {"/api/auth/naver/native", "{\"accessToken\": \"bad\"}"},
+                {"/api/auth/naver/native", "{\"accessToken\": \"bad\", \"refreshToken\": \"bad\"}"},
                 {"/api/auth/apple/native", "{\"identityToken\": \"bad\"}"}}) {
             mockMvc.perform(post(request[0]).contentType(MediaType.APPLICATION_JSON).content(request[1]))
                     .andExpect(status().isUnauthorized())
@@ -303,10 +303,38 @@ class AuthControllerTest {
         for (String[] request : new String[][]{
                 {"/api/auth/kakao/native", "{\"accessToken\": \"\"}"},
                 {"/api/auth/naver/native", "{}"},
+                {"/api/auth/naver/native", "{\"accessToken\": \"a\"}"},
+                {"/api/auth/naver/native", "{\"accessToken\": \"a\", \"refreshToken\": \"\"}"},
                 {"/api/auth/apple/native", "{\"identityToken\": \" \"}"}}) {
             mockMvc.perform(post(request[0]).contentType(MediaType.APPLICATION_JSON).content(request[1]))
                     .andExpect(status().isBadRequest());
         }
+    }
+
+    @Test
+    void nativeEndpointsRejectOverlongTokens() throws Exception {
+        String longToken = "a".repeat(4097);
+        for (String[] request : new String[][]{
+                {"/api/auth/google/native", "{\"idToken\": \"" + longToken + "\"}"},
+                {"/api/auth/kakao/native", "{\"accessToken\": \"" + longToken + "\"}"},
+                {"/api/auth/naver/native", "{\"accessToken\": \"a\", \"refreshToken\": \"" + longToken + "\"}"},
+                {"/api/auth/apple/native", "{\"identityToken\": \"" + longToken + "\"}"}}) {
+            mockMvc.perform(post(request[0]).contentType(MediaType.APPLICATION_JSON).content(request[1]))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message", org.hamcrest.Matchers.containsString("4096")));
+        }
+    }
+
+    @Test
+    void appleNativeAcceptsOverlongFullNameForServerSideTruncation() throws Exception {
+        String longName = "가".repeat(150);
+        doReturn(new SocialLoginResult("apple:001234.abc", "가".repeat(100)))
+                .when(appleNativeAuthService).authenticate("apple-identity-token", longName);
+
+        JsonNode body = postJson("/api/auth/apple/native",
+                "{\"identityToken\": \"apple-identity-token\", \"fullName\": \"" + longName + "\"}");
+
+        assertTokenFields(body, "apple:001234.abc");
     }
 
     /** 테스트 설정에는 OAUTH_KAKAO_NATIVE_APP_ID·OAUTH_NAVER_CLIENT_ID·OAUTH_APPLE_BUNDLE_ID 가 없다. */
@@ -314,7 +342,7 @@ class AuthControllerTest {
     void nativeEndpointsArePublicAndUnavailableWhenNotConfigured() throws Exception {
         for (String[] request : new String[][]{
                 {"/api/auth/kakao/native", "{\"accessToken\": \"any\"}"},
-                {"/api/auth/naver/native", "{\"accessToken\": \"any\"}"},
+                {"/api/auth/naver/native", "{\"accessToken\": \"any\", \"refreshToken\": \"any\"}"},
                 {"/api/auth/apple/native", "{\"identityToken\": \"any\"}"}}) {
             mockMvc.perform(post(request[0])
                             .header("Authorization", "Bearer garbage")

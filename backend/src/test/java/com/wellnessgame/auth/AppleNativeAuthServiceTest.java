@@ -178,6 +178,60 @@ class AppleNativeAuthServiceTest {
     }
 
     @Test
+    void truncatesOverlongFullNameByCodePoint() {
+        expectJwks(jwks(KID, appleKey));
+        String longName = "가".repeat(99) + "😀😀";
+
+        String displayName = service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), longName)
+                .displayName();
+
+        assertThat(displayName).isEqualTo("가".repeat(99) + "😀");
+    }
+
+    @Test
+    void keepsUsingExpiredCacheDuringOutageAndSuppressesRetries() {
+        expectJwks(jwks(KID, appleKey));
+        service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plus(Duration.ofHours(3))), null);
+        server.verify();
+
+        // TTL 이 지난 뒤 Apple 장애: 기존 키로 계속 검증한다.
+        server.reset();
+        server.expect(requestTo(JWKS)).andRespond(withServerError());
+        Instant outage = NOW.plus(Duration.ofHours(1)).plusSeconds(1);
+        clock.setInstant(outage);
+        String token = token(appleKey, KID, BUNDLE_ID, NOW.plus(Duration.ofHours(3)));
+        assertThat(service.authenticate(token, null).userId()).isEqualTo("apple:001234.abcdef.0420");
+        server.verify();
+
+        // 백오프 동안은 Apple 을 다시 부르지 않는다(예상 밖 요청이면 MockRestServiceServer 가 실패시킨다).
+        server.reset();
+        clock.setInstant(outage.plus(AppleNativeAuthService.FAILURE_BACKOFF).minusSeconds(1));
+        assertThat(service.authenticate(token, null).userId()).isEqualTo("apple:001234.abcdef.0420");
+        server.verify();
+
+        // 백오프가 지나면 다시 받는다.
+        server.reset();
+        expectJwks(jwks(KID, appleKey));
+        clock.setInstant(outage.plus(AppleNativeAuthService.FAILURE_BACKOFF).plusSeconds(1));
+        service.authenticate(token, null);
+        server.verify();
+    }
+
+    @Test
+    void failsFastWithoutAnyKeysDuringBackoff() {
+        server.expect(requestTo(JWKS)).andRespond(withServerError());
+        String token = token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600));
+
+        assertThatIllegalStateException().isThrownBy(() -> service.authenticate(token, null));
+        server.verify();
+
+        server.reset();
+        clock.setInstant(NOW.plusSeconds(10));
+        assertThatIllegalStateException().isThrownBy(() -> service.authenticate(token, null));
+        server.verify();
+    }
+
+    @Test
     void reportsUnavailableWhenJwksFetchFails() {
         server.expect(requestTo(JWKS)).andRespond(withServerError());
 
