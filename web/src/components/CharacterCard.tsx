@@ -1,14 +1,8 @@
+import type { ReactNode } from 'react'
 import type { Character } from '../api/types'
 import { growthStage, nextStage } from '../lib/growthStage'
 import { CharacterAvatar } from './CharacterAvatar'
-
-const RADIUS = 45
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS
-
-/** 진행률 0이어도 살짝 보이도록 최소 호를 유지하고 1을 넘지 않게 자른다. (iOS XPRingView와 동일) */
-export function ringFraction(progress: number): number {
-  return Math.max(0.015, Math.min(progress, 1))
-}
+import { IconHeart, IconMoon, IconStrength, IconTarget, Sparkle } from './Icons'
 
 export function xpProgress(character: Character): number {
   if (character.nextLevelXp <= 0) {
@@ -17,89 +11,93 @@ export function xpProgress(character: Character): number {
   return Math.min(Math.max(character.currentXp / character.nextLevelXp, 0), 1)
 }
 
-const STATS = [
-  { key: 'str', title: 'STR', name: '근력', color: 'var(--stat-str)' },
-  { key: 'vit', title: 'VIT', name: '활력', color: 'var(--stat-vit)' },
-  { key: 'discipline', title: 'DISC', name: '절제', color: 'var(--stat-disc)' },
-  { key: 'recovery', title: 'REC', name: '회복', color: 'var(--stat-rec)' },
-] as const
+const STATS: { key: 'str' | 'vit' | 'discipline' | 'recovery'; title: string; name: string; color: string; icon: ReactNode }[] = [
+  { key: 'str', title: 'STR', name: '근력', color: 'var(--stat-str)', icon: <IconStrength /> },
+  { key: 'vit', title: 'VIT', name: '활력', color: 'var(--stat-vit)', icon: <IconHeart /> },
+  { key: 'discipline', title: 'DISC', name: '절제', color: 'var(--stat-disc)', icon: <IconTarget /> },
+  { key: 'recovery', title: 'REC', name: '회복', color: 'var(--stat-rec)', icon: <IconMoon /> },
+]
 
 interface Props {
   character: Character | null
 }
 
 export function CharacterCard({ character }: Props) {
-  if (!character) {
-    return (
-      <section className="hero-card">
-        <div className="empty-state">
-          <CharacterAvatar level={1} size={64} />
-          <div>
-            <h2>새싹이가 기다리고 있어요</h2>
-            <p>iPhone 앱에서 건강 데이터를 동기화하면 XP를 얻고 씨앗이 자라나요.</p>
-          </div>
-        </div>
-      </section>
-    )
+  const level = character?.level ?? 1
+  const stage = growthStage(level)
+  const next = nextStage(level)
+
+  let bubble = 'iPhone 앱에서 동기화하면 나도 깨어날게!'
+  if (character) {
+    bubble = next ? `Lv.${next.minLevel}이 되면 ${next.name} 단계로 자랄 거야!` : '활짝 피었어! 늘 함께해 줘서 고마워!'
   }
 
-  const fraction = ringFraction(xpProgress(character))
-  const stage = growthStage(character.level)
-  const next = nextStage(character.level)
-
   return (
-    <section className="hero-card" aria-label="내 캐릭터">
-      <div className="hero-row">
-        <div className="ring-wrap">
-          <svg width="110" height="110" viewBox="0 0 110 110" aria-hidden>
-            <defs>
-              <linearGradient id="xp-gradient" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#9bd65c" />
-                <stop offset="100%" stopColor="#5ca843" />
-              </linearGradient>
-            </defs>
-            <circle cx="55" cy="55" r={RADIUS} fill="none" stroke="var(--ring-track)" strokeWidth="9" />
-            <circle
-              cx="55"
-              cy="55"
-              r={RADIUS}
-              fill="none"
-              stroke="url(#xp-gradient)"
-              strokeWidth="9"
-              strokeLinecap="round"
-              strokeDasharray={CIRCUMFERENCE}
-              strokeDashoffset={CIRCUMFERENCE * (1 - fraction)}
-              transform="rotate(-90 55 55)"
-              style={{ transition: 'stroke-dashoffset 0.8s ease-out' }}
-            />
-          </svg>
-          <div className="ring-center">
-            <CharacterAvatar level={character.level} size={72} />
-          </div>
+    <>
+      <section className="hero" aria-label="내 캐릭터">
+        <svg className="hills" viewBox="0 0 390 110" preserveAspectRatio="none" aria-hidden>
+          <path className="hill" d="M0 52 Q70 24 150 46 T300 40 T390 50 V110 H0Z" />
+          <path className="hill-deep" d="M0 74 Q90 58 190 72 T390 70 V110 H0Z" />
+        </svg>
+        <p className="bubble">{bubble}</p>
+        <Sparkle size={26} fill="#ffe066" style={{ right: 34, top: 26 }} />
+        <Sparkle size={16} fill="#ffffff" timing="slow" style={{ right: 78, top: 84 }} />
+        <Sparkle size={18} fill="#ff9ec4" timing="late" style={{ left: 48, top: 150 }} />
+        <div className="mascot bob">
+          <CharacterAvatar level={level} size={210} />
         </div>
-        <div className="hero-meta">
-          <span className="pill lime">
-            Lv.{character.level} · {stage.name} 단계
-          </span>
-          <span className="xp">
-            {character.currentXp.toLocaleString()} / {character.nextLevelXp.toLocaleString()} XP
-          </span>
-          <span className="hint">
-            {next ? `Lv.${next.minLevel}이 되면 ${next.name} 단계로 자라나요` : '마지막 단계까지 모두 자랐어요 🌸'}
+        <div className="nameplate">
+          <span className="name-tag">새싹이</span>
+          <span className="level-chip">
+            Lv.{level} · {stage.name} 단계
           </span>
         </div>
+      </section>
+
+      {character && <XpCard character={character} nextLabel={next ? `${next.name}까지 Lv.${next.minLevel}` : '최종 단계'} />}
+
+      {character && (
+        <section className="stat-grid" aria-label="스탯">
+          {STATS.map((stat) => (
+            <div className="stat-tile" key={stat.key}>
+              <div className="stat-band" style={{ background: stat.color }}>
+                {stat.icon}
+              </div>
+              <span className="stat-value">{character.stats[stat.key]}</span>
+              <span className="stat-name">
+                {stat.title} {stat.name}
+              </span>
+            </div>
+          ))}
+        </section>
+      )}
+    </>
+  )
+}
+
+function XpCard({ character, nextLabel }: { character: Character; nextLabel: string }) {
+  const percent = xpProgress(character) * 100
+  return (
+    <section className="card xp-card" aria-label="경험치">
+      <div className="xp-head">
+        <span className="xp-label">EXP</span>
+        <span className="chip pink">누적 {character.totalXp.toLocaleString()} XP</span>
       </div>
-      <div className="stat-grid">
-        {STATS.map((stat) => (
-          <div className="stat-tile" key={stat.key}>
-            <div className="value" style={{ color: stat.color }}>
-              {character.stats[stat.key]}
-            </div>
-            <div className="name">
-              {stat.title} · {stat.name}
-            </div>
-          </div>
-        ))}
+      <div
+        className="xp-bar"
+        role="progressbar"
+        aria-label="다음 레벨까지 경험치"
+        aria-valuemin={0}
+        aria-valuemax={character.nextLevelXp}
+        aria-valuenow={character.currentXp}
+      >
+        <div className="xp-fill" style={{ width: `${percent}%` }} />
+      </div>
+      <div className="xp-foot">
+        <span>
+          {character.currentXp.toLocaleString()} / {character.nextLevelXp.toLocaleString()} XP
+        </span>
+        <span className="hint">{nextLabel}</span>
       </div>
     </section>
   )
