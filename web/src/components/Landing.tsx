@@ -24,16 +24,21 @@ function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 }
 
-/** 히어로 장면의 새싹이가 씨앗 → 개화 단계를 차례로 보여 준다. 동작 줄이기 설정이면 줄기 단계에 멈춘다. */
-function useCyclingStage(): number {
-  const [index, setIndex] = useState(prefersReducedMotion() ? 2 : 0)
+const LAST_STAGE = GROWTH_STAGES.length - 1
+
+/**
+ * 히어로 장면의 새싹이가 씨앗 → 개화를 한 번만 차례로 보여 주고 개화에서 멈춘다.
+ * (끝없이 바뀌는 자동 움직임을 피한다 — WCAG 2.2.2) 동작 줄이기 설정이면 처음부터 개화를 보여 준다.
+ */
+function useGrowingStage(): number {
+  const [index, setIndex] = useState(prefersReducedMotion() ? LAST_STAGE : 0)
   useEffect(() => {
-    if (prefersReducedMotion()) {
+    if (index >= LAST_STAGE) {
       return
     }
-    const timer = setInterval(() => setIndex((i) => (i + 1) % GROWTH_STAGES.length), STAGE_INTERVAL_MS)
-    return () => clearInterval(timer)
-  }, [])
+    const timer = setTimeout(() => setIndex(index + 1), STAGE_INTERVAL_MS)
+    return () => clearTimeout(timer)
+  }, [index])
   return index
 }
 
@@ -45,7 +50,7 @@ interface Props {
 /** 로그인 전 서비스 소개 메인 페이지. */
 export function Landing({ account }: Props) {
   const { t } = useI18n()
-  const stage = GROWTH_STAGES[useCyclingStage()]
+  const stage = GROWTH_STAGES[useGrowingStage()]
 
   return (
     <div className="landing">
@@ -58,7 +63,7 @@ export function Landing({ account }: Props) {
             <a className="btn btn-cta" href="#login">
               {t('landing.ctaLogin')}
             </a>
-            <a className="btn btn-ghost" href="#how">
+            <a className="btn" href="#how">
               {t('landing.ctaHow')}
             </a>
           </div>
@@ -73,7 +78,7 @@ export function Landing({ account }: Props) {
         />
       </section>
 
-      <section id="how" className="landing-section" aria-labelledby="how-title">
+      <section id="how" tabIndex={-1} className="landing-section" aria-labelledby="how-title">
         <h2 id="how-title" className="section-title">
           {t('landing.howTitle')}
         </h2>
@@ -100,19 +105,19 @@ export function Landing({ account }: Props) {
         <div className="landing-stats">
           <Quest
             icon={<IconWalk size={24} />}
-            tint="var(--stat-disc)"
+            tint="var(--mint)"
             title={t('landing.activitySteps')}
             sub={t('landing.statSteps', { stat: `DISC ${t('stat.discipline')}` })}
           />
           <Quest
             icon={<IconRun size={24} />}
-            tint="var(--stat-str)"
+            tint="var(--peach)"
             title={t('landing.activityWorkout')}
             sub={t('landing.statWorkout', { stat1: `STR ${t('stat.str')}`, stat2: `VIT ${t('stat.vit')}` })}
           />
           <Quest
             icon={<IconMoon size={24} />}
-            tint="var(--stat-rec)"
+            tint="var(--lilac)"
             title={t('landing.activitySleep')}
             sub={t('landing.statSleep', { stat: `REC ${t('stat.recovery')}` })}
           />
@@ -141,14 +146,14 @@ export function Landing({ account }: Props) {
               {note.icon}
             </span>
             <div>
-              <h3>{t(note.title)}</h3>
+              <h2 className="note-title">{t(note.title)}</h2>
               <p className="hint">{t(note.body)}</p>
             </div>
           </div>
         ))}
       </section>
 
-      <section id="login" className="landing-section landing-login">
+      <section id="login" tabIndex={-1} className="landing-section landing-login">
         {account}
       </section>
 

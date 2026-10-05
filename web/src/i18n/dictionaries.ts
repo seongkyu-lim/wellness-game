@@ -83,7 +83,7 @@ const ko = {
   'landing.eyebrow': 'Apple 건강 × 성장 게임',
   'landing.title': '걷고, 자고, 움직이면\n새싹이가 자라요',
   'landing.lead':
-    'iPhone의 걸음·운동·수면 기록이 자동으로 XP가 돼요. 따로 입력할 건 없어요. 평소처럼 지내면 화분 속 새싹이가 씨앗에서 꽃까지 자라납니다.',
+    'iPhone의 걸음·운동·수면 기록이 자동으로 XP가 돼요. 따로 입력할 건 없어요. 평소처럼 지내면 화분 속 새싹이가 씨앗에서 꽃까지 자라나요.',
   'landing.ctaLogin': '로그인하고 내 새싹이 보기',
   'landing.ctaHow': '어떻게 자라나요?',
   'landing.bubble': '오늘도 같이 걸을래?',
@@ -92,7 +92,7 @@ const ko = {
   'landing.step1Title': 'Apple 건강 연결',
   'landing.step1Body': 'iPhone 앱에서 건강 데이터 읽기를 한 번만 허락하면 준비 끝.',
   'landing.step2Title': '자동으로 XP 적립',
-  'landing.step2Body': '하루 걸음·운동·수면 요약이 동기화되어 XP와 스탯으로 바뀌어요.',
+  'landing.step2Body': '걸음·운동·수면 기록이 서버로 동기화되어 XP와 스탯으로 바뀌어요.',
   'landing.step3Title': '새싹이 성장',
   'landing.step3Body': '레벨이 오를 때마다 새싹이가 다음 단계로 자라요.',
   'landing.statsTitle': '활동마다 다른 스탯',
@@ -108,7 +108,7 @@ const ko = {
   'landing.webBody': '앱과 같은 계정으로 로그인하면 캐릭터·스탯·오늘의 퀘스트를 웹에서도 볼 수 있어요.',
   'landing.privacyTitle': '내 건강 데이터는 나만',
   'landing.privacyBody':
-    '원본 기록이 아니라 하루 요약만 서버로 보내고, 웹에서는 로그인한 본인 데이터만 볼 수 있어요.',
+    'Apple 건강 전체가 아니라 XP 계산에 필요한 값(걸음 수, 운동·수면 시간, 거리, 칼로리)만 보내고, 웹에서는 로그인한 본인 데이터만 볼 수 있어요.',
   'landing.footer': '웹은 조회 전용이에요. 기록은 iPhone 앱이 Apple 건강에서 자동으로 모아요.',
 } as const
 
@@ -204,9 +204,9 @@ const en: Record<MessageKey, string> = {
   'landing.sceneLabel': 'Preview of Sprouty growing through each stage',
   'landing.howTitle': 'How it works',
   'landing.step1Title': 'Connect Apple Health',
-  'landing.step1Body': 'Allow the iPhone app to read your health data once, and you are set.',
+  'landing.step1Body': 'Allow the iPhone app to read your health data once, and you\'re all set.',
   'landing.step2Title': 'Earn XP automatically',
-  'landing.step2Body': 'Daily step, workout, and sleep summaries sync and become XP and stats.',
+  'landing.step2Body': 'Your steps, workouts, and sleep sync to the server and become XP and stats.',
   'landing.step3Title': 'Sprouty grows',
   'landing.step3Body': 'Every level up helps Sprouty grow into its next stage.',
   'landing.statsTitle': 'Each activity builds a stat',
@@ -222,7 +222,7 @@ const en: Record<MessageKey, string> = {
   'landing.webBody': 'Sign in with the same account as the app to see your character, stats, and today\'s quests here too.',
   'landing.privacyTitle': 'Your health data stays yours',
   'landing.privacyBody':
-    'Only daily summaries are sent, never raw records, and the web shows only your own data after you sign in.',
+    'Only the values needed for XP (step counts, workout and sleep times, distance, calories) are sent, not your full Health history, and the web shows only your own data after you sign in.',
   'landing.footer': 'The web is view-only. The iPhone app collects your records from Apple Health automatically.',
 }
 

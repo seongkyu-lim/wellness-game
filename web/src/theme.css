@@ -688,6 +688,10 @@ input {
     gap: 40px;
     padding-top: 12px;
   }
+
+  .landing-title {
+    font-size: clamp(34px, 4.2vw, 48px);
+  }
 }
 
 .landing-copy {
@@ -699,9 +703,10 @@ input {
 
 .landing-title {
   margin: 0;
-  font-size: clamp(34px, 7vw, 54px);
-  line-height: 1.12;
+  font-size: clamp(30px, 8.5vw, 40px);
+  line-height: 1.15;
   white-space: pre-line;
+  word-break: keep-all;
   letter-spacing: -0.5px;
 }
 
@@ -735,9 +740,8 @@ a.btn {
   padding: 12px 22px;
 }
 
-.btn-ghost {
-  background: var(--card);
-  color: var(--text);
+.landing-section:focus {
+  outline: none;
 }
 
 .landing-section {
@@ -764,7 +768,7 @@ a.btn {
 }
 
 .landing-step h3,
-.landing-note h3 {
+.landing-note .note-title {
   margin: 0 0 6px;
   font-family: var(--font-display);
   font-weight: 400;
@@ -786,7 +790,7 @@ a.btn {
 
 .landing-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
 }
 
@@ -795,8 +799,14 @@ a.btn {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+@media (min-width: 1000px) {
+  .landing-stages {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
 }
 
 .stage-card {
