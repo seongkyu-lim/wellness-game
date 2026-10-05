@@ -61,17 +61,34 @@ final class SleepDurationTextTests: XCTestCase {
     }
 }
 
-final class XPRingFractionTests: XCTestCase {
-    func test_ringFraction_keepsMinimumVisibleArcAtZeroProgress() {
-        XCTAssertEqual(XPRingView.ringFraction(0), 0.015, accuracy: 0.0001)
+final class XPBarFillWidthTests: XCTestCase {
+    func test_fillWidth_keepsMinimumVisibleFillAtZeroProgress() {
+        XCTAssertEqual(XPBarView.fillWidth(progress: 0, totalWidth: 300), XPBarView.minimumFillWidth, accuracy: 0.0001)
     }
 
-    func test_ringFraction_passesThroughMidRangeProgress() {
-        XCTAssertEqual(XPRingView.ringFraction(0.5), 0.5, accuracy: 0.0001)
+    func test_fillWidth_scalesMidRangeProgress() {
+        XCTAssertEqual(XPBarView.fillWidth(progress: 0.5, totalWidth: 300), 150, accuracy: 0.0001)
     }
 
-    func test_ringFraction_clampsToOneAboveFullProgress() {
-        XCTAssertEqual(XPRingView.ringFraction(1.2), 1.0, accuracy: 0.0001)
+    func test_fillWidth_clampsToTrackWidthAboveFullProgress() {
+        XCTAssertEqual(XPBarView.fillWidth(progress: 1.2, totalWidth: 300), 300, accuracy: 0.0001)
+    }
+
+    func test_fillWidth_neverExceedsTrackNarrowerThanMinimum() {
+        XCTAssertEqual(XPBarView.fillWidth(progress: 0, totalWidth: 4), 4, accuracy: 0.0001)
+    }
+}
+
+final class CharacterAvatarPathTests: XCTestCase {
+    func test_svg_parsesAbsoluteLineCommandsIntoClosedShape() {
+        let path = CharacterAvatarView.svg("M10 20 H40 V60 L10 60 Z")
+        XCTAssertEqual(path.boundingRect, CGRect(x: 10, y: 20, width: 30, height: 40))
+    }
+
+    func test_svg_parsesQuadraticCurveEndpoints() {
+        let path = CharacterAvatarView.svg("M0 10 Q5 0 10 10")
+        XCTAssertEqual(path.currentPoint, CGPoint(x: 10, y: 10))
+        XCTAssertEqual(path.boundingRect.maxX, 10, accuracy: 0.0001)
     }
 }
 

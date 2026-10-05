@@ -69,6 +69,40 @@
         }
       }
     },
+    "%@걸음" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ steps"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@걸음"
+          }
+        }
+      }
+    },
+    "%@까지 Lv.%lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ at Lv.%2$lld"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@까지 Lv.%lld"
+          }
+        }
+      }
+    },
     "%lld분" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -256,19 +290,19 @@
         }
       }
     },
-    "Lv.%lld이 되면 %@ 단계로 자라나요" : {
+    "Lv.%lld이 되면 %@ 단계로 자랄 거야!" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Reach Lv.%1$lld to grow into %2$@"
+            "value" : "At Lv.%1$lld I'll grow into the %2$@ stage!"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lv.%lld이 되면 %@ 단계로 자라나요"
+            "value" : "Lv.%lld이 되면 %@ 단계로 자랄 거야!"
           }
         }
       }
@@ -303,6 +337,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Naver로 로그인"
+          }
+        }
+      }
+    },
+    "가볍게 몸을 움직여 볼까요?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How about a quick walk or stretch?"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가볍게 몸을 움직여 볼까요?"
           }
         }
       }
@@ -528,6 +579,40 @@
         }
       }
     },
+    "내 캐릭터" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My character"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내 캐릭터"
+          }
+        }
+      }
+    },
+    "누적 %@ XP" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ XP total"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "누적 %@ XP"
+          }
+        }
+      }
+    },
     "다음 단계 · %@ Lv.%lld" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -545,6 +630,23 @@
         }
       }
     },
+    "다음 레벨까지 경험치" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "XP to next level"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 레벨까지 경험치"
+          }
+        }
+      }
+    },
     "달리기" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -558,6 +660,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "달리기"
+          }
+        }
+      }
+    },
+    "동기화하면 나도 깨어날게!" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sync up and I'll wake up!"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "동기화하면 나도 깨어날게!"
           }
         }
       }
@@ -596,19 +715,19 @@
         }
       }
     },
-    "레벨업! ✨" : {
+    "레벨업!" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Level up! ✨"
+            "value" : "Level up!"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "레벨업! ✨"
+            "value" : "레벨업!"
           }
         }
       }
@@ -851,19 +970,19 @@
         }
       }
     },
-    "마지막 단계까지 모두 자랐어요 🌸" : {
+    "로그인하면 나도 깨어날게!" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fully grown! 🌸"
+            "value" : "Sign in and I'll wake up!"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "마지막 단계까지 모두 자랐어요 🌸"
+            "value" : "로그인하면 나도 깨어날게!"
           }
         }
       }
@@ -915,6 +1034,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "새싹"
+          }
+        }
+      }
+    },
+    "새싹이" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprouty"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새싹이"
           }
         }
       }
@@ -1038,6 +1174,23 @@
         }
       }
     },
+    "아직 동기화 전" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not synced yet"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 동기화 전"
+          }
+        }
+      }
+    },
     "알 수 없는 오류" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1089,36 +1242,36 @@
         }
       }
     },
-    "오늘 운동 기록이 없어요. 가볍게 몸을 움직여 볼까요?" : {
+    "오늘 운동 기록이 없어요" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No workouts logged today. How about a quick walk or stretch?"
+            "value" : "No workouts logged today"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "오늘 운동 기록이 없어요. 가볍게 몸을 움직여 볼까요?"
+            "value" : "오늘 운동 기록이 없어요"
           }
         }
       }
     },
-    "오늘의 활동" : {
+    "오늘의 퀘스트" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Today's Activity"
+            "value" : "Today's Quests"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "오늘의 활동"
+            "value" : "오늘의 퀘스트"
           }
         }
       }
@@ -1242,6 +1395,23 @@
         }
       }
     },
+    "최종 단계" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Final stage"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최종 단계"
+          }
+        }
+      }
+    },
     "활력" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1255,6 +1425,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "활력"
+          }
+        }
+      }
+    },
+    "활짝 피었어! 늘 함께해 줘서 고마워!" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I'm in full bloom! Thanks for always being with me!"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "활짝 피었어! 늘 함께해 줘서 고마워!"
           }
         }
       }

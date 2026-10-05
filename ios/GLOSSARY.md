@@ -39,7 +39,7 @@ Source language is ko; English is the fallback for unsupported device languages.
 | 걸음 수 | Steps |
 | 수면 | Sleep |
 | 수영 / 달리기 / 걷기 / 자전거 / 근력 운동 / 운동 | Swimming / Running / Walking / Cycling / Strength training / Workout |
-| 오늘의 활동 | Today's Activity |
+| 오늘의 퀘스트 | Today's Quests |
 | 획득 내역 | Rewards |
 | 반영됨 | Already counted |
 | 레벨업 | Level up |

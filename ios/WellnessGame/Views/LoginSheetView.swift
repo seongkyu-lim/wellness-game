@@ -12,7 +12,6 @@ struct LoginSheetView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var showsOtherProviders = false
-    @Environment(\.colorScheme) private var colorScheme
 
     /// 지역별 노출 순서. 시트가 열려 있는 동안 바뀌지 않도록 한 번만 계산한다.
     private let policy: LoginProviderPolicy
@@ -43,7 +42,7 @@ struct LoginSheetView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Capsule()
-                    .fill(Theme.surfaceTint)
+                    .fill(Theme.textSecondary.opacity(0.5))
                     .frame(width: 44, height: 5)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 10)
@@ -70,45 +69,46 @@ struct LoginSheetView: View {
     private var signedIn: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("계정")
-                .font(.system(.title3, design: .rounded).weight(.bold))
+                .font(.display(.title2))
                 .foregroundStyle(Theme.textPrimary)
-            HStack {
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 12) {
                 Label(userSession.accountLabel, systemImage: "person.crop.circle.fill.badge.checkmark")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.rounded(.subheadline))
                     .foregroundStyle(Theme.textPrimary)
-                Spacer()
-                PillBadge(text: userSession.provider?.displayName ?? String(localized: "로그인"), color: Theme.primary)
+                Spacer(minLength: 0)
+                PillBadge(text: userSession.provider?.displayName ?? String(localized: "로그인"), fill: Theme.mint)
             }
-            .padding(16)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .celCard(radius: 18)
 
             Button("로그아웃") {
                 socialLogin.signOut(userSession)
                 dismiss()
             }
-            .buttonStyle(SecondaryActionButtonStyle())
+            .buttonStyle(.celSecondary)
             .disabled(isBusy)
+            .padding(.top, 4)
         }
     }
 
     private var signedOut: some View {
         VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("로그인")
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundStyle(Theme.textPrimary)
-                Text("로그인하면 건강 데이터를 동기화하고 여러 기기에서 같은 캐릭터를 키울 수 있어요.")
-                    .font(.footnote)
-                    .foregroundStyle(Theme.textSecondary)
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("로그인")
+                        .font(.display(.title))
+                        .foregroundStyle(Theme.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("로그인하면 건강 데이터를 동기화하고 여러 기기에서 같은 캐릭터를 키울 수 있어요.")
+                        .font(.rounded(.footnote, weight: .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Spacer(minLength: 0)
+                CharacterAvatarView(level: GrowthStage.sprout.minLevel, size: 84, decorative: true)
             }
 
             if let notice = userSession.reloginNotice {
-                Label(notice, systemImage: "exclamationmark.circle.fill")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Theme.statStrength)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                DangerNotice(text: notice, systemImage: "exclamationmark.circle.fill")
             }
 
             credentialForm
@@ -136,24 +136,24 @@ struct LoginSheetView: View {
             )
 
             if let errorMessage = credentialLogin.errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(Theme.statStrength)
+                DangerNotice(text: errorMessage)
             }
 
             Button("로그인") {
                 Task { await credentialLogin.logIn(username: username, password: password, into: userSession) }
             }
-            .buttonStyle(PrimaryActionButtonStyle())
+            .buttonStyle(.celPrimary)
             .disabled(!canSubmitCredentials)
             .opacity(canSubmitCredentials ? 1 : 0.5)
+            .padding(.top, 4)
 
             Button("회원가입") {
                 Task { await credentialLogin.signUp(username: username, password: password, into: userSession) }
             }
-            .buttonStyle(SecondaryActionButtonStyle())
+            .buttonStyle(.celSecondary)
             .disabled(!canSubmitCredentials)
             .opacity(canSubmitCredentials ? 1 : 0.5)
+            .padding(.top, 4)
         }
     }
 
@@ -165,8 +165,8 @@ struct LoginSheetView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.textSecondary)
+                .font(.rounded(.subheadline))
+                .foregroundStyle(Theme.textPrimary)
             Group {
                 if isSecure {
                     SecureField(prompt, text: text)
@@ -175,25 +175,31 @@ struct LoginSheetView: View {
                 }
             }
             .textFieldStyle(.plain)
+            .font(.rounded(.body, weight: .medium))
+            .foregroundStyle(Theme.textPrimary)
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .frame(minHeight: 50)
+            .background(RoundedRectangle(cornerRadius: Theme.chipRadius, style: .continuous).fill(Theme.surface))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.chipRadius, style: .continuous)
+                    .strokeBorder(Theme.fieldBorder, lineWidth: 2.5)
+            )
         }
     }
 
     private var divider: some View {
         HStack(spacing: 12) {
-            Rectangle().fill(Theme.surfaceTint).frame(height: 1)
+            Capsule().fill(Theme.fieldBorder.opacity(0.5)).frame(height: 2)
             Text("또는 소셜 계정")
-                .font(.caption)
+                .font(.rounded(.footnote, weight: .medium))
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize()
-            Rectangle().fill(Theme.surfaceTint).frame(height: 1)
+            Capsule().fill(Theme.fieldBorder.opacity(0.5)).frame(height: 2)
         }
     }
 
     private var socialButtons: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             ForEach(policy.primary, id: \.self) { provider in
                 providerButton(provider)
             }
@@ -207,9 +213,10 @@ struct LoginSheetView: View {
                     HStack(spacing: 6) {
                         Text("다른 방법으로 로그인")
                         Image(systemName: showsOtherProviders ? "chevron.up" : "chevron.down")
-                            .font(.caption.weight(.bold))
+                            .font(.rounded(.caption, weight: .bold))
+                            .accessibilityHidden(true)
                     }
-                    .font(.footnote.weight(.semibold))
+                    .font(.rounded(.footnote))
                     .foregroundStyle(Theme.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 44)
                 }
@@ -234,9 +241,10 @@ struct LoginSheetView: View {
             } onCompletion: { result in
                 socialLogin.signInWithApple(result, session: userSession)
             }
-            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-            .frame(height: 48)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .signInWithAppleButtonStyle(.black)
+            .frame(height: 54)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.ink, lineWidth: Theme.line))
             .disabled(isBusy)
         case .google:
             socialButton(text: "Google로 로그인", prefix: "G", textColor: Theme.textPrimary, background: Theme.surface) {
@@ -245,8 +253,8 @@ struct LoginSheetView: View {
         case .kakao:
             socialButton(
                 text: "Kakao로 로그인",
-                textColor: Color(red: 0.12, green: 0.09, blue: 0.08),
-                background: Color(red: 1.0, green: 0.90, blue: 0.0)
+                textColor: Theme.onPop,
+                background: Color(hex: 0xFEE500)
             ) {
                 socialLogin.signInWithKakao(userSession)
             }
@@ -254,8 +262,9 @@ struct LoginSheetView: View {
             socialButton(
                 text: "Naver로 로그인",
                 prefix: "N",
-                textColor: .white,
-                background: Color(red: 0.01, green: 0.78, blue: 0.35)
+                // 흰 글자는 초록 바탕에서 대비가 부족해 웹과 같이 남색 글자를 쓴다.
+                textColor: Color(hex: 0x14172B),
+                background: Color(hex: 0x03C75A)
             ) {
                 socialLogin.signInWithNaver(userSession)
             }
@@ -275,17 +284,13 @@ struct LoginSheetView: View {
             HStack(spacing: 6) {
                 if let prefix {
                     Text(prefix)
-                        .font(.headline.bold())
+                        .font(.display(.headline))
+                        .accessibilityHidden(true)
                 }
                 Text(text)
-                    .fontWeight(.semibold)
             }
-            .foregroundStyle(textColor)
-            .frame(maxWidth: .infinity)
-            .frame(height: 48)
-            .background(background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(CelButtonStyle(fill: background, foreground: textColor))
         .disabled(isBusy)
     }
 }
