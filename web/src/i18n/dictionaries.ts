@@ -25,6 +25,7 @@ const ko = {
   'account.signInHint':
     '내 캐릭터와 활동 기록을 보려면 iPhone 앱과 같은 계정으로 로그인해 주세요. 로그인한 본인의 데이터만 볼 수 있어요.',
   'account.signInWith': '{provider}로 로그인',
+  'account.otherSignIn': '다른 방법으로 로그인',
   'account.disabledHint':
     '비활성화된 버튼은 provider 키가 설정되지 않은 것입니다. 설정 방법은 web/README.md를 참고하세요. (Apple 로그인은 Apple Developer 유료 계정과 HTTPS 도메인이 필요해 웹에서는 아직 지원하지 않아요.)',
 
@@ -107,6 +108,7 @@ const en: Record<MessageKey, string> = {
   'account.signInHint':
     'Sign in with the same account as the iPhone app to see your character and activity. You can only see your own data.',
   'account.signInWith': 'Sign in with {provider}',
+  'account.otherSignIn': 'Other sign-in options',
   'account.disabledHint':
     "Disabled buttons mean the provider key isn't configured. See web/README.md for setup. (Sign in with Apple needs a paid Apple Developer account and an HTTPS domain, so it isn't available on the web yet.)",
 
