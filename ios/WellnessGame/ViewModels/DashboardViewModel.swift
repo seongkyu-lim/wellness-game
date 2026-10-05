@@ -6,7 +6,7 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var snapshot: DailyHealthSnapshot?
     @Published private(set) var syncResponse: HealthActivitySyncResponse?
     @Published private(set) var isLoading = false
-    @Published private(set) var statusMessage = "건강 데이터를 자동으로 동기화합니다."
+    @Published private(set) var statusMessage = String(localized: "건강 데이터를 자동으로 동기화합니다.")
     @Published var useMockData = false
 
     private let appleProvider: HealthDataProvider
@@ -60,8 +60,8 @@ final class DashboardViewModel: ObservableObject {
             syncResponse = response
             lastSyncedAt = Date()
             statusMessage = response.levelUp
-                ? "레벨업! 성장 결과를 확인하세요."
-                : "자동 동기화 완료"
+                ? String(localized: "레벨업! 성장 결과를 확인하세요.")
+                : String(localized: "자동 동기화 완료")
         }
     }
 
@@ -93,7 +93,7 @@ final class DashboardViewModel: ObservableObject {
             userSession.handleUnauthorized()
             reset()
         } catch {
-            statusMessage = "동기화하지 못했어요. 당겨서 다시 시도할 수 있어요. (\(error.localizedDescription))"
+            statusMessage = String(localized: "동기화하지 못했어요. 당겨서 다시 시도할 수 있어요. (\(error.localizedDescription))")
         }
     }
 }

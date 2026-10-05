@@ -14,7 +14,7 @@ enum LoginProvider: String {
         case .google: "Google"
         case .kakao: "Kakao"
         case .naver: "Naver"
-        case .password: "계정"
+        case .password: String(localized: "계정")
         }
     }
 
@@ -31,8 +31,8 @@ enum LoginProvider: String {
 /// - 게스트 세션은 없다. 로그인하지 않으면 `userId == nil`이다.
 @MainActor
 final class UserSession: ObservableObject {
-    static let signInPrompt = "로그인하면 건강 데이터를 동기화하고 캐릭터를 키울 수 있어요."
-    static let reloginMessage = "로그인이 만료되었어요. 다시 로그인해 주세요."
+    static var signInPrompt: String { String(localized: "로그인하면 건강 데이터를 동기화하고 캐릭터를 키울 수 있어요.") }
+    static var reloginMessage: String { String(localized: "로그인이 만료되었어요. 다시 로그인해 주세요.") }
 
     @Published private(set) var provider: LoginProvider?
     @Published private(set) var userId: String?
@@ -74,9 +74,9 @@ final class UserSession: ObservableObject {
 
     var accountLabel: String {
         guard isSignedIn else {
-            return "로그인 필요"
+            return String(localized: "로그인 필요")
         }
-        return displayName ?? "\(provider?.displayName ?? "") 사용자"
+        return displayName ?? String(localized: "\(provider?.displayName ?? "") 사용자")
     }
 
     /// 서버 로그인 응답으로 세션을 갱신한다. 토큰 저장에 실패하면 로그인 상태로 바꾸지 않는다.
@@ -100,14 +100,14 @@ final class UserSession: ObservableObject {
         } else {
             defaults.removeObject(forKey: Key.expiresAt)
         }
-        statusMessage = "\(provider.displayName) 계정으로 로그인했습니다."
+        statusMessage = String(localized: "\(provider.displayName) 계정으로 로그인했습니다.")
     }
 
     /// 로그아웃: Keychain 토큰과 저장된 세션 정보를 모두 지운다.
-    func signOut(message: String = "로그아웃했습니다. 다시 로그인하면 동기화를 이어서 할 수 있어요.") {
+    func signOut(message: String? = nil) {
         clearStoredSession()
         reloginNotice = nil
-        statusMessage = message
+        statusMessage = message ?? String(localized: "로그아웃했습니다. 다시 로그인하면 동기화를 이어서 할 수 있어요.")
     }
 
     /// 서버가 401을 반환했을 때 호출한다. 토큰을 버리고 재로그인을 안내한다.
@@ -142,7 +142,7 @@ final class UserSession: ObservableObject {
             provider = storedProvider
             userId = storedUserId
             displayName = defaults.string(forKey: Key.displayName)
-            statusMessage = "\(storedProvider.displayName) 계정으로 로그인되어 있습니다."
+            statusMessage = String(localized: "\(storedProvider.displayName) 계정으로 로그인되어 있습니다.")
             return
         }
 
@@ -153,7 +153,7 @@ final class UserSession: ObservableObject {
             reloginNotice = Self.reloginMessage
             statusMessage = Self.reloginMessage
         } else if hadGuestSession {
-            statusMessage = "게스트 모드가 종료되었어요. " + Self.signInPrompt
+            statusMessage = String(localized: "게스트 모드가 종료되었어요.") + " " + Self.signInPrompt
         }
     }
 

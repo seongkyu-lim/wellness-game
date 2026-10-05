@@ -15,9 +15,9 @@ enum KeychainError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .unexpectedStatus(status):
-            return "로그인 정보를 기기에 저장하지 못했습니다. (Keychain \(status))"
+            return String(localized: "로그인 정보를 기기에 저장하지 못했습니다. (Keychain \(status))")
         case .invalidData:
-            return "로그인 정보를 기기에 저장하지 못했습니다."
+            return String(localized: "로그인 정보를 기기에 저장하지 못했습니다.")
         }
     }
 }

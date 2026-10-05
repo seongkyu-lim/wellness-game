@@ -59,28 +59,28 @@ final class SocialLoginService: ObservableObject {
     /// 서버 교환에 실패하면 SDK 세션도 정리해 반쯤 로그인된 상태를 남기지 않는다.
     func signInWithGoogle(_ session: UserSession) {
         guard Self.configurationValue(for: "GIDClientID") != nil else {
-            session.updateStatus("Google OAuth 클라이언트 ID를 먼저 설정해 주세요.")
+            session.updateStatus(String(localized: "Google OAuth 클라이언트 ID를 먼저 설정해 주세요."))
             return
         }
         guard let presenter = Self.presentingViewController() else {
-            session.updateStatus("Google 로그인 화면을 표시하지 못했습니다.")
+            session.updateStatus(String(localized: "Google 로그인 화면을 표시하지 못했습니다."))
             return
         }
 
         isLoading = true
-        session.updateStatus("Google 로그인을 진행하고 있습니다.")
+        session.updateStatus(String(localized: "Google 로그인을 진행하고 있습니다."))
         GIDSignIn.sharedInstance.signIn(withPresenting: presenter) { [weak self] result, error in
             Task { @MainActor in
                 guard let self else { return }
                 if let error {
                     self.isLoading = false
-                    session.updateStatus("Google 로그인에 실패했습니다: \(error.localizedDescription)")
+                    session.updateStatus(String(localized: "Google 로그인에 실패했습니다: \(error.localizedDescription)"))
                     return
                 }
                 guard let idToken = result?.user.idToken?.tokenString else {
                     self.isLoading = false
                     GIDSignIn.sharedInstance.signOut()
-                    session.updateStatus("Google 사용자 정보를 확인하지 못했습니다.")
+                    session.updateStatus(String(localized: "Google 사용자 정보를 확인하지 못했습니다."))
                     return
                 }
                 await self.exchangeGoogleToken(idToken, session: session)
@@ -96,17 +96,17 @@ final class SocialLoginService: ObservableObject {
         } catch {
             GIDSignIn.sharedInstance.signOut()
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            session.updateStatus("Google 로그인에 실패했습니다: \(message)")
+            session.updateStatus(String(localized: "Google 로그인에 실패했습니다: \(message)"))
         }
     }
 
     /// Kakao·Naver·Apple은 서버 토큰 발급이 준비되지 않아 비활성화돼 있다.
     func signInWithKakao(_ session: UserSession) {
-        session.updateStatus("Kakao 로그인은 아직 지원하지 않습니다.")
+        session.updateStatus(String(localized: "Kakao 로그인은 아직 지원하지 않습니다."))
     }
 
     func signInWithNaver(_ session: UserSession) {
-        session.updateStatus("Naver 로그인은 아직 지원하지 않습니다.")
+        session.updateStatus(String(localized: "Naver 로그인은 아직 지원하지 않습니다."))
     }
 
     /// 로그아웃: SDK 세션을 정리하고 Keychain 토큰을 포함한 앱 세션을 지운다.

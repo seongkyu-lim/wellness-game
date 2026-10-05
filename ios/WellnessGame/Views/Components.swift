@@ -16,7 +16,7 @@ extension View {
 // MARK: - Section header
 
 struct SectionHeader: View {
-    let title: String
+    let title: LocalizedStringKey
     var icon: String?
 
     var body: some View {
@@ -64,8 +64,9 @@ struct XPRingView: View {
 // MARK: - Stat tile
 
 struct StatTile: View {
+    /// STR·VIT 같은 약어. 번역하지 않는다.
     let title: String
-    let subtitle: String
+    let subtitle: LocalizedStringKey
     let value: Int
     let icon: String
     let color: Color
@@ -99,7 +100,7 @@ struct StatTile: View {
 // MARK: - Metric card (걸음 · 수면)
 
 struct MetricCard: View {
-    let title: String
+    let title: LocalizedStringKey
     let value: String
     let icon: String
     let color: Color
@@ -183,8 +184,17 @@ extension CharacterState {
 extension DailyHealthSnapshot {
     /// 수면 시간 표시 문자열. 수면 기록이나 분 데이터가 없으면 "기록 없음".
     var sleepDurationText: String {
-        guard let minutes = sleep?.sleepMinutes else { return "기록 없음" }
-        return "\(minutes / 60)시간 \(minutes % 60)분"
+        sleepDurationText(in: .main)
+    }
+
+    /// 지정한 번들(언어)로 만든 수면 시간 문자열. 테스트에서 언어별 결과를 검증할 때 쓴다.
+    func sleepDurationText(in bundle: Bundle) -> String {
+        guard let minutes = sleep?.sleepMinutes else {
+            return String(localized: "기록 없음", bundle: bundle)
+        }
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        return String(localized: "\(hours)시간 \(remainder)분", bundle: bundle)
     }
 }
 
@@ -203,13 +213,18 @@ extension WorkoutType {
     }
 
     var displayName: String {
+        displayName(in: .main)
+    }
+
+    /// 지정한 번들(언어)로 만든 표시 이름.
+    func displayName(in bundle: Bundle) -> String {
         switch self {
-        case .swimming: "수영"
-        case .running: "달리기"
-        case .walking: "걷기"
-        case .cycling: "자전거"
-        case .strengthTraining: "근력 운동"
-        case .other: "운동"
+        case .swimming: String(localized: "수영", bundle: bundle)
+        case .running: String(localized: "달리기", bundle: bundle)
+        case .walking: String(localized: "걷기", bundle: bundle)
+        case .cycling: String(localized: "자전거", bundle: bundle)
+        case .strengthTraining: String(localized: "근력 운동", bundle: bundle)
+        case .other: String(localized: "운동", bundle: bundle)
         }
     }
 }
