@@ -77,10 +77,11 @@ struct NetworkClient {
     }
 
     /// Naver SDK가 발급한 액세스 토큰을 서버 토큰으로 교환한다.
-    func signInWithNaver(accessToken: String) async throws -> AuthTokenResponse {
+    /// 서버가 토큰 대체 공격을 막을 수 있도록 refresh token도 함께 보낸다.
+    func signInWithNaver(accessToken: String, refreshToken: String) async throws -> AuthTokenResponse {
         try await post(
             path: "api/auth/naver/native",
-            body: SocialAccessTokenRequest(accessToken: accessToken),
+            body: NaverNativeLoginRequest(accessToken: accessToken, refreshToken: refreshToken),
             authorized: false
         )
     }
@@ -148,6 +149,12 @@ struct GoogleNativeLoginRequest: Encodable {
 /// Kakao·Naver 네이티브 로그인 요청. SDK가 발급한 액세스 토큰만 보낸다.
 struct SocialAccessTokenRequest: Encodable {
     let accessToken: String
+}
+
+/// Naver 네이티브 로그인 요청.
+struct NaverNativeLoginRequest: Encodable {
+    let accessToken: String
+    let refreshToken: String
 }
 
 /// Apple 네이티브 로그인 요청. `fullName`은 Apple이 최초 인증에만 주므로 없으면 생략한다.

@@ -46,4 +46,4 @@ Source language is ko; English is the fallback for unsupported device languages.
 | 로그인 / 로그아웃 / 회원가입 / 계정 | Log In / Log Out / Sign Up / Account |
 | 아이디 / 비밀번호 | Username / Password |
 | Google·Kakao·Naver·Apple로 로그인 | Sign in with Google / Kakao / Naver / Apple |
-| 다른 방법으로 로그인 | Other ways to sign in |
+| 다른 방법으로 로그인 | Other sign-in options |

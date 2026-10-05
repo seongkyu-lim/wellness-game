@@ -189,13 +189,13 @@ final class SocialLoginService: ObservableObject {
 /// Kakao SDK로 로그인해 액세스 토큰을 얻는다. 카카오톡 앱이 있으면 앱 로그인, 없거나 실패하면 카카오계정 로그인.
 @MainActor
 struct KakaoTokenProvider: SocialAccessTokenProviding {
-    func fetchAccessToken() async throws -> String {
+    func fetchTokens() async throws -> SocialTokens {
         try await withCheckedThrowingContinuation { continuation in
             let finish: (OAuthToken?, Error?) -> Void = { token, error in
                 if let error {
                     continuation.resume(throwing: Self.isCancellation(error) ? SocialLoginError.cancelled : error)
                 } else if let accessToken = token?.accessToken {
-                    continuation.resume(returning: accessToken)
+                    continuation.resume(returning: SocialTokens(accessToken: accessToken, refreshToken: nil))
                 } else {
                     continuation.resume(throwing: SocialLoginError.missingToken)
                 }
@@ -225,12 +225,15 @@ struct KakaoTokenProvider: SocialAccessTokenProviding {
 /// Naver SDK로 로그인해 액세스 토큰을 얻는다.
 @MainActor
 struct NaverTokenProvider: SocialAccessTokenProviding {
-    func fetchAccessToken() async throws -> String {
+    func fetchTokens() async throws -> SocialTokens {
         try await withCheckedThrowingContinuation { continuation in
             NidOAuth.shared.requestLogin { result in
                 switch result {
                 case let .success(login):
-                    continuation.resume(returning: login.accessToken.tokenString)
+                    continuation.resume(returning: SocialTokens(
+                        accessToken: login.accessToken.tokenString,
+                        refreshToken: login.refreshToken.tokenString
+                    ))
                 case let .failure(error):
                     if case .clientError(.canceledByUser) = error {
                         continuation.resume(throwing: SocialLoginError.cancelled)

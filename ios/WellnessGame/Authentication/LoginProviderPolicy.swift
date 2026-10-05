@@ -12,12 +12,12 @@ struct LoginProviderPolicy: Equatable {
     /// "다른 방법으로 로그인"을 눌러야 보이는 수단(표시 순서).
     let secondary: [LoginProvider]
 
+    /// 모든 소셜 수단. 한국에서는 이 순서 그대로 우선 노출한다.
     static let socialProviders: [LoginProvider] = [.kakao, .naver, .google, .apple]
+    private static let overseasPrimary: [LoginProvider] = [.apple, .google]
 
     init(region: Locale.Region? = Locale.current.region) {
-        let primary: [LoginProvider] = region == .southKorea
-            ? [.kakao, .naver, .google, .apple]
-            : [.apple, .google]
+        let primary = region == .southKorea ? Self.socialProviders : Self.overseasPrimary
         self.primary = primary
         self.secondary = Self.socialProviders.filter { !primary.contains($0) }
     }

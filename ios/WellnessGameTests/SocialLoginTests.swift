@@ -1,3 +1,4 @@
+import AuthenticationServices
 import XCTest
 
 // MARK: - LoginProviderPolicy
@@ -38,8 +39,16 @@ final class LoginProviderPolicyTests: XCTestCase {
 // MARK: - Token exchange
 
 private struct FakeTokenProvider: SocialAccessTokenProviding {
-    let result: Result<String, Error>
-    func fetchAccessToken() async throws -> String { try result.get() }
+    let result: Result<SocialTokens, Error>
+    func fetchTokens() async throws -> SocialTokens { try result.get() }
+
+    static func access(_ token: String) -> FakeTokenProvider {
+        FakeTokenProvider(result: .success(SocialTokens(accessToken: token, refreshToken: nil)))
+    }
+
+    static func naver(access: String, refresh: String?) -> FakeTokenProvider {
+        FakeTokenProvider(result: .success(SocialTokens(accessToken: access, refreshToken: refresh)))
+    }
 }
 
 @MainActor
@@ -89,7 +98,7 @@ final class SocialSignInFlowTests: XCTestCase {
     func test_kakao_postsAccessToken_withoutAuthorization_andStoresSession() async throws {
         StubURLProtocol.setStub(status: 200, json: response("kakao:1", token: "jwt-kakao"))
 
-        await flow.signInWithKakao(tokenProvider: FakeTokenProvider(result: .success("kakao-sdk-token")), session: session)
+        await flow.signInWithKakao(tokenProvider: FakeTokenProvider.access("kakao-sdk-token"), session: session)
 
         let (request, json) = try lastRequestJSON()
         XCTAssertEqual(request.httpMethod, "POST")
@@ -104,12 +113,12 @@ final class SocialSignInFlowTests: XCTestCase {
     func test_naver_postsAccessToken_withoutAuthorization_andStoresSession() async throws {
         StubURLProtocol.setStub(status: 200, json: response("naver:2", token: "jwt-naver"))
 
-        await flow.signInWithNaver(tokenProvider: FakeTokenProvider(result: .success("naver-sdk-token")), session: session)
+        await flow.signInWithNaver(tokenProvider: FakeTokenProvider.naver(access: "naver-sdk-token", refresh: "naver-refresh-token"), session: session)
 
         let (request, json) = try lastRequestJSON()
         XCTAssertEqual(request.url?.path, "/api/auth/naver/native")
         XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
-        XCTAssertEqual(json as? [String: String], ["accessToken": "naver-sdk-token"])
+        XCTAssertEqual(json as? [String: String], ["accessToken": "naver-sdk-token", "refreshToken": "naver-refresh-token"])
         XCTAssertEqual(session.userId, "naver:2")
         XCTAssertEqual(session.provider, .naver)
         XCTAssertEqual(store.loadToken(), "jwt-naver")
@@ -154,7 +163,7 @@ final class SocialSignInFlowTests: XCTestCase {
     func test_serverFailure_keepsSignedOut_andStoresNoToken() async {
         StubURLProtocol.setStub(status: 401, json: #"{"message":"토큰이 유효하지 않습니다."}"#)
 
-        await flow.signInWithNaver(tokenProvider: FakeTokenProvider(result: .success("bad")), session: session)
+        await flow.signInWithNaver(tokenProvider: FakeTokenProvider.naver(access: "bad", refresh: "bad-refresh"), session: session)
 
         XCTAssertFalse(session.isSignedIn)
         XCTAssertNil(store.loadToken())
@@ -163,11 +172,69 @@ final class SocialSignInFlowTests: XCTestCase {
 
     func test_restore_keepsSocialProviderSessions() async throws {
         StubURLProtocol.setStub(status: 200, json: response("kakao:1", token: "jwt-kakao"))
-        await flow.signInWithKakao(tokenProvider: FakeTokenProvider(result: .success("t")), session: session)
+        await flow.signInWithKakao(tokenProvider: FakeTokenProvider.access("t"), session: session)
 
         let restored = UserSession(defaults: defaults, tokenStore: store)
 
         XCTAssertEqual(restored.provider, .kakao)
         XCTAssertEqual(restored.userId, "kakao:1")
+    }
+
+    func test_naver_withoutRefreshToken_makesNoRequest_andShowsFailure() async {
+        StubURLProtocol.setStub(status: 200, json: response("naver:2", token: "x"))
+
+        await flow.signInWithNaver(tokenProvider: FakeTokenProvider.naver(access: "a", refresh: nil), session: session)
+        await flow.signInWithNaver(tokenProvider: FakeTokenProvider.naver(access: "a", refresh: ""), session: session)
+        await flow.signInWithNaver(tokenProvider: FakeTokenProvider.naver(access: "", refresh: "r"), session: session)
+
+        XCTAssertTrue(StubURLProtocol.requests.isEmpty)
+        XCTAssertFalse(session.isSignedIn)
+        XCTAssertNil(store.loadToken())
+        XCTAssertNotEqual(session.statusMessage, UserSession.signInPrompt)
+    }
+
+    func test_apple_truncatesFullNameTo100Characters() async throws {
+        StubURLProtocol.setStub(status: 200, json: response("apple:3", token: "jwt-apple"))
+        let longName = String(repeating: "가", count: 150)
+
+        await flow.signInWithApple(credential: AppleCredential(identityToken: "t", fullName: longName), session: session)
+
+        let (_, json) = try lastRequestJSON()
+        XCTAssertEqual((json["fullName"] as? String)?.count, 100)
+    }
+
+    func test_apple_authorizationFailure_makesNoRequest() async {
+        StubURLProtocol.setStub(status: 200, json: response("apple:3", token: "x"))
+
+        await flow.signInWithApple(result: .failure(ASAuthorizationError(.canceled)), session: session)
+
+        XCTAssertTrue(StubURLProtocol.requests.isEmpty)
+        XCTAssertEqual(session.statusMessage, UserSession.signInPrompt)
+    }
+
+    func test_serverReturns401_showsServerMessage_forEachProvider() async {
+        StubURLProtocol.setStub(status: 401, json: #"{"message":"유효하지 않은 토큰"}"#)
+
+        await flow.signInWithKakao(tokenProvider: FakeTokenProvider.access("k"), session: session)
+        XCTAssertTrue(session.statusMessage.contains("유효하지 않은 토큰"))
+        XCTAssertTrue(session.statusMessage.contains("Kakao"))
+
+        await flow.signInWithApple(credential: AppleCredential(identityToken: "t", fullName: nil), session: session)
+        XCTAssertTrue(session.statusMessage.contains("유효하지 않은 토큰"))
+        XCTAssertTrue(session.statusMessage.contains("Apple"))
+        XCTAssertFalse(session.isSignedIn)
+    }
+
+    func test_restore_clearsPreviousVersionSocialSessionsWithoutToken_withReloginNotice() {
+        for provider in ["apple", "kakao", "naver"] {
+            defaults.set(provider, forKey: "auth.provider")
+            defaults.set("\(provider):legacy", forKey: "auth.userId")
+
+            let restored = UserSession(defaults: defaults, tokenStore: InMemoryTokenStore())
+
+            XCTAssertFalse(restored.isSignedIn, provider)
+            XCTAssertEqual(restored.reloginNotice, UserSession.reloginMessage, provider)
+            XCTAssertNil(defaults.string(forKey: "auth.provider"), provider)
+        }
     }
 }

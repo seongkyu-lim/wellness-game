@@ -10,12 +10,20 @@ enum SocialLoginError: Error, Equatable {
 /// Kakao·Naver SDK 로그인을 감싼 추상화. 테스트에서는 SDK 없이 가짜 구현을 주입한다.
 @MainActor
 protocol SocialAccessTokenProviding {
-    /// 사용자 로그인을 진행하고 SDK 액세스 토큰을 돌려준다. 취소하면 `SocialLoginError.cancelled`를 던진다.
-    func fetchAccessToken() async throws -> String
+    /// 사용자 로그인을 진행하고 SDK 토큰을 돌려준다. 취소하면 `SocialLoginError.cancelled`를 던진다.
+    func fetchTokens() async throws -> SocialTokens
+}
+
+/// SDK가 발급한 토큰. Naver만 refresh token이 필요하다.
+struct SocialTokens: Equatable {
+    let accessToken: String
+    let refreshToken: String?
 }
 
 /// Sign in with Apple 인증 결과 중 서버가 쓰는 값.
 struct AppleCredential: Equatable {
+    static let maxFullNameLength = 100
+
     let identityToken: String
     /// Apple은 최초 인증에만 이름을 주므로 보통 이후에는 nil이다.
     let fullName: String?
@@ -23,7 +31,8 @@ struct AppleCredential: Equatable {
     init(identityToken: String, fullName: String?) {
         self.identityToken = identityToken
         let trimmed = fullName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.fullName = trimmed?.isEmpty == false ? trimmed : nil
+        // 서버 제한(100자)에 맞춰 자른다.
+        self.fullName = trimmed?.isEmpty == false ? String(trimmed!.prefix(Self.maxFullNameLength)) : nil
     }
 
     /// `ASAuthorization`에서 identity token(UTF-8)과 이름을 꺼낸다.
@@ -47,22 +56,26 @@ struct SocialSignInFlow {
 
     func signInWithKakao(tokenProvider: SocialAccessTokenProviding, session: UserSession) async {
         await run(.kakao, session: session) {
-            let token = try await tokenProvider.fetchAccessToken()
-            return try await networkClient.signInWithKakao(accessToken: token)
+            let tokens = try await tokenProvider.fetchTokens()
+            return try await networkClient.signInWithKakao(accessToken: tokens.accessToken)
         }
     }
 
     func signInWithNaver(tokenProvider: SocialAccessTokenProviding, session: UserSession) async {
         await run(.naver, session: session) {
-            let token = try await tokenProvider.fetchAccessToken()
-            return try await networkClient.signInWithNaver(accessToken: token)
+            let tokens = try await tokenProvider.fetchTokens()
+            // 둘 중 하나라도 비어 있으면 서버를 호출하지 않는다.
+            guard !tokens.accessToken.isEmpty, let refreshToken = tokens.refreshToken, !refreshToken.isEmpty else {
+                throw SocialLoginError.missingToken
+            }
+            return try await networkClient.signInWithNaver(accessToken: tokens.accessToken, refreshToken: refreshToken)
         }
     }
 
     /// `SignInWithAppleButton`의 완료 결과를 처리한다. 취소는 조용히 무시한다.
     func signInWithApple(result: Result<ASAuthorization, Error>, session: UserSession) async {
-        await run(.apple, session: session) {
-            let credential: AppleCredential
+        let credential: AppleCredential
+        do {
             switch result {
             case let .success(authorization):
                 credential = try AppleCredential(authorization: authorization)
@@ -72,11 +85,11 @@ struct SocialSignInFlow {
                 }
                 throw error
             }
-            return try await networkClient.signInWithApple(
-                identityToken: credential.identityToken,
-                fullName: credential.fullName
-            )
+        } catch {
+            await run(.apple, session: session) { throw error }
+            return
         }
+        await signInWithApple(credential: credential, session: session)
     }
 
     func signInWithApple(credential: AppleCredential, session: UserSession) async {
