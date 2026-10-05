@@ -21,6 +21,10 @@ server:
 
 app:
   timezone: ${APP_TIMEZONE:Asia/Seoul}
+  migrations:
+    sleep-keys:
+      # 기동 시 구 형식 수면 로그 키(userId|start|end|SLEEP)를 새 형식으로 정리한다(#50, 멱등).
+      enabled: ${APP_MIGRATIONS_SLEEP_KEYS_ENABLED:true}
 
 auth:
   jwt:

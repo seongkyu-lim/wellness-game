@@ -8,6 +8,7 @@ import com.wellnessgame.api.HealthActivitySyncResponse.CharacterResponse;
 import com.wellnessgame.api.HealthActivitySyncResponse.GoalResponse;
 import com.wellnessgame.character.CharacterStats;
 import com.wellnessgame.character.UserCharacter;
+import com.wellnessgame.character.UserCharacterProvisioner;
 import com.wellnessgame.character.UserCharacterRepository;
 import com.wellnessgame.i18n.LocalizedMessage;
 import com.wellnessgame.i18n.Messages;
@@ -27,17 +28,20 @@ import java.util.function.Function;
 @Service
 public class HealthActivitySyncService {
     private final UserCharacterRepository characterRepository;
+    private final UserCharacterProvisioner characterProvisioner;
     private final HealthActivityRepository activityRepository;
     private final ActivityXpCalculator xpCalculator;
     private final HealthActivitySyncValidator validator;
 
     public HealthActivitySyncService(
             UserCharacterRepository characterRepository,
+            UserCharacterProvisioner characterProvisioner,
             HealthActivityRepository activityRepository,
             ActivityXpCalculator xpCalculator,
             HealthActivitySyncValidator validator
     ) {
         this.characterRepository = characterRepository;
+        this.characterProvisioner = characterProvisioner;
         this.activityRepository = activityRepository;
         this.xpCalculator = xpCalculator;
         this.validator = validator;
@@ -48,10 +52,13 @@ public class HealthActivitySyncService {
         validator.validate(request);
         List<ActivityPayload> activities = request.activities().stream().map(this::withResolvedDuration).toList();
 
-        // 같은 사용자의 동시 동기화를 직렬화한 뒤 남은 일일 XP 를 계산한다.
-        UserCharacter character = characterRepository.findByUserIdForUpdate(request.userId())
-                .orElseGet(() -> new UserCharacter(request.userId()));
-        SyncState state = new SyncState(request, character, remainingDailyXp(request.userId(), request.date()));
+        // 신규 사용자면 캐릭터를 별도 트랜잭션에서 먼저 만든다(동시 생성 경합은 제약 위반을 무시).
+        // 그 뒤 캐릭터 행을 잠가 같은 사용자의 동시 동기화를 직렬화하고, 남은 일일 XP 를 계산한다.
+        characterProvisioner.createIfAbsent(request.userId());
+        UserCharacter character = characterRepository.findByUserIdForUpdate(request.userId()).orElseThrow();
+        SyncState state = new SyncState(request, character,
+                remainingDailyXp(request.userId(), request.date()),
+                remainingWorkoutXp(request.userId(), request.date()));
 
         List<LocalizedMessage> rejections = activities.stream()
                 .map(activity -> validator.rejection(request.date(), activity).orElse(null))
@@ -76,6 +83,10 @@ public class HealthActivitySyncService {
             }
 
             int awardedXp = capToDaily(decision.earnedXp(), state.remainingDailyXp);
+            if (activity.type() == ActivityType.WORKOUT) {
+                awardedXp = Math.min(awardedXp, state.remainingWorkoutXp);
+                state.remainingWorkoutXp -= awardedXp;
+            }
             state.remainingDailyXp -= awardedXp;
             if (activity.type() == ActivityType.WORKOUT) {
                 // STEPS/SLEEP 로그는 upsert 에서 같은 규칙(capToDaily)으로 실제 지급액을 기록한다.
@@ -113,18 +124,25 @@ public class HealthActivitySyncService {
         private final Set<String> requestKeys = new HashSet<>();
         private final List<ActivityPayload> acceptedWorkouts = new ArrayList<>();
         private int remainingDailyXp;
+        private int remainingWorkoutXp;
         private ActivityPayload effectiveSteps;
         private ActivityPayload effectiveSleep;
 
-        private SyncState(HealthActivitySyncRequest request, UserCharacter character, int remainingDailyXp) {
+        private SyncState(
+                HealthActivitySyncRequest request,
+                UserCharacter character,
+                int remainingDailyXp,
+                int remainingWorkoutXp
+        ) {
             this.request = request;
             this.character = character;
             this.remainingDailyXp = remainingDailyXp;
+            this.remainingWorkoutXp = remainingWorkoutXp;
         }
     }
 
     /**
-     * 활동 하나의 처리 결과. APPLIED 일 때 earnedXp 는 일일 상한 적용 전 XP 다.
+     * 활동 하나의 처리 결과. APPLIED 일 때 earnedXp 는 일일 상한(총·유형별) 적용 전 XP 다.
      */
     private record Decision(Outcome outcome, int earnedXp, LocalizedMessage reason) {
         enum Outcome { APPLIED, DUPLICATE, OVERLAP, REJECTED }
@@ -205,6 +223,11 @@ public class HealthActivitySyncService {
     private int remainingDailyXp(String userId, LocalDate date) {
         long alreadyGained = activityRepository.sumGainedXpByUserIdAndActivityDate(userId, date);
         return (int) Math.max(0, ActivityXpCalculator.DAILY_XP_CAP - alreadyGained);
+    }
+
+    private int remainingWorkoutXp(String userId, LocalDate date) {
+        long alreadyGained = activityRepository.sumGainedXpByUserIdAndActivityDateAndType(userId, date, ActivityType.WORKOUT);
+        return (int) Math.max(0, ActivityXpCalculator.DAILY_WORKOUT_XP_CAP - alreadyGained);
     }
 
     /**

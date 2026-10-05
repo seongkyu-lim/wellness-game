@@ -23,6 +23,12 @@ public class ActivityXpCalculator {
      */
     public static final int DAILY_XP_CAP = 600;
 
+    /**
+     * 사용자·날짜별 WORKOUT 지급 XP 합계 상한(최대치 운동 2회분). 운동만으로 일일 상한을 채우지 못하게 한다.
+     * 걸음(100)·수면(80)은 활동별 상한이 곧 하루 상한이다(날짜별 로그 1건).
+     */
+    public static final int DAILY_WORKOUT_XP_CAP = 400;
+
     private static final int STEPS_XP_CAP = 100;
     private static final int WORKOUT_XP_CAP = 200;
     public static final int SLEEP_QUALITY_BONUS_SCORE = 80;

@@ -138,6 +138,22 @@ public class HealthActivity {
         this.gainedXp = gainedXp;
     }
 
+    public UUID getId() {
+        return id;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public LocalDate getActivityDate() {
+        return activityDate;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
     public String getExternalKey() {
         return externalKey;
     }
