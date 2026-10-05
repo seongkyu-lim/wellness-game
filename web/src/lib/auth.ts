@@ -19,6 +19,10 @@ const STATE_KEY = 'wellness.oauth-state'
 const LEGACY_GUEST_ID_KEY = 'wellness.userId'
 const PROVIDERS: readonly Provider[] = ['google', 'kakao', 'naver']
 
+function isProvider(value: unknown): value is Provider {
+  return PROVIDERS.includes(value as Provider)
+}
+
 const CLIENT_IDS: Record<Provider, string | undefined> = {
   google: import.meta.env.VITE_GOOGLE_CLIENT_ID,
   kakao: import.meta.env.VITE_KAKAO_CLIENT_ID,
@@ -57,7 +61,7 @@ function isValidSession(value: unknown): value is Session {
   }
   const v = value as Record<string, unknown>
   return (
-    PROVIDERS.includes(v.provider as Provider) &&
+    isProvider(v.provider) &&
     typeof v.userId === 'string' &&
     v.userId.length > 0 &&
     typeof v.accessToken === 'string' &&
@@ -98,8 +102,8 @@ export async function completeLoginFromRedirect(): Promise<Session | null> {
     throw new Error('로그인 상태 검증에 실패했습니다. 다시 시도해 주세요.')
   }
 
-  const provider = state.split(':')[0] as Provider
-  if (!PROVIDERS.includes(provider)) {
+  const provider = state.split(':')[0]
+  if (!isProvider(provider)) {
     throw new Error('지원하지 않는 로그인 방식입니다.')
   }
   const result = await postSocialLogin(provider, code, redirectUri())

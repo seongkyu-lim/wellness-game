@@ -25,8 +25,8 @@ export function AccountSection({ session, onLogout }: Props) {
       {session ? (
         <>
           <p className="hint">
-            {session.displayName ?? '회원'}님, iPhone 앱에서도 {PROVIDER_LABELS[session.provider]} 계정으로 로그인하면
-            같은 캐릭터가 자동으로 이어집니다.
+            {session.displayName ?? '회원'}님, 이 계정의 캐릭터 기록을 조회하고 있어요. 기록은 iPhone 앱에서
+            같은 계정으로 로그인해 동기화하면 쌓입니다.
           </p>
           <p className="mono">{session.userId}</p>
           <button className="btn btn-secondary" onClick={onLogout}>
