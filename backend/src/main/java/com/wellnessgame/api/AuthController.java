@@ -10,6 +10,8 @@ import com.wellnessgame.auth.PasswordAuthResult;
 import com.wellnessgame.auth.PasswordAuthService;
 import com.wellnessgame.auth.SocialAuthService;
 import com.wellnessgame.auth.SocialLoginResult;
+import com.wellnessgame.ratelimit.ClientIpResolver;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -41,6 +43,7 @@ public class AuthController {
     private final NaverNativeAuthService naverNativeAuthService;
     private final AppleNativeAuthService appleNativeAuthService;
     private final JwtTokenService tokenService;
+    private final ClientIpResolver clientIpResolver;
 
     public AuthController(
             SocialAuthService authService,
@@ -49,7 +52,8 @@ public class AuthController {
             KakaoNativeAuthService kakaoNativeAuthService,
             NaverNativeAuthService naverNativeAuthService,
             AppleNativeAuthService appleNativeAuthService,
-            JwtTokenService tokenService
+            JwtTokenService tokenService,
+            ClientIpResolver clientIpResolver
     ) {
         this.authService = authService;
         this.passwordAuthService = passwordAuthService;
@@ -58,6 +62,7 @@ public class AuthController {
         this.naverNativeAuthService = naverNativeAuthService;
         this.appleNativeAuthService = appleNativeAuthService;
         this.tokenService = tokenService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @PostMapping("/signup")
@@ -67,8 +72,9 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public PasswordAuthResponse logIn(@Valid @RequestBody LoginRequest request) {
-        PasswordAuthResult result = passwordAuthService.signIn(request.username(), request.password());
+    public PasswordAuthResponse logIn(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        PasswordAuthResult result = passwordAuthService.signIn(
+                request.username(), request.password(), clientIpResolver.resolve(httpRequest));
         return PasswordAuthResponse.of(result, tokenService.issue(result.userId()));
     }
 

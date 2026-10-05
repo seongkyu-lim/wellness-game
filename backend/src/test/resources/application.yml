@@ -14,3 +14,10 @@ auth:
     # 테스트 전용 고정 키(32바이트 이상). 운영에서 사용 금지.
     secret: test-only-jwt-secret-0123456789abcdef
     ttl: 30d
+
+app:
+  # 여러 테스트가 같은 IP(127.0.0.1)·사용자로 인증·동기화를 반복하므로 기본은 끄고, RateLimitIntegrationTest 에서만 켠다.
+  rate-limit:
+    sync-per-minute: 0
+    auth-per-minute: 0
+    login-per-minute: 0

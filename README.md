@@ -106,6 +106,42 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 - Apple 교환은 `{"identityToken", "fullName"(선택)}`을 받고 Apple JWKS로 서명·`iss`·`aud`·`exp`를 검증합니다. `fullName`은 100자를 넘으면 잘라서 씁니다.
 - 로그인 방식별로 별도 계정입니다(`kakao:`, `naver:`, `google:`, `apple:`, `password:` 접두사). 같은 사람이 여러 방식으로 가입해도 계정을 합치지 않습니다.
 
+### 레이트 리밋·로그인 잠금·JWT 설정 (#48, #55)
+
+| 설정 키 (환경변수) | 기본값 | 설명 |
+|---|---|---|
+| `app.rate-limit.sync-per-minute` (`APP_RATE_LIMIT_SYNC_PER_MINUTE`) | `30` | `POST /api/health-activities/sync`, 인증 주체(userId)별 분당 한도 |
+| `app.rate-limit.auth-per-minute` (`APP_RATE_LIMIT_AUTH_PER_MINUTE`) | `30` | `/api/auth/**` 전체(소셜 로그인·`/api/auth/{provider}` 포함), 클라이언트 IP별 분당 한도 |
+| `app.rate-limit.login-per-minute` (`APP_RATE_LIMIT_LOGIN_PER_MINUTE`) | `10` | `/api/auth/login`·`/api/auth/signup`, IP별 분당 한도(위 한도와 함께 적용) |
+| `app.rate-limit.trust-forwarded-header` (`APP_RATE_LIMIT_TRUST_FORWARDED_HEADER`) | `false` | `true`면 `X-Forwarded-For`의 **마지막 줄의 마지막 값**을 클라이언트 IP로 사용. 신뢰하는 리버스 프록시 한 단 뒤에서만 켤 것 |
+| `app.rate-limit.max-keys` (`APP_RATE_LIMIT_MAX_KEYS`) | `100000` | 레이트 리밋 카운터·로그인 실패 기록이 각각 메모리에 두는 최대 키 수. 넘으면 만료 키를 먼저 지우고, 그래도 가득 차면 가장 오래된 항목을 내보냄 |
+| `app.auth.max-failed-logins` (`APP_AUTH_MAX_FAILED_LOGINS`) | `5` | 같은 (아이디, IP) 연속 로그인 실패 허용 횟수 |
+| `app.auth.max-failed-logins-per-username` (`APP_AUTH_MAX_FAILED_LOGINS_PER_USERNAME`) | `50` | IP와 무관한 아이디 전체 실패 허용 횟수(분산 공격 방어) |
+| `app.auth.lockout-minutes` (`APP_AUTH_LOCKOUT_MINUTES`) | `15` | 잠금 시간이자 실패 기록 유지 시간(마지막 실패 기준, 분) |
+| `auth.jwt.issuer` (`AUTH_JWT_ISSUER`) | `wellness-game` | 발급 토큰 `iss`, 검증 시 일치 필요 |
+| `auth.jwt.audience` (`AUTH_JWT_AUDIENCE`) | `wellness-game-api` | 발급 토큰 `aud`, 검증 시 포함 필요 |
+| `auth.jwt.legacy-cutoff` (`AUTH_JWT_LEGACY_CUTOFF`) | `2026-10-06T00:00:00Z` | `iss`·`aud`가 둘 다 없는 이전 형식 토큰은 `iat`이 이 시각 **이전**일 때만 허용. 비우면 이전 형식 토큰을 받지 않음 |
+
+- 레이트 리밋 한도를 `0` 이하로 두면 해당 제한이 꺼지고, 잠금 한도를 `0` 이하로 두면 그 단계의 잠금이 꺼집니다.
+- 한도를 넘으면 `429 Too Many Requests`, `Retry-After`(초) 헤더, 기존 오류 body(`timestamp`·`status`·`error`·`message`)로 응답합니다. CORS 응답에도 `Retry-After`를 노출합니다.
+- 1분 **고정 윈도우**라서 경계 직전·직후에 몰리면 순간적으로 한도의 최대 2배까지 통과할 수 있습니다.
+- 클라이언트 IP는 IPv4는 주소 그대로, IPv6는 **/64 접두사** 단위로 셉니다(주소를 바꿔 가며 한도를 피하는 것 방지). `X-Forwarded-For` 값이 64자를 넘거나 IP 리터럴이 아니면 연결 주소로 셉니다.
+- 로그인 잠금은 (아이디, IP) 단위라서 다른 사람이 자기 IP에서 틀려도 피해자의 다른 IP 로그인은 막히지 않습니다. 대신 여러 IP로 나눠 시도하면 아이디 전체 한도(50회)에 걸려 그 아이디가 15분 잠깁니다. 시도는 비밀번호 비교 **전에** 먼저 세므로 동시 요청이 몰려도 한도보다 많이 비교하지 않습니다. 성공하면 그 (아이디, IP)의 실패 횟수를 지우고, 아이디 전체 기록에서는 이번 시도만 되돌립니다.
+- 잠긴 동안에는 올바른 비밀번호도 기존 실패와 같은 `400 "아이디 또는 비밀번호가 올바르지 않습니다."`로 거부합니다. 없는 아이디도 같은 횟수 뒤 같은 방식으로 반응하고 bcrypt 비교를 한 번 거쳐 응답 시간으로 아이디 존재가 드러나지 않습니다. 가입의 "이미 사용 중인 아이디" 응답은 클라이언트 UX를 위해 유지하되 IP 레이트 리밋으로 열거 속도를 제한합니다.
+- `AUTH_JWT_SECRET`은 32바이트 이상이어야 하고, 서로 다른 문자가 8종류 미만인 단순한 값(같은 문자 반복 등)이면 기동에 실패합니다. `openssl rand -base64 48` 같은 무작위 값을 쓰세요.
+- **이전 형식 토큰 제거 계획:** #55 이전 서버가 발급한 토큰에는 `iss`·`aud`가 없습니다. 이 변경을 `legacy-cutoff`(기본 `2026-10-06T00:00:00Z`) 전에 배포하면 그 전에 발급된 토큰은 TTL(`AUTH_JWT_TTL`, 기본 30일)이 끝날 때까지 계속 쓰이고, cutoff 이후 시각이 찍힌 이전 형식 토큰은 위조로 보고 거부합니다. 배포가 cutoff보다 늦어지면 실제 배포 시각으로 `AUTH_JWT_LEGACY_CUTOFF`를 맞추세요. 마지막 이전 토큰은 cutoff + TTL(기본 2026-11-05) 이후 자연 소멸하므로, 그 뒤 릴리스에서 이 설정과 이전 형식 처리 코드를 제거합니다. `iss`나 `aud` 중 하나만 있는 토큰은 항상 거부합니다.
+
+> **단일 인스턴스 한계:** 레이트 리밋 카운터와 로그인 실패·잠금 상태는 서버 메모리에만 있습니다. 재시작하면 초기화되고, 인스턴스를 여러 대 띄우면 인스턴스마다 따로 세므로 실제 한도가 대수만큼 늘어납니다. 수평 확장 시에는 Redis 등 공용 저장소 기반으로 바꿔야 합니다. 만료된 키는 주기적으로 정리하고 키 수 상한(`max-keys`)으로 메모리를 제한합니다.
+
+#### 배포 체크리스트
+
+- [ ] **리버스 프록시·로드 밸런서 뒤**에 배포한다면 `APP_RATE_LIMIT_TRUST_FORWARDED_HEADER=true`로 설정합니다. 끄면 서버가 보는 연결 주소가 모두 프록시 IP라서 **모든 사용자가 IP 하나를 공유**해 인증 한도(분당 30·10회)와 (아이디, IP) 잠금이 사실상 전체 사용자에게 함께 걸립니다.
+- [ ] 켜기 전에 프록시가 **항상** `X-Forwarded-For`에 클라이언트 주소를 덧붙이는지(클라이언트가 보낸 값을 그대로 넘기기만 하지 않는지) 확인합니다. 서버는 마지막 줄의 마지막 값만 믿으므로 프록시가 덧붙이지 않으면 클라이언트가 IP를 위조할 수 있습니다. 프록시가 여러 단(CDN + LB 등)이면 마지막 값이 앞단 프록시 주소가 되므로 프록시 구성을 바꾸거나 이 구현을 확장해야 합니다.
+- [ ] 프록시를 거치지 않고 직접 노출한다면 기본값(`false`)을 유지합니다. 켜면 누구나 헤더로 IP를 바꿔 한도를 피할 수 있습니다.
+- [ ] 모바일 통신사 CGNAT·회사·학교 NAT에서는 많은 사용자가 같은 공인 IP를 쓸 수 있습니다. 같은 IP에서 정상 로그인이 몰려 `429`가 보이면 `APP_RATE_LIMIT_AUTH_PER_MINUTE`·`APP_RATE_LIMIT_LOGIN_PER_MINUTE`를 올립니다.
+- [ ] 인스턴스를 2대 이상 띄우면 한도가 대수만큼 느슨해지므로 Redis 기반 구현을 먼저 검토합니다.
+- [ ] `AUTH_JWT_LEGACY_CUTOFF`가 실제 배포 시각 이후인지 확인합니다(그래야 기존 사용자가 로그아웃되지 않습니다).
+
 ## API
 
 ### `POST /api/health-activities/sync`
