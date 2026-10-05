@@ -16,8 +16,8 @@ export function AccountSection({ session, onLogout }: Props) {
   return (
     <section className="card" aria-label="계정">
       <div className="section-head">
-        <h2 className="section-title">👤 계정</h2>
-        <span className={`pill ${session ? 'lime' : 'muted'}`}>
+        <h2 className="section-title">계정</h2>
+        <span className={`chip ${session ? 'green' : 'muted'}`}>
           {session ? `${PROVIDER_LABELS[session.provider]} 로그인` : '로그인 필요'}
         </span>
       </div>
@@ -29,7 +29,7 @@ export function AccountSection({ session, onLogout }: Props) {
             같은 계정으로 로그인해 동기화하면 쌓입니다.
           </p>
           <p className="mono">{session.userId}</p>
-          <button className="btn btn-secondary" onClick={onLogout}>
+          <button className="btn" onClick={onLogout}>
             로그아웃
           </button>
         </>
@@ -41,17 +41,17 @@ export function AccountSection({ session, onLogout }: Props) {
           </p>
           <div className="social-btns">
             <button
-              className="btn btn-google"
+              className="btn"
               onClick={() => startLogin('google')}
               disabled={!isConfigured('google')}
             >
-              <b>G</b> Google로 로그인
+              Google로 로그인
             </button>
             <button className="btn btn-kakao" onClick={() => startLogin('kakao')} disabled={!isConfigured('kakao')}>
               Kakao로 로그인
             </button>
             <button className="btn btn-naver" onClick={() => startLogin('naver')} disabled={!isConfigured('naver')}>
-              <b>N</b> Naver로 로그인
+              Naver로 로그인
             </button>
           </div>
           {(['google', 'kakao', 'naver'] as Provider[]).some((p) => !isConfigured(p)) && (
