@@ -3,6 +3,7 @@ import { fetchDailyActivities, fetchMyCharacter, isUnauthorized } from './api/cl
 import type { ActivityEntry, Character } from './api/types'
 import { AccountSection } from './components/AccountSection'
 import { CharacterCard } from './components/CharacterCard'
+import { Landing } from './components/Landing'
 import { TodayActivities } from './components/TodayActivities'
 import { useI18n } from './i18n/I18nProvider'
 import { LanguageToggle } from './components/LanguageToggle'
@@ -18,6 +19,8 @@ export default function App() {
   const [activities, setActivities] = useState<ActivityEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 소셜 로그인에서 돌아온 직후(?code=)에는 토큰 교환이 끝날 때까지 랜딩을 그리지 않는다.
+  const [completingLogin, setCompletingLogin] = useState(() => new URLSearchParams(window.location.search).has('code'))
 
   // 로그아웃·세션 교체 후 늦게 도착한 응답이 화면을 덮어쓰지 않도록 현재 토큰을 추적한다.
   const activeTokenRef = useRef<string | null>(session?.accessToken ?? null)
@@ -33,6 +36,7 @@ export default function App() {
         }
       })
       .catch((e) => setError(e instanceof Error ? e.message : t('error.loginFailed')))
+      .finally(() => setCompletingLogin(false))
   }, [])
 
   const signOut = useCallback((message: string | null) => {
@@ -93,7 +97,7 @@ export default function App() {
   })
 
   return (
-    <main className="container">
+    <main className={session ? 'container' : 'container wide'}>
       <header className="header">
         <div className="header-top">
           <div>
@@ -112,7 +116,7 @@ export default function App() {
         </div>
       )}
 
-      {session && (
+      {session ? (
         <>
           <CharacterCard character={character} />
           <TodayActivities
@@ -122,9 +126,11 @@ export default function App() {
             onRefresh={() => void refresh()}
             loading={loading}
           />
+          <AccountSection session={session} onLogout={() => signOut(null)} />
         </>
+      ) : completingLogin ? null : (
+        <Landing account={<AccountSection session={null} onLogout={() => signOut(null)} />} />
       )}
-      <AccountSection session={session} onLogout={() => signOut(null)} />
     </main>
   )
 }

@@ -2,8 +2,8 @@ import type { ReactNode } from 'react'
 import type { Character } from '../api/types'
 import { useI18n } from '../i18n/I18nProvider'
 import { growthStage, nextStage } from '../lib/growthStage'
-import { CharacterAvatar } from './CharacterAvatar'
-import { IconHeart, IconMoon, IconStrength, IconTarget, Sparkle } from './Icons'
+import { HeroScene } from './HeroScene'
+import { IconHeart, IconMoon, IconStrength, IconTarget } from './Icons'
 
 export function xpProgress(character: Character): number {
   if (character.nextLevelXp <= 0) {
@@ -38,23 +38,12 @@ export function CharacterCard({ character }: Props) {
 
   return (
     <>
-      <section className="hero" aria-label={t('character.label')}>
-        <svg className="hills" viewBox="0 0 390 110" preserveAspectRatio="none" aria-hidden>
-          <path className="hill" d="M0 52 Q70 24 150 46 T300 40 T390 50 V110 H0Z" />
-          <path className="hill-deep" d="M0 74 Q90 58 190 72 T390 70 V110 H0Z" />
-        </svg>
-        <p className="bubble">{bubble}</p>
-        <Sparkle size={26} fill="#ffe066" style={{ right: 34, top: 26 }} />
-        <Sparkle size={16} fill="#ffffff" timing="slow" style={{ right: 78, top: 84 }} />
-        <Sparkle size={18} fill="#ff9ec4" timing="late" style={{ left: 48, top: 150 }} />
-        <div className="mascot bob">
-          <CharacterAvatar level={level} size={210} />
-        </div>
-        <div className="nameplate">
-          <span className="name-tag">{t('character.name')}</span>
-          <span className="level-chip">{character ? t('character.stageBadge', { level, stage: t(`stage.${stage.key}`) }) : t('character.notSynced')}</span>
-        </div>
-      </section>
+      <HeroScene
+        level={level}
+        bubble={bubble}
+        badge={character ? t('character.stageBadge', { level, stage: t(`stage.${stage.key}`) }) : t('character.notSynced')}
+        label={t('character.label')}
+      />
 
       {character && <XpCard character={character} nextLabel={
             next
