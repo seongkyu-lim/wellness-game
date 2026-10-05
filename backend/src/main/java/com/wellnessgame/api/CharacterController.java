@@ -1,5 +1,7 @@
 package com.wellnessgame.api;
 
+import com.wellnessgame.auth.AuthenticatedUser;
+import com.wellnessgame.auth.UserAccess;
 import com.wellnessgame.character.UserCharacterRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,8 +18,21 @@ public class CharacterController {
         this.characterRepository = characterRepository;
     }
 
+    /** 토큰 주체의 캐릭터. 응답 형식은 {@link #character} 와 같다. */
+    @GetMapping("/me")
+    public ResponseEntity<CharacterSummaryResponse> me(@AuthenticatedUser String authenticatedUserId) {
+        return find(authenticatedUserId);
+    }
+
     @GetMapping("/{userId}")
-    public ResponseEntity<CharacterSummaryResponse> character(@PathVariable String userId) {
+    public ResponseEntity<CharacterSummaryResponse> character(
+            @AuthenticatedUser String authenticatedUserId,
+            @PathVariable String userId
+    ) {
+        return find(UserAccess.resolve(authenticatedUserId, userId));
+    }
+
+    private ResponseEntity<CharacterSummaryResponse> find(String userId) {
         return characterRepository.findByUserId(userId)
                 .map(CharacterSummaryResponse::from)
                 .map(ResponseEntity::ok)

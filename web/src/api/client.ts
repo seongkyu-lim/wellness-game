@@ -12,9 +12,18 @@ export class ApiError extends Error {
   }
 }
 
-/** 캐릭터 조회. 아직 캐릭터가 없는 사용자는 null. */
-export async function fetchCharacter(userId: string): Promise<CharacterSummary | null> {
-  const res = await fetch(`${BASE_URL}/api/characters/${encodeURIComponent(userId)}`)
+/** 토큰이 없거나 만료·무효(401). 호출 측은 세션을 지우고 로그인 안내로 돌아가야 한다. */
+export function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401
+}
+
+function authHeaders(accessToken: string): HeadersInit {
+  return { Authorization: `Bearer ${accessToken}` }
+}
+
+/** 로그인한 본인의 캐릭터 조회. 아직 캐릭터가 없으면 null. */
+export async function fetchMyCharacter(accessToken: string): Promise<CharacterSummary | null> {
+  const res = await fetch(`${BASE_URL}/api/characters/me`, { headers: authHeaders(accessToken) })
   if (res.status === 404) {
     return null
   }
@@ -24,23 +33,35 @@ export async function fetchCharacter(userId: string): Promise<CharacterSummary |
   return res.json()
 }
 
-/** iOS 앱이 동기화해둔 하루치 활동 기록을 조회한다. */
-export async function fetchDailyActivities(userId: string, date: string): Promise<DailyActivitiesResponse> {
+/**
+ * iOS 앱이 동기화해둔 본인의 하루치 활동 기록을 조회한다.
+ * userId는 서버가 토큰 주체와 대조하므로 반드시 세션의 userId를 넘긴다.
+ */
+export async function fetchDailyActivities(
+  accessToken: string,
+  userId: string,
+  date: string,
+): Promise<DailyActivitiesResponse> {
   const params = new URLSearchParams({ userId, date })
-  const res = await fetch(`${BASE_URL}/api/health-activities?${params}`)
+  const res = await fetch(`${BASE_URL}/api/health-activities?${params}`, { headers: authHeaders(accessToken) })
   if (!res.ok) {
     throw new ApiError(res.status, await errorMessage(res))
   }
   return res.json()
 }
 
-export interface SocialLoginResponse {
+/** 백엔드가 발급하는 토큰 응답 공통 필드. */
+export interface TokenResponse {
   userId: string
   displayName: string | null
+  accessToken: string
+  tokenType: 'Bearer'
+  /** 초 단위 유효 기간 */
+  expiresIn: number
 }
 
-/** authorization code를 백엔드에서 provider 토큰·프로필로 교환한다. */
-export async function postSocialLogin(provider: string, code: string, redirectUri: string): Promise<SocialLoginResponse> {
+/** authorization code를 백엔드에서 교환하고 서버 발급 accessToken을 받는다. */
+export async function postSocialLogin(provider: string, code: string, redirectUri: string): Promise<TokenResponse> {
   const res = await fetch(`${BASE_URL}/api/auth/${encodeURIComponent(provider)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -49,7 +70,11 @@ export async function postSocialLogin(provider: string, code: string, redirectUr
   if (!res.ok) {
     throw new ApiError(res.status, await errorMessage(res))
   }
-  return res.json()
+  const body = (await res.json()) as Partial<TokenResponse>
+  if (typeof body.accessToken !== 'string' || !body.accessToken || typeof body.userId !== 'string') {
+    throw new ApiError(res.status, '서버가 인증 토큰을 반환하지 않았습니다.')
+  }
+  return body as TokenResponse
 }
 
 async function errorMessage(res: Response): Promise<string> {

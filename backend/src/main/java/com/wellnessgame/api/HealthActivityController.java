@@ -4,6 +4,8 @@ import com.wellnessgame.activity.HealthActivity;
 import com.wellnessgame.activity.HealthActivityRepository;
 import com.wellnessgame.activity.HealthActivitySyncService;
 import com.wellnessgame.api.DailyActivitiesResponse.ActivityEntry;
+import com.wellnessgame.auth.AuthenticatedUser;
+import com.wellnessgame.auth.UserAccess;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -30,15 +32,21 @@ public class HealthActivityController {
     }
 
     @PostMapping("/sync")
-    public ResponseEntity<HealthActivitySyncResponse> sync(@Valid @RequestBody HealthActivitySyncRequest request) {
-        return ResponseEntity.ok(syncService.sync(request));
+    public ResponseEntity<HealthActivitySyncResponse> sync(
+            @AuthenticatedUser String authenticatedUserId,
+            @Valid @RequestBody HealthActivitySyncRequest request
+    ) {
+        String userId = UserAccess.resolve(authenticatedUserId, request.userId());
+        return ResponseEntity.ok(syncService.sync(request.withUserId(userId)));
     }
 
     @GetMapping
     public DailyActivitiesResponse daily(
-            @RequestParam String userId,
+            @AuthenticatedUser String authenticatedUserId,
+            @RequestParam(name = "userId", required = false) String requestedUserId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
+        String userId = UserAccess.resolve(authenticatedUserId, requestedUserId);
         List<ActivityEntry> activities = activityRepository.findByUserIdAndActivityDate(userId, date).stream()
                 .sorted(Comparator.comparing(HealthActivity::getStartedAt, Comparator.nullsFirst(Comparator.naturalOrder())))
                 .map(ActivityEntry::from)

@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { isConfigured, startLogin, type Provider, type Session } from '../lib/auth'
 
 const PROVIDER_LABELS: Record<Provider, string> = {
@@ -9,30 +8,27 @@ const PROVIDER_LABELS: Record<Provider, string> = {
 
 interface Props {
   session: Session | null
-  userId: string
   onLogout: () => void
-  onApplyManualId: (userId: string) => void
 }
 
-export function AccountSection({ session, userId, onLogout, onApplyManualId }: Props) {
-  const [draft, setDraft] = useState('')
-
+/** 로그인 안내(세션 없음) 또는 현재 로그인 계정 정보(세션 있음)를 보여준다. */
+export function AccountSection({ session, onLogout }: Props) {
   return (
     <section className="card" aria-label="계정">
       <div className="section-head">
         <h2 className="section-title">계정</h2>
         <span className={`chip ${session ? 'green' : 'muted'}`}>
-          {session ? `${PROVIDER_LABELS[session.provider]} 로그인` : '게스트'}
+          {session ? `${PROVIDER_LABELS[session.provider]} 로그인` : '로그인 필요'}
         </span>
       </div>
 
       {session ? (
         <>
           <p className="hint">
-            {session.displayName ?? '회원'}님, iPhone 앱에서도 {PROVIDER_LABELS[session.provider]} 계정으로 로그인하면
-            같은 캐릭터가 자동으로 이어집니다.
+            {session.displayName ?? '회원'}님, 이 계정의 캐릭터 기록을 조회하고 있어요. 기록은 iPhone 앱에서
+            같은 계정으로 로그인해 동기화하면 쌓입니다.
           </p>
-          <p className="mono">{userId}</p>
+          <p className="mono">{session.userId}</p>
           <button className="btn" onClick={onLogout}>
             로그아웃
           </button>
@@ -40,7 +36,7 @@ export function AccountSection({ session, userId, onLogout, onApplyManualId }: P
       ) : (
         <>
           <p className="hint">
-            iPhone 앱과 같은 계정으로 로그인하면 캐릭터가 자동으로 연동됩니다. 로그인하지 않아도 게스트로 이용할 수
+            내 캐릭터와 활동 기록을 보려면 iPhone 앱과 같은 계정으로 로그인해 주세요. 로그인한 본인의 데이터만 볼 수
             있어요.
           </p>
           <div className="social-btns">
@@ -64,24 +60,6 @@ export function AccountSection({ session, userId, onLogout, onApplyManualId }: P
               로그인은 Apple Developer 유료 계정과 HTTPS 도메인이 필요해 웹에서는 아직 지원하지 않아요.)
             </p>
           )}
-          <p className="mono">{userId}</p>
-          <div className="userid-row">
-            <input
-              placeholder="개발용: 사용자 ID 직접 입력 (예: guest:...)"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-            />
-            <button
-              className="btn btn-compact"
-              onClick={() => {
-                onApplyManualId(draft.trim())
-                setDraft('')
-              }}
-              disabled={!draft.trim()}
-            >
-              적용
-            </button>
-          </div>
         </>
       )}
     </section>

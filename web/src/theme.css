@@ -446,8 +446,7 @@ input {
   font-family: inherit;
 }
 
-.section-tools input[type='date'],
-.userid-row input {
+.section-tools input[type='date'] {
   border: 2.5px solid var(--ink);
   border-radius: var(--chip-radius);
   background: var(--card);
@@ -458,7 +457,6 @@ input {
 }
 
 .section-tools input[type='date']:focus-visible,
-.userid-row input:focus-visible,
 .btn:focus-visible {
   outline: 3px solid var(--stat-disc);
   outline-offset: 2px;
@@ -489,11 +487,6 @@ input {
   cursor: not-allowed;
 }
 
-.btn-primary {
-  background: var(--yellow);
-  color: var(--on-pop);
-}
-
 .btn-compact {
   width: auto;
   min-height: 44px;
@@ -517,17 +510,6 @@ input {
 .btn-naver {
   background: #03c75a;
   color: #14172b;
-}
-
-.userid-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.userid-row input {
-  flex: 1;
-  min-width: 0;
 }
 
 .mono {

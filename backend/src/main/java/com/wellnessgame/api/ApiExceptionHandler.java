@@ -1,5 +1,8 @@
 package com.wellnessgame.api;
 
+import com.wellnessgame.auth.ForbiddenException;
+import com.wellnessgame.auth.UnauthorizedException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -11,6 +14,19 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    @ExceptionHandler(UnauthorizedException.class)
+    ResponseEntity<Map<String, Object>> handleUnauthorized(UnauthorizedException exception) {
+        ResponseEntity<Map<String, Object>> response = error(HttpStatus.UNAUTHORIZED, exception.getMessage());
+        return ResponseEntity.status(response.getStatusCode())
+                .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+                .body(response.getBody());
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    ResponseEntity<Map<String, Object>> handleForbidden(ForbiddenException exception) {
+        return error(HttpStatus.FORBIDDEN, exception.getMessage());
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException exception) {
         return error(HttpStatus.BAD_REQUEST, exception.getMessage());

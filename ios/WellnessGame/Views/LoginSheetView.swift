@@ -1,8 +1,8 @@
 import AuthenticationServices
 import SwiftUI
 
-/// 소셜 로그인 시트 — 메인 화면을 단순하게 유지하기 위해 로그인 UI를 분리한다.
-/// 로그인은 선택 사항이며, 게스트도 모든 기능을 사용할 수 있다.
+/// 로그인 시트 — 메인 화면을 단순하게 유지하기 위해 로그인 UI를 분리한다.
+/// 동기화는 로그인한 사용자(ID/비밀번호 또는 Google)만 할 수 있다.
 struct LoginSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var userSession: UserSession
@@ -80,9 +80,18 @@ struct LoginSheetView: View {
                 Text("로그인")
                     .font(.system(.title3, design: .rounded).weight(.bold))
                     .foregroundStyle(Theme.textPrimary)
-                Text("로그인하면 여러 기기에서 같은 캐릭터를 키울 수 있어요. 로그인 없이도 모든 기능을 쓸 수 있습니다.")
+                Text("로그인하면 건강 데이터를 동기화하고 여러 기기에서 같은 캐릭터를 키울 수 있어요.")
                     .font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
+            }
+
+            if let notice = userSession.reloginNotice {
+                Label(notice, systemImage: "exclamationmark.circle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Theme.statStrength)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
 
             credentialForm
@@ -170,9 +179,9 @@ struct LoginSheetView: View {
         VStack(alignment: .leading, spacing: 12) {
             // 현재 Google 로그인만 지원 — 나머지 제공자는 준비되면 isEnabled를 되돌린다.
             SignInWithAppleButton(.signIn) { request in
-                userSession.configureAppleRequest(request)
-            } onCompletion: { result in
-                userSession.handleAppleResult(result)
+                request.requestedScopes = [.fullName, .email]
+            } onCompletion: { _ in
+                userSession.updateStatus("Apple 로그인은 아직 지원하지 않습니다.")
             }
             .signInWithAppleButtonStyle(.black)
             .frame(height: 48)

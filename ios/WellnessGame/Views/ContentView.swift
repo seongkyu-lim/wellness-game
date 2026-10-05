@@ -9,11 +9,14 @@ struct ContentView: View {
     @State private var showLoginSheet = false
 
     init() {
-        let userSession = UserSession()
+        // 세션과 네트워크가 같은 Keychain 저장소를 공유해야 로그인 직후 토큰이 헤더에 실린다.
+        let tokenStore = KeychainTokenStore()
+        let networkClient = NetworkClient(tokenStore: tokenStore)
+        let userSession = UserSession(tokenStore: tokenStore)
         _userSession = StateObject(wrappedValue: userSession)
-        _socialLogin = StateObject(wrappedValue: SocialLoginService())
-        _credentialLogin = StateObject(wrappedValue: CredentialAuthService())
-        _viewModel = StateObject(wrappedValue: DashboardViewModel(userSession: userSession))
+        _socialLogin = StateObject(wrappedValue: SocialLoginService(networkClient: networkClient))
+        _credentialLogin = StateObject(wrappedValue: CredentialAuthService(networkClient: networkClient))
+        _viewModel = StateObject(wrappedValue: DashboardViewModel(networkClient: networkClient, userSession: userSession))
     }
 
     var body: some View {
@@ -35,7 +38,6 @@ struct ContentView: View {
                 await viewModel.autoSync(force: true)
             }
             .task {
-                socialLogin.restoreSessionIfNeeded(userSession)
                 await viewModel.autoSync()
             }
             .onChange(of: scenePhase) { _, phase in
@@ -44,7 +46,19 @@ struct ContentView: View {
                 }
             }
             .onChange(of: viewModel.useMockData) {
+                // autoSync는 로그인하지 않았으면 동기화하지 않는다.
                 Task { await viewModel.autoSync(force: true) }
+            }
+            .onChange(of: userSession.userId) { _, userId in
+                if userId != nil {
+                    Task { await viewModel.autoSync(force: true) }
+                } else {
+                    viewModel.reset()
+                    // 401·만료로 세션이 끊기면 로그인 시트를 다시 띄워 재로그인을 안내한다.
+                    if userSession.reloginNotice != nil {
+                        showLoginSheet = true
+                    }
+                }
             }
             .sheet(isPresented: $showLoginSheet) {
                 LoginSheetView(userSession: userSession, socialLogin: socialLogin, credentialLogin: credentialLogin)
@@ -96,7 +110,9 @@ struct ContentView: View {
 
     private var characterHero: some View {
         VStack(spacing: 18) {
-            if let response = viewModel.syncResponse {
+            if !userSession.isSignedIn {
+                signInPrompt
+            } else if let response = viewModel.syncResponse {
                 let character = response.character
                 XPRingView(level: character.level, progress: character.xpProgress, size: 158, lineWidth: 13)
                     .padding(.top, 6)
@@ -155,6 +171,27 @@ struct ContentView: View {
         .padding(20)
         .background(Theme.heroGradient, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
         .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
+    }
+
+    /// 로그인 전 상태 — 동기화하지 않고 로그인 시트로 유도한다.
+    private var signInPrompt: some View {
+        VStack(spacing: 22) {
+            CharacterAvatarView(level: 1, size: 170)
+            VStack(spacing: 8) {
+                Text("로그인하고 새싹이를 키워 보세요")
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text(userSession.reloginNotice ?? "로그인하면 걸음 · 운동 · 수면이 자동으로 XP가 되어\n캐릭터가 자라나요")
+                    .font(.footnote)
+                    .foregroundStyle(userSession.reloginNotice == nil ? Theme.textSecondary : Theme.statStrength)
+                    .multilineTextAlignment(.center)
+            }
+            Button("로그인하기") {
+                showLoginSheet = true
+            }
+            .buttonStyle(PrimaryActionButtonStyle())
+            .padding(.bottom, 12)
+        }
     }
 
     // MARK: - Health summary
@@ -263,6 +300,7 @@ struct ContentView: View {
                     .foregroundStyle(Theme.textSecondary)
             }
             .tint(Theme.primary)
+            .disabled(!userSession.isSignedIn)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 4)

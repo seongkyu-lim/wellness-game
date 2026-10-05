@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-/// 아이디/비밀번호 회원가입·로그인을 백엔드 API로 처리하고 세션에 반영한다.
+/// 아이디/비밀번호 회원가입·로그인을 백엔드 API로 처리하고, 발급된 토큰으로 세션을 갱신한다.
 @MainActor
 final class CredentialAuthService: ObservableObject {
     @Published private(set) var isLoading = false
@@ -32,7 +32,7 @@ final class CredentialAuthService: ObservableObject {
     private func authenticate(
         session: UserSession,
         statusMessage: String,
-        _ request: @escaping () async throws -> PasswordAuthResponse
+        _ request: @escaping () async throws -> AuthTokenResponse
     ) async {
         isLoading = true
         errorMessage = nil
@@ -41,18 +41,9 @@ final class CredentialAuthService: ObservableObject {
 
         do {
             let response = try await request()
-            session.signIn(
-                provider: .password,
-                userIdentifier: response.userIdentifier,
-                displayName: response.displayName
-            )
+            try session.signIn(provider: .password, auth: response)
         } catch {
-            let message: String
-            if let networkError = error as? NetworkError {
-                message = networkError.errorDescription ?? "인증에 실패했습니다."
-            } else {
-                message = error.localizedDescription
-            }
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             errorMessage = message
             session.updateStatus(message)
         }

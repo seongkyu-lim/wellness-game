@@ -23,9 +23,18 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.security:spring-security-crypto'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
     runtimeOnly 'com.mysql:mysql-connector-j'
     testRuntimeOnly 'com.h2database:h2'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+// 로컬 실행(./gradlew bootRun)은 개발용 JWT 키가 든 local 프로필로 띄운다.
+// 배포 jar 는 프로필 없이 실행되므로 AUTH_JWT_SECRET 이 없으면 기동에 실패한다.
+tasks.named('bootRun') {
+    systemProperty 'spring.profiles.active', System.getenv('SPRING_PROFILES_ACTIVE') ?: 'local'
 }
 
 tasks.named('test') {
