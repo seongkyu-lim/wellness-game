@@ -3,6 +3,7 @@ package com.wellnessgame.activity;
 import com.wellnessgame.api.HealthActivitySyncRequest;
 import com.wellnessgame.api.HealthActivitySyncRequest.ActivityPayload;
 import com.wellnessgame.api.HealthActivitySyncResponse;
+import com.wellnessgame.character.UserCharacter;
 import com.wellnessgame.character.UserCharacterRepository;
 import com.wellnessgame.support.ActivityPayloads;
 import com.wellnessgame.support.MutableClock;
@@ -262,11 +263,13 @@ class HealthActivitySyncRulesTest {
 
     @Test
     void concurrentSyncsForSameUserDoNotExceedDailyCap() throws Exception {
-        // 200 + 200 + 100 = 500 → 남은 상한 100
+        // #46 운동 상한(400) 이후 정상 동기화만으로는 600 에 닿지 않으므로 이전 지급분 120 을 미리 둔다.
+        // 120 + 운동 200 + 걸음 100 + 수면 80 = 500 → 남은 총 상한 100 (운동 상한은 200 남음)
+        seedPriorXp(120);
         sync(
                 workoutAt(WorkoutType.RUNNING, 70, "06:00", "07:10"),
-                workoutAt(WorkoutType.SWIMMING, 70, "08:00", "09:10"),
-                steps(16_000));
+                steps(16_000),
+                sleepWithScore90(450, "2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z"));
 
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -296,10 +299,11 @@ class HealthActivitySyncRulesTest {
 
     @Test
     void clipsXpThatWouldExceedDailyCap() {
-        // 200 + 200 + 100(걸음 상한) + 80(수면) = 580
+        // 이전 지급분 185 + 달리기 105 + 수영 110 + 100(걸음 상한) + 80(수면) = 580 (운동 상한은 185 남음)
+        seedPriorXp(185);
         sync(
-                workoutAt(WorkoutType.RUNNING, 70, "06:00", "07:10"),
-                workoutAt(WorkoutType.SWIMMING, 70, "08:00", "09:10"),
+                workoutAt(WorkoutType.RUNNING, 30, "06:00", "06:30"),
+                workoutAt(WorkoutType.SWIMMING, 30, "08:00", "08:30"),
                 steps(16_000),
                 sleepWithScore90(450, "2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z"));
 
@@ -319,12 +323,12 @@ class HealthActivitySyncRulesTest {
 
     @Test
     void stepsDifferenceIsClippedByDailyCapAndGoalsStillUpdate() {
-        // 200 + 200 + 80 + 105 = 585 → 남은 상한 15
+        // 이전 지급분 105 + 운동 200 + 200 + 수면 80 = 585 → 남은 상한 15
+        seedPriorXp(105);
         sync(
                 workoutAt(WorkoutType.RUNNING, 70, "06:00", "07:10"),
                 workoutAt(WorkoutType.SWIMMING, 70, "08:00", "09:10"),
-                sleepWithScore90(450, "2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z"),
-                workoutAt(WorkoutType.RUNNING, 30, "10:00", "10:30"));
+                sleepWithScore90(450, "2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z"));
 
         HealthActivitySyncResponse morning = sync(steps(9_000));
         assertThat(morning.gainedXp()).isEqualTo(15);                // 75 중 15만 지급
@@ -356,6 +360,75 @@ class HealthActivitySyncRulesTest {
         assertThat(nextDay.gainedXp()).isEqualTo(70);
     }
 
+    @Test
+    void workoutXpIsCappedPerDayEvenBelowTotalCap() {
+        // 운동 200 + 105 = 305 → 운동 상한(400)까지 95 남음
+        HealthActivitySyncResponse first = sync(
+                workoutAt(WorkoutType.RUNNING, 70, "06:00", "07:10"),
+                workoutAt(WorkoutType.RUNNING, 30, "08:00", "08:30"),
+                workoutAt(WorkoutType.CYCLING, 70, "10:00", "11:10"));
+
+        assertThat(first.activityResults()).extracting(r -> r.gainedXp()).containsExactly(200, 105, 95);
+        assertThat(first.activityResults().get(2).message()).isEqualTo("자전거 완료 +95 XP (일일 XP 상한 도달)");
+        assertThat(activityRepository.sumGainedXpByUserIdAndActivityDateAndType(USER, DAY, ActivityType.WORKOUT))
+                .isEqualTo(ActivityXpCalculator.DAILY_WORKOUT_XP_CAP);
+
+        // 다음 요청의 운동은 0 XP(스탯은 반영), 걸음·수면은 운동 상한과 무관하게 지급
+        HealthActivitySyncResponse second = sync(
+                workoutAt(WorkoutType.STRENGTH_TRAINING, 30, "12:00", "12:30"),
+                steps(16_000),
+                sleepWithScore90(450, "2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z"));
+
+        assertThat(second.activityResults()).extracting(r -> r.gainedXp()).containsExactly(0, 100, 80);
+        assertThat(second.activityResults().get(0).duplicate()).isFalse();
+        assertThat(second.activityResults().get(0).message()).isEqualTo("근력 운동 완료 +0 XP (일일 XP 상한 도달)");
+        assertThat(second.character().stats().str()).isEqualTo(1 + 1 + 1 + 2); // 달리기·달리기·자전거 +1, 근력 +2
+        assertThat(second.character().totalXp()).isEqualTo(580);
+    }
+
+    @Test
+    void workoutCapIsPerDate() {
+        sync(
+                workoutAt(WorkoutType.RUNNING, 70, "06:00", "07:10"),
+                workoutAt(WorkoutType.SWIMMING, 70, "08:00", "09:10"));
+
+        clock.setInstant(Instant.parse("2026-06-18T23:00:00Z"));
+        HealthActivitySyncResponse nextDay = syncService.sync(new HealthActivitySyncRequest(USER, DAY.plusDays(1),
+                List.of(ActivityPayloads.workout(WorkoutType.RUNNING, 70,
+                        "2026-06-18T06:00:00Z", "2026-06-18T07:10:00Z"))));
+
+        assertThat(nextDay.gainedXp()).isEqualTo(200);
+    }
+
+    // ---- 신규 사용자 동시 동기화 (#49) ----
+
+    @Test
+    void concurrentFirstSyncsForNewUserBothSucceedWithSingleCharacter() throws Exception {
+        String newUser = "brand-new-user";
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<HealthActivitySyncResponse> a = executor.submit(() -> {
+                start.await();
+                return syncService.sync(new HealthActivitySyncRequest(newUser, DAY,
+                        List.of(workoutAt(WorkoutType.RUNNING, 30, "08:00", "08:30"))));
+            });
+            Future<HealthActivitySyncResponse> b = executor.submit(() -> {
+                start.await();
+                return syncService.sync(new HealthActivitySyncRequest(newUser, DAY,
+                        List.of(workoutAt(WorkoutType.CYCLING, 30, "10:00", "10:30"))));
+            });
+            start.countDown();
+            int gained = a.get(10, TimeUnit.SECONDS).gainedXp() + b.get(10, TimeUnit.SECONDS).gainedXp();
+
+            assertThat(gained).isEqualTo(105 + 105);
+        } finally {
+            executor.shutdownNow();
+        }
+        assertThat(characterRepository.findAll()).filteredOn(c -> newUser.equals(c.getUserId())).hasSize(1);
+        assertThat(characterRepository.findByUserId(newUser).orElseThrow().getTotalXp()).isEqualTo(210);
+    }
+
     // ---- 오버플로 포화 ----
 
     @Test
@@ -376,6 +449,19 @@ class HealthActivitySyncRulesTest {
     }
 
     // ---- helpers ----
+
+    /**
+     * 그날 이미 지급된 XP(운동 외 유형)를 로그와 캐릭터에 함께 남긴다. 유형별 상한 도입 전 데이터처럼,
+     * 정상 동기화만으로는 닿지 않는 일일 총 상한(600) 경계를 시험할 때 쓴다.
+     */
+    private void seedPriorXp(int xp) {
+        activityRepository.save(new HealthActivity(USER, DAY, ActivityType.STEPS, "STEPS",
+                null, BigDecimal.ZERO, BigDecimal.ZERO, null, null, null, xp,
+                "seed-prior-xp|" + USER + "|" + DAY, null, null));
+        UserCharacter character = new UserCharacter(USER);
+        character.addXp(xp);
+        characterRepository.save(character);
+    }
 
     private HealthActivitySyncResponse sync(ActivityPayload... activities) {
         return syncService.sync(new HealthActivitySyncRequest(USER, DAY, List.of(activities)));
