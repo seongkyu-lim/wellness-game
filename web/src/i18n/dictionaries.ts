@@ -35,7 +35,7 @@ const ko = {
   'activity.refresh': '새로고침',
   'activity.emptyTitle': '아직 동기화된 기록이 없어요',
   'activity.emptyBody':
-    'iPhone 앱이 HealthKit 데이터를 자동으로 수집해요. 앱에서 ‘서버에 동기화’를 누르면 이곳에 바로 표시됩니다.',
+    'iPhone 앱에서 로그인하면 HealthKit 데이터가 자동으로 동기화되어 이곳에 표시돼요.',
   'activity.steps': '걸음 수',
   'activity.sleep': '수면',
   'activity.noRecord': '기록 없음',
@@ -107,7 +107,7 @@ const en: Record<MessageKey, string> = {
   'activity.refresh': 'Refresh',
   'activity.emptyTitle': 'Nothing synced yet',
   'activity.emptyBody':
-    'The iPhone app collects your HealthKit data automatically. Tap “Sync to server” in the app and it shows up here right away.',
+    'Sign in on the iPhone app and your HealthKit data syncs automatically and shows up here.',
   'activity.steps': 'Steps',
   'activity.sleep': 'Sleep',
   'activity.noRecord': 'No data',
@@ -125,7 +125,7 @@ const en: Record<MessageKey, string> = {
   'character.emptyTitle': 'Sprouty is waiting for you',
   'character.emptyBody': 'Sync your health data from the iPhone app to earn XP and watch your seed grow.',
   'character.stageBadge': 'Lv.{level} · {stage} stage',
-  'character.nextStage': 'Grows into a {stage} at Lv.{level}',
+  'character.nextStage': 'Reach Lv.{level} to grow into {stage}',
   'character.maxStage': "Fully grown — you've reached the final stage 🌸",
   'character.avatarLabel': '{stage} stage character',
 
