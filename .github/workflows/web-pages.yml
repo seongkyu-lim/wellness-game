@@ -33,7 +33,7 @@ jobs:
       - run: npm ci
       - name: Build
         # 저장소 이름이 Pages 하위 경로가 된다 (https://<owner>.github.io/<repo>/)
-        run: npx tsc --noEmit && npx vite build --base=/${{ github.event.repository.name }}/
+        run: npm run build -- --base=/${{ github.event.repository.name }}/
         env:
           # 저장소 Variables에 설정하면 반영된다. 비어 있으면 기본값(localhost)·로그인 버튼 비활성.
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
