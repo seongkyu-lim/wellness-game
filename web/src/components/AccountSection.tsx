@@ -19,7 +19,7 @@ export function AccountSection({ session, onLogout }: Props) {
     <section className="card" aria-label={t('account.label')}>
       <div className="section-head">
         <h2 className="section-title">{t('account.title')}</h2>
-        <span className={`pill ${session ? 'lime' : 'muted'}`}>
+        <span className={`chip ${session ? 'green' : 'muted'}`}>
           {session
             ? t('account.signedIn', { provider: PROVIDER_LABELS[session.provider] })
             : t('account.signInRequired')}
@@ -32,7 +32,7 @@ export function AccountSection({ session, onLogout }: Props) {
             {t('account.signedInHint', { name: session.displayName ?? t('account.defaultName') })}
           </p>
           <p className="mono">{session.userId}</p>
-          <button className="btn btn-secondary" onClick={onLogout}>
+          <button className="btn" onClick={onLogout}>
             {t('account.logout')}
           </button>
         </>
@@ -43,17 +43,17 @@ export function AccountSection({ session, onLogout }: Props) {
           </p>
           <div className="social-btns">
             <button
-              className="btn btn-google"
+              className="btn"
               onClick={() => startLogin('google')}
               disabled={!isConfigured('google')}
             >
-              <b>G</b> {t('account.signInWith', { provider: 'Google' })}
+              {t('account.signInWith', { provider: 'Google' })}
             </button>
             <button className="btn btn-kakao" onClick={() => startLogin('kakao')} disabled={!isConfigured('kakao')}>
               {t('account.signInWith', { provider: 'Kakao' })}
             </button>
             <button className="btn btn-naver" onClick={() => startLogin('naver')} disabled={!isConfigured('naver')}>
-              <b>N</b> {t('account.signInWith', { provider: 'Naver' })}
+              {t('account.signInWith', { provider: 'Naver' })}
             </button>
           </div>
           {(['google', 'kakao', 'naver'] as Provider[]).some((p) => !isConfigured(p)) && (

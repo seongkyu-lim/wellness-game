@@ -96,10 +96,14 @@ export default function App() {
     <main className="container">
       <header className="header">
         <div className="header-top">
-          <p className="date">{dateLabel}</p>
+          <div>
+            <h1 className="brand">
+              Wellness <span>Game</span>
+            </h1>
+            <p className="date">{dateLabel}</p>
+          </div>
           <LanguageToggle />
         </div>
-        <h1>{t('header.title')}</h1>
       </header>
 
       {error && (

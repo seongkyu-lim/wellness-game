@@ -1,19 +1,56 @@
+import type { ReactNode } from 'react'
 import type { ActivityEntry } from '../api/types'
 import { useI18n } from '../i18n/I18nProvider'
+import { CharacterAvatar } from './CharacterAvatar'
+import { IconBike, IconMoon, IconRun, IconStrength, IconWalk, IconWave } from './Icons'
 
-const WORKOUT_EMOJIS = {
-  SWIMMING: '🏊',
-  RUNNING: '🏃',
-  WALKING: '🚶',
-  CYCLING: '🚴',
-  STRENGTH_TRAINING: '🏋️',
-  OTHER: '💪',
-} as const
+const WORKOUT_ICONS = {
+  SWIMMING: <IconWave size={24} />,
+  RUNNING: <IconRun size={24} />,
+  WALKING: <IconWalk size={24} />,
+  CYCLING: <IconBike size={24} />,
+  STRENGTH_TRAINING: <IconStrength size={24} />,
+  OTHER: <IconRun size={24} />,
+} as const satisfies Record<string, ReactNode>
 
-type WorkoutKey = keyof typeof WORKOUT_EMOJIS
+type WorkoutKey = keyof typeof WORKOUT_ICONS
 
 function workoutKey(source: string): WorkoutKey {
-  return source in WORKOUT_EMOJIS ? (source as WorkoutKey) : 'OTHER'
+  return source in WORKOUT_ICONS ? (source as WorkoutKey) : 'OTHER'
+}
+
+function workoutDetail(workout: ActivityEntry, fallback: string): string {
+  const parts: string[] = []
+  if (workout.calories != null && Number(workout.calories) > 0) {
+    parts.push(`${Math.round(Number(workout.calories))} kcal`)
+  }
+  if (workout.distanceMeters != null && workout.distanceMeters > 0) {
+    parts.push(`${(workout.distanceMeters / 1000).toFixed(1)} km`)
+  }
+  return parts.length > 0 ? parts.join(' · ') : fallback
+}
+
+interface QuestProps {
+  icon: ReactNode
+  tint: string
+  title: string
+  sub: string
+  xp?: number
+}
+
+function Quest({ icon, tint, title, sub, xp }: QuestProps) {
+  return (
+    <div className="quest">
+      <div className="quest-icon" style={{ background: tint }}>
+        {icon}
+      </div>
+      <div className="quest-body">
+        <span className="quest-title">{title}</span>
+        <span className="quest-sub">{sub}</span>
+      </div>
+      {xp != null && xp > 0 && <span className="chip">+{xp} XP</span>}
+    </div>
+  )
 }
 
 interface Props {
@@ -50,7 +87,7 @@ export function TodayActivities({ date, onDateChange, activities, onRefresh, loa
             max={today}
             onChange={(e) => onDateChange(e.target.value)}
           />
-          <button className="btn btn-secondary btn-compact" onClick={onRefresh} disabled={loading}>
+          <button className="btn btn-compact" onClick={onRefresh} disabled={loading}>
             {t('activity.refresh')}
           </button>
         </div>
@@ -58,52 +95,50 @@ export function TodayActivities({ date, onDateChange, activities, onRefresh, loa
 
       {activities.length === 0 ? (
         <div className="empty-state">
-          <span className="emoji" aria-hidden>
-            📱
-          </span>
+          <CharacterAvatar level={1} size={64} decorative />
           <div>
-            <h2>{t('activity.emptyTitle')}</h2>
-            <p>{t('activity.emptyBody')}</p>
+            <h3>{t('activity.emptyTitle')}</h3>
+            <p className="hint">{t('activity.emptyBody')}</p>
           </div>
         </div>
       ) : (
-        <>
-          <div className="metric-grid">
-            <div className="metric-card">
-              <span className="metric-icon" aria-hidden>
-                👟
-              </span>
-              <span className="metric-value">{steps?.steps != null ? formatNumber(steps.steps) : t('activity.noRecord')}</span>
-              <span className="metric-name">{t('activity.steps')}</span>
-            </div>
-            <div className="metric-card">
-              <span className="metric-icon" aria-hidden>
-                🌙
-              </span>
-              <span className="metric-value">{sleepText}</span>
-              <span className="metric-name">{t('activity.sleep')}</span>
-            </div>
-          </div>
-
+        <div className="quest-list">
+          <Quest
+            icon={<IconWalk size={24} />}
+            tint="var(--mint)"
+            title={t('activity.steps')}
+            sub={steps?.steps != null ? t('activity.stepsCount', { n: formatNumber(steps.steps) }) : t('activity.noRecord')}
+            xp={steps?.gainedXp}
+          />
+          <Quest
+            icon={<IconMoon size={24} />}
+            tint="var(--lilac)"
+            title={t('activity.sleepTitle', { duration: sleepText })}
+            sub={sleep?.sleepScore != null ? t('activity.sleepScore', { score: sleep.sleepScore }) : t('activity.noSleepScore')}
+            xp={sleep?.gainedXp}
+          />
           {workouts.map((workout, index) => {
             const key = workoutKey(workout.source)
             return (
-              <div className="result-row" key={`${workout.source}-${workout.startedAt ?? index}`}>
-                <span className="message">
-                  {WORKOUT_EMOJIS[key]} {t(`workout.${key}`)}
-                  {workout.durationMinutes != null && ` · ${t('activity.minutes', { n: workout.durationMinutes })}`}
-                  {workout.calories != null && Number(workout.calories) > 0 && ` · ${Math.round(Number(workout.calories))} kcal`}
-                </span>
-                <span className="pill lime">+{workout.gainedXp} XP</span>
-              </div>
+              <Quest
+                key={`${workout.source}-${workout.startedAt ?? index}`}
+                icon={WORKOUT_ICONS[key]}
+                tint="var(--peach)"
+                title={
+                  workout.durationMinutes != null
+                    ? `${t(`workout.${key}`)} ${t('activity.minutes', { n: workout.durationMinutes })}`
+                    : t(`workout.${key}`)
+                }
+                sub={workoutDetail(workout, t('activity.healthSource'))}
+                xp={workout.gainedXp}
+              />
             )
           })}
-
-          <div className="result-row">
-            <span className="message hint">{t('activity.totalXp')}</span>
-            <span className="pill lime">+{activities.reduce((sum, a) => sum + a.gainedXp, 0)} XP</span>
+          <div className="quest-total">
+            <span className="hint">{t('activity.totalXp')}</span>
+            <span className="chip green">+{activities.reduce((sum, a) => sum + a.gainedXp, 0)} XP</span>
           </div>
-        </>
+        </div>
       )}
     </section>
   )
