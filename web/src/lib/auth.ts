@@ -120,7 +120,8 @@ export async function completeLoginFromRedirect(): Promise<Session | null> {
 
 function redirectUri(): string {
   // provider 콘솔에 등록하는 Redirect URI와 정확히 일치해야 한다.
-  return `${window.location.origin}/`
+  // GitHub Pages처럼 하위 경로에 배포하면 BASE_URL이 '/<repo>/'가 된다. (로컬은 '/')
+  return `${window.location.origin}${import.meta.env.BASE_URL}`
 }
 
 function authorizeUrl(provider: Provider, state: string): string {
