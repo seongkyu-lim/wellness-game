@@ -8,8 +8,6 @@
 | 웹 | `web/src/theme.css` | `web/src/components/CharacterAvatar.tsx` | `CharacterCard.tsx`, `TodayActivities.tsx`, `Icons.tsx` |
 | iOS | `ios/WellnessGame/Views/Theme.swift` | `ios/WellnessGame/Views/CharacterAvatarView.swift` | `Components.swift`, `ContentView.swift`, `LoginSheetView.swift` |
 
-화면 시안 원본은 [`docs/design/`](design/)에 있습니다.
-
 ## 1. 원칙
 
 - **만화 컷처럼**: 모든 카드·칩·버튼에 굵은 잉크 외곽선을 두르고, 흐림 없는 오프셋 그림자로 띄웁니다.
@@ -21,6 +19,9 @@
 ## 2. 컬러 토큰
 
 다크 모드는 '밤하늘' 버전입니다. 외곽선은 더 어두워지고, 카드 그림자는 네온 보라로 바뀌어 카드를 구분합니다.
+
+> 값의 기준은 코드입니다. 이 표와 `theme.css`·`Theme.swift`가 다르면 코드가 맞고, 표를 고칩니다.
+> 토큰 이름은 `웹 / iOS` 순서이며, 한 이름만 적힌 것은 두 플랫폼이 같은 이름(웹은 앞에 `--`)을 씁니다.
 
 ### 면·글자
 
@@ -52,14 +53,14 @@
 
 | 토큰 | 값 | 용도 |
 |---|---|---|
-| `xp` | `#9BE15D` | EXP 바 채움, 합계 XP 칩 |
-| `yellow` | `#FFE066` | 주요 버튼, +XP 칩, 이름표 |
-| `pink` | `#FFB3CF` | 누적 XP 칩 |
+| `--xp` / `xp` | `#9BE15D` | EXP 바 채움, 합계 XP 칩 |
+| `--yellow` / `yellow` | `#FFE066` | 주요 버튼, +XP 칩, 이름표 |
+| `--pink` / `pink` | `#FFB3CF` | 누적 XP 칩 |
 | `mint` / `lilac` / `peach` | `#CFF3B5` / `#E3D9FF` / `#FFD9C7` | 퀘스트 아이콘 상자 (걸음 / 수면 / 운동) |
-| `stat-str` / `statStrength` | `#FF9A6C` | STR 근력 |
-| `stat-vit` / `statVitality` | `#7DD484` | VIT 활력 |
-| `stat-disc` / `statDiscipline` | `#7FB8F7` | DISC 절제 |
-| `stat-rec` / `statRecovery` | `#B9A2F5` | REC 회복 |
+| `--stat-str` / `statStrength` | `#FF9A6C` | STR 근력 |
+| `--stat-vit` / `statVitality` | `#7DD484` | VIT 활력 |
+| `--stat-disc` / `statDiscipline` | `#7FB8F7` | DISC 절제 |
+| `--stat-rec` / `statRecovery` | `#B9A2F5` | REC 회복 |
 
 ## 3. 타이포그래피
 
@@ -76,8 +77,8 @@
 | 항목 | 값 |
 |---|---|
 | 외곽선 두께 | 3 (칩·입력칸·작은 요소는 2.5) |
-| 카드 모서리 | 22 (히어로 24, 칩 14, 버튼 16) |
-| 오프셋 그림자 | 카드 4, 히어로 6, 버튼은 아래로 4~5 |
+| 모서리 | 카드 22 (iOS EXP 카드 20), 히어로 24, 버튼 16, 아이콘 상자·입력칸·경고 박스·EXP 바 14, 칩·레벨 칩은 캡슐 |
+| 오프셋 그림자 | 카드 4, 히어로 6, 버튼은 아래로 4~5 (헤더의 작은 캡슐 버튼은 대각선 3) |
 | 섹션 간격 | 18 |
 | 최소 터치 영역 | 44 |
 
@@ -85,7 +86,7 @@
 
 - **카드**: `card` 색 + 3 외곽선 + 오프셋 그림자. iOS `celCard()`, 웹 `.card`.
 - **히어로**: 하늘색 패널 + 하프톤 점 + 두 겹 언덕, 말풍선(꼬리 포함), 반짝이 3개, 흔들리는 새싹이, 노란 기울어진 이름표 '새싹이', 레벨 칩. 데이터가 없으면 레벨 칩 대신 '아직 동기화 전'을 보여 줍니다.
-- **EXP 바**: 높이 24, 사선 줄무늬가 흐르는 `xp` 채움, 채움 끝에 잉크 세로선. 최소 채움 10. 진행바 접근성 값은 0~100(%)이고 문구는 `aria-valuetext`/`accessibilityValue`로 전달합니다.
+- **EXP 바**: 높이 24, 사선 줄무늬가 흐르는 `xp` 채움, 채움 끝에 잉크 세로선. 최소 채움 10. 웹은 진행바 접근성 값을 0~100(%)로 주고 문구를 `aria-valuetext`로, iOS는 문구를 `accessibilityValue`로 전달합니다.
 - **스탯 타일**: 위쪽 색 띠(스탯 색) + 잉크 아이콘, 큰 숫자, 'STR 근력' 라벨. 4열.
 - **퀘스트 카드**: 46 크기 틴트 아이콘 상자, 제목·부제, 오른쪽 '+N XP' 노란 칩. 아이콘 상자 틴트는 항상 밝은 채색(다크 모드 카드색 금지 — 잉크 아이콘이 안 보임).
 - **섹션 제목**: 기울어진 브랜드 그린 막대 + 굵은 제목.
@@ -101,12 +102,12 @@
 |---|---|---|---|
 | 씨앗 | 1–2 | 흙 위 씨앗 | 잠든 얼굴 |
 | 새싹 | 3–5 | 잎 두 장 | 큰 눈 + 하이라이트 |
-| 줄기 | 6–9 | 긴 줄기 + 잎 네 장 | 큰 눈 + 하이라이트 |
+| 줄기 | 6–9 | 긴 줄기 + 잎 세 장 + 끝눈 | 큰 눈 + 하이라이트 |
 | 어린나무 | 10–14 | 작은 수관 | 웃는 얼굴 |
 | 나무 | 15–19 | 큰 수관 | 큰 눈 + 하이라이트 |
 | 개화 | 20+ | 큰 수관 + 분홍 꽃 6송이 | 웃는 얼굴 |
 
-- 레벨 구간은 `web/src/lib/growthStage.ts`와 iOS `GrowthStage`가 같아야 합니다.
+- 레벨 구간은 `web/src/lib/growthStage.ts`와 `ios/WellnessGame/Views/CharacterAvatarView.swift`의 `GrowthStage`가 같아야 합니다.
 - 공통 요소: 셀 셰이딩 화분(본색 `#F4A06C`, 그림자 `#DC7A4C`, 테두리 `#F9BC8A`), 볼 터치 `#FF8FB1`, 바닥 그림자.
 - 장식용으로 쓸 때(빈 상태 등)는 스크린 리더에서 숨깁니다 (`decorative`).
 
@@ -116,7 +117,7 @@
 |---|---|
 | 새싹이 | 위아래로 둥실 + 살짝 기울기, 약 2.6초 |
 | 반짝이 | 커졌다 작아지며 회전, 1.8~2.3초, 서로 엇갈림 |
-| EXP 바 | 사선 줄무늬가 오른쪽으로 흐름, 1.2초 |
+| EXP 바 | 사선 줄무늬가 오른쪽으로 흐름 (웹 1.2초, iOS 0.86초 — 같은 속도) |
 | EXP 채움 | 값이 바뀌면 0.8초 동안 늘어남 |
 
 웹 `prefers-reduced-motion`, iOS '동작 줄이기' 설정이면 모든 반복 애니메이션을 멈춥니다.
@@ -136,8 +137,8 @@
 |---|---|
 | `Main.dc.html` | 홈 (라이트) |
 | `MainDark.dc.html` | 홈 (다크 · 밤하늘) |
-| `LevelUp.dc.html` | 레벨업 연출 (집중선 + LEVEL UP!) — 아직 미구현 |
-| `Growth.dc.html` | 성장 도감 — 아직 미구현 |
+| `LevelUp.dc.html` | 레벨업 연출 (집중선 + LEVEL UP!) |
+| `Growth.dc.html` | 성장 도감 |
 | `Login.dc.html` | 로그인 |
 | `Stages.dc.html` | 새싹이 성장 설정화 (6단계) |
 | `canvas.json` | 캔버스 위 화면 배치 |
