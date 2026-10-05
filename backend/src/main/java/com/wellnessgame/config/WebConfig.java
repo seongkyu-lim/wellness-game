@@ -1,9 +1,11 @@
 package com.wellnessgame.config;
 
+import com.wellnessgame.auth.AppleNativeProperties;
 import com.wellnessgame.auth.AuthenticatedUserArgumentResolver;
 import com.wellnessgame.auth.AuthenticationInterceptor;
 import com.wellnessgame.auth.GoogleNativeProperties;
 import com.wellnessgame.auth.JwtProperties;
+import com.wellnessgame.auth.KakaoNativeProperties;
 import com.wellnessgame.auth.OAuthProperties;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -17,7 +19,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import java.util.List;
 
 @Configuration
-@EnableConfigurationProperties({OAuthProperties.class, GoogleNativeProperties.class, JwtProperties.class})
+@EnableConfigurationProperties({
+        OAuthProperties.class,
+        GoogleNativeProperties.class,
+        KakaoNativeProperties.class,
+        AppleNativeProperties.class,
+        JwtProperties.class
+})
 public class WebConfig implements WebMvcConfigurer {
     private final String[] allowedOrigins;
     private final AuthenticationInterceptor authenticationInterceptor;
@@ -52,6 +60,9 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/auth/signup",
                         "/api/auth/login",
                         "/api/auth/google/native",
+                        "/api/auth/kakao/native",
+                        "/api/auth/naver/native",
+                        "/api/auth/apple/native",
                         "/api/auth/{provider}");
     }
 
