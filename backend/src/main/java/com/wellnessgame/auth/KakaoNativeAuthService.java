@@ -1,5 +1,6 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.error.ServiceUnavailableException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.wellnessgame.i18n.Messages;
 import org.slf4j.Logger;
@@ -62,13 +63,13 @@ public class KakaoNativeAuthService {
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode().isSameCodeAs(HttpStatus.TOO_MANY_REQUESTS)) {
                 // 쿼터 초과는 토큰 문제가 아니라 일시 장애다.
-                throw new IllegalStateException(Messages.get("auth.kakao.verification-failed"), e);
+                throw new ServiceUnavailableException(Messages.get("auth.kakao.verification-failed"), e);
             }
             // 카카오는 무효·만료 토큰에 401(code -401)을, 형식 오류에 400 을 준다.
             throw new UnauthorizedException(Messages.get("auth.kakao.access-token-invalid"), e);
         } catch (RestClientException e) {
             // 5xx(HttpServerErrorException)·타임아웃·연결 실패
-            throw new IllegalStateException(Messages.get("auth.kakao.verification-failed"), e);
+            throw new ServiceUnavailableException(Messages.get("auth.kakao.verification-failed"), e);
         }
     }
 

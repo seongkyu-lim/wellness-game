@@ -1,5 +1,6 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.error.ServiceUnavailableException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.wellnessgame.i18n.Messages;
 import org.slf4j.Logger;
@@ -70,7 +71,7 @@ public class NaverNativeAuthService {
             throw new UnauthorizedException(Messages.get("auth.naver.access-token-invalid"), e);
         } catch (RestClientException e) {
             // 5xx·타임아웃·연결 실패
-            throw new IllegalStateException(Messages.get("auth.naver.verification-failed"), e);
+            throw new ServiceUnavailableException(Messages.get("auth.naver.verification-failed"), e);
         }
     }
 

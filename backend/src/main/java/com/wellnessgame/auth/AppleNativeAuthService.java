@@ -1,5 +1,6 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.error.ServiceUnavailableException;
 import com.wellnessgame.i18n.Messages;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -94,7 +95,7 @@ public class AppleNativeAuthService {
         try {
             return parser.parseSignedClaims(identityToken).getPayload();
         } catch (JwksUnavailableException e) {
-            throw new IllegalStateException(Messages.get("auth.apple.verification-failed"), e.getCause());
+            throw new ServiceUnavailableException(Messages.get("auth.apple.verification-failed"), e.getCause());
         } catch (ExpiredJwtException e) {
             throw new UnauthorizedException(Messages.get("auth.apple.identity-token-expired"), e);
         } catch (IncorrectClaimException | MissingClaimException e) {

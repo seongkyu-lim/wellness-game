@@ -1,5 +1,6 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.error.ServiceUnavailableException;
 import com.wellnessgame.i18n.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
@@ -56,7 +57,7 @@ public class GoogleNativeAuthService {
         } catch (HttpClientErrorException e) {
             throw new UnauthorizedException(Messages.get("auth.google.id-token-invalid"), e);
         } catch (RestClientException e) {
-            throw new IllegalStateException(Messages.get("auth.google.verification-failed"), e);
+            throw new ServiceUnavailableException(Messages.get("auth.google.verification-failed"), e);
         }
         if (info == null) {
             throw new UnauthorizedException(Messages.get("auth.google.id-token-invalid"));

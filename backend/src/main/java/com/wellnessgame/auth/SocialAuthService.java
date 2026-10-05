@@ -1,5 +1,7 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.error.BadRequestException;
+import com.wellnessgame.error.ServiceUnavailableException;
 import com.wellnessgame.i18n.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.MissingNode;
@@ -32,7 +34,7 @@ public class SocialAuthService {
 
     public SocialLoginResult authenticate(String providerName, String code, String redirectUri) {
         if (!SUPPORTED.contains(providerName)) {
-            throw new IllegalArgumentException(Messages.get("auth.social.unsupported-provider", providerName));
+            throw new BadRequestException(Messages.get("auth.social.unsupported-provider", providerName));
         }
         OAuthProperties.Provider provider = switch (providerName) {
             case "kakao" -> properties.kakao();
@@ -40,7 +42,7 @@ public class SocialAuthService {
             default -> properties.google();
         };
         if (provider == null || !provider.configured()) {
-            throw new IllegalStateException(
+            throw new ServiceUnavailableException(
                     Messages.get("auth.social.not-configured", providerName, providerName.toUpperCase()));
         }
 
@@ -48,24 +50,24 @@ public class SocialAuthService {
             String accessToken = requestAccessToken(provider, code, redirectUri);
             return toResult(providerName, requestProfile(provider, accessToken));
         } catch (RestClientException e) {
-            throw new IllegalStateException(Messages.get("auth.social.failed", providerName), e);
+            throw new ServiceUnavailableException(Messages.get("auth.social.failed", providerName), e);
         }
     }
 
     /**
      * provider 액세스 토큰으로 profile-uri 를 호출한다. iOS 네이티브 로그인(카카오·네이버)도 같은 호출을 쓴다.
-     * profile-uri 가 없으면 {@link IllegalStateException}, 호출 실패는 {@link RestClientException} 그대로 던진다.
+     * profile-uri 가 없으면 {@link ServiceUnavailableException}, 호출 실패는 {@link RestClientException} 그대로 던진다.
      */
     JsonNode fetchProfile(String providerName, String accessToken) {
         OAuthProperties.Provider provider = switch (providerName) {
             case "kakao" -> properties.kakao();
             case "naver" -> properties.naver();
             case "google" -> properties.google();
-            default -> throw new IllegalArgumentException(
+            default -> throw new BadRequestException(
                     Messages.get("auth.social.unsupported-provider", providerName));
         };
         if (provider == null || provider.profileUri() == null || provider.profileUri().isBlank()) {
-            throw new IllegalStateException(Messages.get("auth.social.failed", providerName));
+            throw new ServiceUnavailableException(Messages.get("auth.social.failed", providerName));
         }
         return requestProfile(provider, accessToken);
     }
@@ -97,7 +99,7 @@ public class SocialAuthService {
 
         String accessToken = response == null ? null : response.path("access_token").asText(null);
         if (accessToken == null) {
-            throw new IllegalStateException(Messages.get("auth.social.token-issue-failed"));
+            throw new ServiceUnavailableException(Messages.get("auth.social.token-issue-failed"));
         }
         return accessToken;
     }
