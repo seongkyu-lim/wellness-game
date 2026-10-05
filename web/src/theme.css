@@ -166,6 +166,10 @@ h2 {
   transform: skewX(-12deg);
 }
 
+.section-head + .hint {
+  margin-top: 10px;
+}
+
 .section-tools {
   display: flex;
   align-items: center;

@@ -76,8 +76,10 @@ export default function App() {
   return (
     <main className="container">
       <header className="header">
+        <h1 className="brand">
+          Wellness <span>Game</span>
+        </h1>
         <p className="date">{dateLabel}</p>
-        <h1>오늘도 한 뼘 성장해요 🌱</h1>
       </header>
 
       {error && (
