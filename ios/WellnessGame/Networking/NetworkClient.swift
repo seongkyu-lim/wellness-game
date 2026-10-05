@@ -25,25 +25,13 @@ struct NetworkClient {
     let tokenStore: AccessTokenStore?
 
     init(
-        baseURL: URL = URL(string: "http://127.0.0.1:8080")!,
+        baseURL: URL = ServerEnvironment.defaultBaseURL,
         session: URLSession = .shared,
         tokenStore: AccessTokenStore? = nil
     ) {
         self.baseURL = baseURL
         self.session = session
         self.tokenStore = tokenStore
-    }
-
-    /// 서버가 메시지를 번역할 수 있도록 보내는 `Accept-Language` 값. 서버가 지원하는 ko·en만 보낸다.
-    /// 기기 선호 언어 순서대로 처음 만나는 ko/en을 쓰고, 둘 다 없으면 개발 언어(en)로 대체한다.
-    static func acceptLanguage(preferredLanguages: [String] = Locale.preferredLanguages) -> String {
-        for identifier in preferredLanguages {
-            let code = Locale(identifier: identifier).language.languageCode?.identifier
-            if code == "ko" || code == "en" {
-                return code ?? "en"
-            }
-        }
-        return "en"
     }
 
     func sync(_ requestBody: HealthActivitySyncRequest) async throws -> HealthActivitySyncResponse {
@@ -104,7 +92,8 @@ struct NetworkClient {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(Self.acceptLanguage(), forHTTPHeaderField: "Accept-Language")
+        // 서버가 메시지를 번역할 수 있도록 지원 언어(ko·en)를 보낸다.
+        request.setValue(AppLanguage.acceptLanguage(), forHTTPHeaderField: "Accept-Language")
         if authorized, let token = tokenStore?.loadToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }

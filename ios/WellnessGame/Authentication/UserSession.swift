@@ -24,6 +24,7 @@ enum LoginProvider: String {
 /// - 토큰은 Keychain(`AccessTokenStore`), 표시용 정보는 UserDefaults에 둔다.
 /// - `userId`는 서버 응답 값만 사용하며 앱이 직접 조합하지 않는다.
 /// - 게스트 세션은 없다. 로그인하지 않으면 `userId == nil`이다.
+/// - 로그인·세션 복원·로그아웃·401 때마다 Watch에 로그인 정보(로그아웃이면 빈 값)를 전달한다.
 @MainActor
 final class UserSession: ObservableObject {
     static var signInPrompt: String { String(localized: "로그인하면 건강 데이터를 동기화하고 캐릭터를 키울 수 있어요.") }
@@ -51,14 +52,17 @@ final class UserSession: ObservableObject {
     private let defaults: UserDefaults
     private let tokenStore: AccessTokenStore
     private let now: () -> Date
+    private let watchPublisher: WatchAuthPublishing
 
     init(
         defaults: UserDefaults = .standard,
         tokenStore: AccessTokenStore = KeychainTokenStore(),
+        watchPublisher: WatchAuthPublishing = WatchAuthRelay.shared,
         now: @escaping () -> Date = Date.init
     ) {
         self.defaults = defaults
         self.tokenStore = tokenStore
+        self.watchPublisher = watchPublisher
         self.now = now
         restore()
     }
@@ -96,6 +100,7 @@ final class UserSession: ObservableObject {
             defaults.removeObject(forKey: Key.expiresAt)
         }
         statusMessage = String(localized: "\(provider.displayName) 계정으로 로그인했습니다.")
+        publishToWatch()
     }
 
     /// 로그아웃: Keychain 토큰과 저장된 세션 정보를 모두 지운다.
@@ -138,6 +143,7 @@ final class UserSession: ObservableObject {
             userId = storedUserId
             displayName = defaults.string(forKey: Key.displayName)
             statusMessage = String(localized: "\(storedProvider.displayName) 계정으로 로그인되어 있습니다.")
+            publishToWatch()
             return
         }
 
@@ -161,5 +167,18 @@ final class UserSession: ObservableObject {
         defaults.removeObject(forKey: Key.userId)
         defaults.removeObject(forKey: Key.displayName)
         defaults.removeObject(forKey: Key.expiresAt)
+        watchPublisher.publish(nil)
+    }
+
+    /// 현재 로그인 정보를 Watch에 보낸다. 토큰이 없으면 보내지 않는다.
+    private func publishToWatch() {
+        guard let userId, let token = tokenStore.loadToken() else { return }
+        watchPublisher.publish(WatchAuthContext(
+            accessToken: token,
+            userId: userId,
+            displayName: displayName,
+            expiresAt: defaults.object(forKey: Key.expiresAt) as? Date,
+            language: AppLanguage.acceptLanguage()
+        ))
     }
 }

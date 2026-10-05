@@ -3,19 +3,32 @@ import XCTest
 // MARK: - Test doubles
 
 /// 네트워크 없이 요청을 가로채 응답을 돌려주는 URLProtocol stub.
+/// 기본 응답 하나(`setStub`) 또는 경로별 응답 맵(`setStubs`)을 쓴다. 맵에 없는 경로는 기본 응답을 돌려준다.
 final class StubURLProtocol: URLProtocol {
     struct Stub {
         let status: Int
         let body: Data
+
+        init(status: Int, json: String) {
+            self.status = status
+            body = Data(json.utf8)
+        }
     }
 
     private static let lock = NSLock()
-    private static var _stub = Stub(status: 200, body: Data())
+    private static var _defaultStub = Stub(status: 200, json: "")
+    private static var _stubsByPath: [String: Stub] = [:]
     private static var _requests: [URLRequest] = []
 
     static func setStub(status: Int, json: String) {
+        setStubs([:], default: Stub(status: status, json: json))
+    }
+
+    /// 경로(`/api/...`)별 응답을 정한다. 맵에 없는 경로는 `default`(기본 404)를 돌려준다.
+    static func setStubs(_ stubs: [String: Stub], default defaultStub: Stub = Stub(status: 404, json: "")) {
         lock.withLock {
-            _stub = Stub(status: status, body: Data(json.utf8))
+            _defaultStub = defaultStub
+            _stubsByPath = stubs
             _requests = []
         }
     }
@@ -24,13 +37,17 @@ final class StubURLProtocol: URLProtocol {
         lock.withLock { _requests }
     }
 
+    static func request(forPath path: String) -> URLRequest? {
+        requests.first { $0.url?.path == path }
+    }
+
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
         let stub = Self.lock.withLock { () -> Stub in
             Self._requests.append(request)
-            return Self._stub
+            return Self._stubsByPath[request.url?.path ?? ""] ?? Self._defaultStub
         }
         let response = HTTPURLResponse(
             url: request.url!,
@@ -152,16 +169,8 @@ final class NetworkClientAuthTests: XCTestCase {
         StubURLProtocol.setStub(status: 200, json: Fixture.passwordLogin)
         _ = try await makeClient(tokenStore: nil).logIn(LoginRequest(username: "alice", password: "password1"))
         let header = StubURLProtocol.requests.last?.value(forHTTPHeaderField: "Accept-Language")
-        XCTAssertEqual(header, NetworkClient.acceptLanguage())
+        XCTAssertEqual(header, AppLanguage.acceptLanguage())
         XCTAssertTrue(["ko", "en"].contains(header ?? ""))
-    }
-
-    func test_acceptLanguage_picksFirstSupportedLanguage() {
-        XCTAssertEqual(NetworkClient.acceptLanguage(preferredLanguages: ["ko-KR", "en-US"]), "ko")
-        XCTAssertEqual(NetworkClient.acceptLanguage(preferredLanguages: ["en-GB", "ko-KR"]), "en")
-        XCTAssertEqual(NetworkClient.acceptLanguage(preferredLanguages: ["ja-JP", "ko-KR"]), "ko")
-        XCTAssertEqual(NetworkClient.acceptLanguage(preferredLanguages: ["zh-Hans-CN"]), "en")
-        XCTAssertEqual(NetworkClient.acceptLanguage(preferredLanguages: []), "en")
     }
 
     func test_sync_omitsAuthorization_whenNoToken() async throws {
@@ -258,7 +267,7 @@ final class UserSessionAuthTests: XCTestCase {
     func test_passwordLogin_storesServerToken_andServerUserId() async throws {
         StubURLProtocol.setStub(status: 200, json: Fixture.passwordLogin)
         let store = InMemoryTokenStore()
-        let session = UserSession(defaults: defaults, tokenStore: store)
+        let session = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
         let service = CredentialAuthService(networkClient: makeClient(tokenStore: store))
 
         await service.logIn(username: "alice", password: "password1", into: session)
@@ -274,7 +283,7 @@ final class UserSessionAuthTests: XCTestCase {
         StubURLProtocol.setStub(status: 200, json: Fixture.passwordLogin)
         let store = InMemoryTokenStore()
         let client = makeClient(tokenStore: store)
-        let session = UserSession(defaults: defaults, tokenStore: store)
+        let session = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
         await CredentialAuthService(networkClient: client)
             .logIn(username: "alice", password: "password1", into: session)
 
@@ -290,7 +299,7 @@ final class UserSessionAuthTests: XCTestCase {
     func test_failedLogin_keepsSignedOut_andStoresNoToken() async {
         StubURLProtocol.setStub(status: 401, json: Fixture.unauthorized)
         let store = InMemoryTokenStore()
-        let session = UserSession(defaults: defaults, tokenStore: store)
+        let session = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
         let service = CredentialAuthService(networkClient: makeClient(tokenStore: store))
 
         await service.logIn(username: "alice", password: "wrongpass", into: session)
@@ -302,10 +311,10 @@ final class UserSessionAuthTests: XCTestCase {
 
     func test_restore_keepsSessionWithTokenAcrossLaunches() throws {
         let store = InMemoryTokenStore()
-        let first = UserSession(defaults: defaults, tokenStore: store)
+        let first = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
         try first.signIn(provider: .google, auth: decodeAuth(Fixture.googleLogin))
 
-        let relaunched = UserSession(defaults: defaults, tokenStore: store)
+        let relaunched = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
 
         XCTAssertEqual(relaunched.userId, "google:123")
         XCTAssertEqual(relaunched.provider, .google)
@@ -314,11 +323,11 @@ final class UserSessionAuthTests: XCTestCase {
 
     func test_restore_signsOut_whenTokenMissing() throws {
         let store = InMemoryTokenStore()
-        try UserSession(defaults: defaults, tokenStore: store)
+        try UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
             .signIn(provider: .google, auth: decodeAuth(Fixture.googleLogin))
         store.deleteToken()
 
-        let relaunched = UserSession(defaults: defaults, tokenStore: store)
+        let relaunched = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
 
         XCTAssertFalse(relaunched.isSignedIn)
         XCTAssertEqual(relaunched.reloginNotice, UserSession.reloginMessage)
@@ -327,11 +336,11 @@ final class UserSessionAuthTests: XCTestCase {
     func test_restore_signsOut_whenTokenExpired() throws {
         let store = InMemoryTokenStore()
         let issuedAt = Date(timeIntervalSince1970: 1_800_000_000)
-        try UserSession(defaults: defaults, tokenStore: store, now: { issuedAt })
+        try UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher(), now: { issuedAt })
             .signIn(provider: .password, auth: decodeAuth(Fixture.passwordLogin))
 
         let later = issuedAt.addingTimeInterval(2_592_001)
-        let relaunched = UserSession(defaults: defaults, tokenStore: store, now: { later })
+        let relaunched = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher(), now: { later })
 
         XCTAssertFalse(relaunched.isSignedIn)
         XCTAssertNil(store.loadToken())
@@ -341,7 +350,7 @@ final class UserSessionAuthTests: XCTestCase {
     func test_existingGuestSession_isMigratedToSignedOut() {
         defaults.set("old-guest-uuid", forKey: "auth.guestIdentifier")
 
-        let session = UserSession(defaults: defaults, tokenStore: InMemoryTokenStore())
+        let session = UserSession(defaults: defaults, tokenStore: InMemoryTokenStore(), watchPublisher: NoopWatchPublisher())
 
         XCTAssertFalse(session.isSignedIn)
         XCTAssertNil(session.userId)
@@ -352,7 +361,7 @@ final class UserSessionAuthTests: XCTestCase {
         defaults.set("google", forKey: "auth.provider")
         defaults.set("123", forKey: "auth.providerUserIdentifier")
 
-        let session = UserSession(defaults: defaults, tokenStore: InMemoryTokenStore())
+        let session = UserSession(defaults: defaults, tokenStore: InMemoryTokenStore(), watchPublisher: NoopWatchPublisher())
 
         XCTAssertFalse(session.isSignedIn)
         XCTAssertNil(defaults.string(forKey: "auth.provider"))
@@ -362,7 +371,7 @@ final class UserSessionAuthTests: XCTestCase {
 
     func test_signOut_clearsKeychainToken() throws {
         let store = InMemoryTokenStore()
-        let session = UserSession(defaults: defaults, tokenStore: store)
+        let session = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
         try session.signIn(provider: .google, auth: decodeAuth(Fixture.googleLogin))
 
         session.signOut()
@@ -374,7 +383,7 @@ final class UserSessionAuthTests: XCTestCase {
 
     func test_handleUnauthorized_clearsToken_andShowsReloginNotice() throws {
         let store = InMemoryTokenStore()
-        let session = UserSession(defaults: defaults, tokenStore: store)
+        let session = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
         try session.signIn(provider: .password, auth: decodeAuth(Fixture.passwordLogin))
 
         session.handleUnauthorized()
@@ -382,12 +391,12 @@ final class UserSessionAuthTests: XCTestCase {
         XCTAssertNil(store.loadToken())
         XCTAssertFalse(session.isSignedIn)
         XCTAssertEqual(session.reloginNotice, UserSession.reloginMessage)
-        XCTAssertFalse(UserSession(defaults: defaults, tokenStore: store).isSignedIn)
+        XCTAssertFalse(UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher()).isSignedIn)
     }
 
     func test_dashboardSync_on401_signsOutSession() async throws {
         let store = InMemoryTokenStore()
-        let session = UserSession(defaults: defaults, tokenStore: store)
+        let session = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
         try session.signIn(provider: .password, auth: decodeAuth(Fixture.passwordLogin))
         let viewModel = DashboardViewModel(
             appleProvider: MockHealthDataProvider(),
@@ -407,7 +416,7 @@ final class UserSessionAuthTests: XCTestCase {
 
     func test_dashboardSync_whenSignedOut_makesNoRequest() async {
         let store = InMemoryTokenStore()
-        let session = UserSession(defaults: defaults, tokenStore: store)
+        let session = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
         let viewModel = DashboardViewModel(
             appleProvider: MockHealthDataProvider(),
             mockProvider: MockHealthDataProvider(),

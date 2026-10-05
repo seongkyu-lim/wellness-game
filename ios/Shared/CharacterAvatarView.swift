@@ -1,46 +1,5 @@
 import SwiftUI
 
-/// 레벨 → 캐릭터 성장 단계. 웹(web/src/lib/growthStage.ts)과 반드시 동일한 구간을 유지해야 한다.
-enum GrowthStage: CaseIterable {
-    case seed, sprout, sapling, young, tree, blossom
-
-    var minLevel: Int {
-        switch self {
-        case .seed: 1
-        case .sprout: 3
-        case .sapling: 6
-        case .young: 10
-        case .tree: 15
-        case .blossom: 20
-        }
-    }
-
-    var displayName: String {
-        displayName(in: .main)
-    }
-
-    /// 지정한 번들(언어)로 만든 단계 이름.
-    func displayName(in bundle: Bundle) -> String {
-        switch self {
-        case .seed: String(localized: "씨앗", bundle: bundle)
-        case .sprout: String(localized: "새싹", bundle: bundle)
-        case .sapling: String(localized: "줄기", bundle: bundle)
-        case .young: String(localized: "어린나무", bundle: bundle)
-        case .tree: String(localized: "나무", bundle: bundle)
-        case .blossom: String(localized: "개화", bundle: bundle)
-        }
-    }
-
-    static func stage(for level: Int) -> GrowthStage {
-        allCases.last { level >= $0.minLevel } ?? .seed
-    }
-
-    /// 다음 성장 단계. 마지막 단계면 nil.
-    static func next(after level: Int) -> GrowthStage? {
-        allCases.first { $0.minLevel > max(level, 1) }
-    }
-}
-
 /// 레벨에 따라 씨앗 → 개화로 자라는 화분 마스코트 '새싹이'.
 /// iOS와 웹(web/src/components/CharacterAvatar.tsx)은 같은 좌표계(SVG viewBox 120×120)와 같은 경로 문자열을 공유한다.
 /// 웹 그림을 고치면 이 파일의 경로·색도 함께 고쳐야 한다.
@@ -58,7 +17,7 @@ struct CharacterAvatarView: View {
         }
         .frame(width: size, height: size)
         .accessibilityElement()
-        .accessibilityLabel(String(localized: "\(stage.displayName) 단계 캐릭터"))
+        .accessibilityLabel(String(localized: "\(stage.displayName) 단계 캐릭터", table: "Shared"))
         .accessibilityAddTraits(.isImage)
         .accessibilityHidden(decorative)
     }
