@@ -20,6 +20,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static com.wellnessgame.support.TestRequests.fromIp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
@@ -146,6 +147,30 @@ class AuthControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", is("아이디 또는 비밀번호가 올바르지 않습니다.")))
                 .andExpect(jsonPath("$.accessToken").doesNotExist());
+    }
+
+    /** #55 잠금은 (아이디, IP) 단위라서 다른 IP 의 정상 로그인은 막지 않는다. */
+    @Test
+    void loginLockoutIsPerUsernameAndClientIp() throws Exception {
+        postJson("/api/auth/signup", """
+                {"username": "erin_01", "password": "password1"}
+                """);
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(fromIp(post("/api/auth/login"), "203.0.113.77")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"username\": \"erin_01\", \"password\": \"wrong-password\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        mockMvc.perform(fromIp(post("/api/auth/login"), "203.0.113.77")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\": \"erin_01\", \"password\": \"password1\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("아이디 또는 비밀번호가 올바르지 않습니다.")));
+        mockMvc.perform(fromIp(post("/api/auth/login"), "198.51.100.77")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\": \"erin_01\", \"password\": \"password1\"}"))
+                .andExpect(status().isOk());
     }
 
     @Test

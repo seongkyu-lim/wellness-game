@@ -2,7 +2,6 @@ package com.wellnessgame.ratelimit;
 
 import com.wellnessgame.support.MutableClock;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -13,7 +12,7 @@ class FixedWindowRateLimiterTest {
     private static final Instant NOW = Instant.parse("2026-10-04T00:00:00Z");
 
     private final MutableClock clock = new MutableClock(NOW);
-    private final FixedWindowRateLimiter limiter = new FixedWindowRateLimiter(clock, Duration.ofMinutes(1));
+    private final FixedWindowRateLimiter limiter = new FixedWindowRateLimiter(clock, Duration.ofMinutes(1), 1_000);
 
     @Test
     void allowsUpToLimitThenRejectsWithRetryAfter() {
@@ -90,22 +89,33 @@ class FixedWindowRateLimiterTest {
     }
 
     @Test
-    void clientIpIgnoresForwardedHeaderUnlessTrusted() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setRemoteAddr("10.0.0.1");
-        request.addHeader("X-Forwarded-For", "1.2.3.4, 203.0.113.7");
+    void evictsOldestWindowInsteadOfRejectingWhenKeyCapReached() {
+        FixedWindowRateLimiter capped = new FixedWindowRateLimiter(clock, Duration.ofMinutes(1), 3);
+        capped.tryAcquire("oldest", 1);
+        clock.setInstant(NOW.plusSeconds(1));
+        capped.tryAcquire("middle", 1);
+        clock.setInstant(NOW.plusSeconds(2));
+        capped.tryAcquire("newest", 1);
 
-        assertThat(ClientIpResolver.resolve(request, false)).isEqualTo("10.0.0.1");
-        assertThat(ClientIpResolver.resolve(request, true)).isEqualTo("203.0.113.7");
+        assertThat(capped.tryAcquire("newcomer", 1).allowed()).isTrue();
+
+        assertThat(capped.trackedKeys()).isEqualTo(3);
+        // 축출된 가장 오래된 키는 새 윈도우로 다시 시작하고, 남은 키는 한도를 유지한다.
+        assertThat(capped.tryAcquire("middle", 1).allowed()).isFalse();
+        assertThat(capped.tryAcquire("oldest", 1).allowed()).isTrue();
     }
 
     @Test
-    void clientIpFallsBackToRemoteAddrWhenTrustedHeaderMissingOrBlank() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setRemoteAddr("10.0.0.1");
-        assertThat(ClientIpResolver.resolve(request, true)).isEqualTo("10.0.0.1");
+    void capPrefersPurgingExpiredKeysBeforeEvicting() {
+        FixedWindowRateLimiter capped = new FixedWindowRateLimiter(clock, Duration.ofMinutes(1), 2);
+        capped.tryAcquire("expired", 1);
+        clock.setInstant(NOW.plusSeconds(50));
+        capped.tryAcquire("active", 1);
+        clock.setInstant(NOW.plusSeconds(61));
 
-        request.addHeader("X-Forwarded-For", " , ");
-        assertThat(ClientIpResolver.resolve(request, true)).isEqualTo("10.0.0.1");
+        capped.tryAcquire("newcomer", 1);
+
+        assertThat(capped.trackedKeys()).isEqualTo(2);
+        assertThat(capped.tryAcquire("active", 1).allowed()).isFalse();
     }
 }

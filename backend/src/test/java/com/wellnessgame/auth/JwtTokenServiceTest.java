@@ -4,12 +4,15 @@ import com.wellnessgame.support.MutableClock;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
@@ -18,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class JwtTokenServiceTest {
     private static final String SECRET = "unit-test-jwt-secret-0123456789abcdef";
     private static final Instant NOW = Instant.parse("2026-10-04T00:00:00Z");
+    private static final Instant CUTOFF = Instant.parse("2026-10-06T00:00:00Z");
 
     private final MutableClock clock = new MutableClock(NOW);
     private final JwtTokenService service = new JwtTokenService(new JwtProperties(SECRET, Duration.ofDays(30)), clock);
@@ -146,29 +150,62 @@ class JwtTokenServiceTest {
     // ---- #55 iss/aud 와 약한 시크릿 ----
 
     @Test
-    void acceptsLegacyTokenWithoutIssuerAndAudienceByDefault() {
-        String legacy = legacyToken("password:abc");
+    void acceptsLegacyTokenIssuedBeforeCutoff() {
+        JwtTokenService withCutoff = serviceWithCutoff(CUTOFF);
+        clock.setInstant(CUTOFF.plus(Duration.ofDays(10)));
 
-        assertThat(service.verify(legacy)).isEqualTo("password:abc");
+        assertThat(withCutoff.verify(legacyToken("password:abc", CUTOFF.minusSeconds(1)))).isEqualTo("password:abc");
     }
 
     @Test
-    void rejectsLegacyTokenWhenLegacyTokensDisabled() {
-        JwtTokenService strict = new JwtTokenService(
-                new JwtProperties(SECRET, Duration.ofDays(30), null, null, false), clock);
+    void rejectsLegacyTokenIssuedAtOrAfterCutoff() {
+        JwtTokenService withCutoff = serviceWithCutoff(CUTOFF);
+        clock.setInstant(CUTOFF.plusSeconds(10));
 
-        assertThatThrownBy(() -> strict.verify(legacyToken("password:abc")))
+        assertThatThrownBy(() -> withCutoff.verify(legacyToken("password:abc", CUTOFF)))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("유효하지 않습니다");
-        assertThat(strict.verify(strict.issue("password:abc").accessToken())).isEqualTo("password:abc");
+        assertThatThrownBy(() -> withCutoff.verify(legacyToken("password:abc", CUTOFF.plusSeconds(1))))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void rejectsLegacyTokenWithoutIssuedAt() {
+        String noIat = Jwts.builder()
+                .subject("password:abc")
+                .expiration(Date.from(NOW.plusSeconds(60)))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
+                .compact();
+
+        assertThatThrownBy(() -> serviceWithCutoff(CUTOFF).verify(noIat)).isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void rejectsAllLegacyTokensWhenCutoffNotSet() {
+        assertThatThrownBy(() -> service.verify(legacyToken("password:abc", NOW.minusSeconds(60))))
+                .isInstanceOf(UnauthorizedException.class);
+        assertThat(service.verify(service.issue("password:abc").accessToken())).isEqualTo("password:abc");
+    }
+
+    @Test
+    void blankCutoffPropertyBindsToNoLegacyTokens() {
+        JwtProperties blank = new Binder(new MapConfigurationPropertySource(Map.of(
+                "auth.jwt.secret", SECRET, "auth.jwt.legacy-cutoff", "")))
+                .bind("auth.jwt", JwtProperties.class).get();
+        JwtProperties set = new Binder(new MapConfigurationPropertySource(Map.of(
+                "auth.jwt.secret", SECRET, "auth.jwt.legacy-cutoff", "2026-10-06T00:00:00Z")))
+                .bind("auth.jwt", JwtProperties.class).get();
+
+        assertThat(blank.legacyCutoff()).isNull();
+        assertThat(set.legacyCutoff()).isEqualTo(Instant.parse("2026-10-06T00:00:00Z"));
     }
 
     @Test
     void rejectsTokenFromAnotherIssuerOrAudience() {
         JwtTokenService otherIssuer = new JwtTokenService(
-                new JwtProperties(SECRET, Duration.ofDays(30), "someone-else", null, true), clock);
+                new JwtProperties(SECRET, Duration.ofDays(30), "someone-else", null, CUTOFF), clock);
         JwtTokenService otherAudience = new JwtTokenService(
-                new JwtProperties(SECRET, Duration.ofDays(30), null, "another-api", true), clock);
+                new JwtProperties(SECRET, Duration.ofDays(30), null, "another-api", CUTOFF), clock);
 
         assertThatThrownBy(() -> service.verify(otherIssuer.issue("google:1").accessToken()))
                 .isInstanceOf(UnauthorizedException.class);
@@ -186,7 +223,7 @@ class JwtTokenServiceTest {
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
                 .compact();
 
-        assertThatThrownBy(() -> service.verify(issuerOnly)).isInstanceOf(UnauthorizedException.class);
+        assertThatThrownBy(() -> serviceWithCutoff(CUTOFF).verify(issuerOnly)).isInstanceOf(UnauthorizedException.class);
     }
 
     @Test
@@ -195,7 +232,7 @@ class JwtTokenServiceTest {
 
         assertThat(properties.issuer()).isEqualTo("wellness-game");
         assertThat(properties.audience()).isEqualTo("wellness-game-api");
-        assertThat(properties.acceptLegacyTokens()).isTrue();
+        assertThat(properties.legacyCutoff()).isNull();
     }
 
     @Test
@@ -217,11 +254,15 @@ class JwtTokenServiceTest {
         }
     }
 
-    private static String legacyToken(String subject) {
+    private JwtTokenService serviceWithCutoff(Instant cutoff) {
+        return new JwtTokenService(new JwtProperties(SECRET, Duration.ofDays(30), null, null, cutoff), clock);
+    }
+
+    private static String legacyToken(String subject, Instant issuedAt) {
         return Jwts.builder()
                 .subject(subject)
-                .issuedAt(Date.from(NOW))
-                .expiration(Date.from(NOW.plus(Duration.ofDays(30))))
+                .issuedAt(Date.from(issuedAt))
+                .expiration(Date.from(issuedAt.plus(Duration.ofDays(30))))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
                 .compact();
     }

@@ -10,7 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
-import static com.wellnessgame.ratelimit.RateLimitIntegrationTest.fromIp;
+import static com.wellnessgame.support.TestRequests.fromIp;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -40,9 +40,29 @@ class TrustedForwardedHeaderRateLimitTest {
 
     @Test
     void usesLastForwardedAddressAddedByProxyNotClientSuppliedFirstOne() throws Exception {
-        loginVia("spoofed-1, 203.0.113.10").andExpect(status().isBadRequest());
+        loginVia("198.51.100.1, 203.0.113.10").andExpect(status().isBadRequest());
 
-        loginVia("spoofed-2, 203.0.113.10").andExpect(status().isTooManyRequests());
+        loginVia("198.51.100.2, 203.0.113.10").andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void usesLastLineWhenProxyAddsSeparateHeaderLine() throws Exception {
+        mockMvc.perform(fromIp(post("/api/auth/login"), PROXY)
+                        .header("X-Forwarded-For", "198.51.100.3")
+                        .header("X-Forwarded-For", "203.0.113.20")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\": \"nobody_fwd\", \"password\": \"wrong-password\"}"))
+                .andExpect(status().isBadRequest());
+
+        loginVia("203.0.113.20").andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void invalidForwardedValueFallsBackToProxyAddress() throws Exception {
+        loginVia("203.0.113.30, not-an-ip").andExpect(status().isBadRequest());
+
+        // 둘 다 프록시 주소(PROXY)로 세어진다.
+        loginVia("203.0.113.31, also-bad").andExpect(status().isTooManyRequests());
     }
 
     private ResultActions loginVia(String forwardedFor) throws Exception {

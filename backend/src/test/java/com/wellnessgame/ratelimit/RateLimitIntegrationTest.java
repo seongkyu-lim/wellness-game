@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import static com.wellnessgame.support.TestAuth.bearer;
+import static com.wellnessgame.support.TestRequests.fromIp;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
@@ -104,8 +105,9 @@ class RateLimitIntegrationTest {
         login("198.51.100.20").andExpect(status().isBadRequest());
     }
 
+    /** {@code /api/auth/{provider}} 코드 교환도 /api/auth/** 한도에 포함된다. */
     @Test
-    void wholeAuthPathIsLimitedPerIp() throws Exception {
+    void providerCodeExchangeCountsTowardWholeAuthLimitPerIp() throws Exception {
         for (int i = 0; i < 4; i++) {
             socialCodeExchange("198.51.100.30").andExpect(status().is(not(429)));
         }
@@ -114,6 +116,15 @@ class RateLimitIntegrationTest {
         // 같은 IP 의 로그인도 /api/auth/** 한도에 걸린다.
         login("198.51.100.30").andExpect(status().isTooManyRequests());
         socialCodeExchange("198.51.100.31").andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void ipv6ClientsInSameSlash64ShareLimit() throws Exception {
+        login("2001:db8:77:1::1").andExpect(status().isBadRequest());
+        login("2001:db8:77:1::2").andExpect(status().isBadRequest());
+
+        login("2001:db8:77:1:ffff::3").andExpect(status().isTooManyRequests());
+        login("2001:db8:77:2::1").andExpect(status().isBadRequest());
     }
 
     @Test
@@ -191,12 +202,5 @@ class RateLimitIntegrationTest {
                 .with(bearer(tokenService, userId))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}"));
-    }
-
-    static MockHttpServletRequestBuilder fromIp(MockHttpServletRequestBuilder builder, String ip) {
-        return builder.with(request -> {
-            request.setRemoteAddr(ip);
-            return request;
-        });
     }
 }

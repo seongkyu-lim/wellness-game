@@ -26,21 +26,23 @@ public class RateLimitInterceptors {
     static final Duration WINDOW = Duration.ofMinutes(1);
 
     private final RateLimitProperties properties;
+    private final ClientIpResolver clientIpResolver;
     private final FixedWindowRateLimiter limiter;
 
-    public RateLimitInterceptors(RateLimitProperties properties, Clock clock) {
+    public RateLimitInterceptors(RateLimitProperties properties, ClientIpResolver clientIpResolver, Clock clock) {
         this.properties = properties;
-        this.limiter = new FixedWindowRateLimiter(clock, WINDOW);
+        this.clientIpResolver = clientIpResolver;
+        this.limiter = new FixedWindowRateLimiter(clock, WINDOW, properties.maxKeys());
     }
 
     /** {@code /api/auth/**} 전체: 클라이언트 IP 별. */
     public HandlerInterceptor auth() {
-        return interceptor("auth", RateLimitProperties::authPerMinute, this::clientIp);
+        return interceptor("auth", RateLimitProperties::authPerMinute, clientIpResolver::resolve);
     }
 
     /** 로그인·가입: 클라이언트 IP 별(더 엄격한 한도). */
     public HandlerInterceptor login() {
-        return interceptor("login", RateLimitProperties::loginPerMinute, this::clientIp);
+        return interceptor("login", RateLimitProperties::loginPerMinute, clientIpResolver::resolve);
     }
 
     /** 동기화: 인증 주체(userId)별. {@link AuthenticationInterceptor} 다음에 등록해야 한다. POST 만 센다. */
@@ -52,10 +54,6 @@ public class RateLimitInterceptors {
             Object userId = request.getAttribute(AuthenticationInterceptor.USER_ID_ATTRIBUTE);
             return userId == null ? null : userId.toString();
         });
-    }
-
-    private String clientIp(HttpServletRequest request) {
-        return ClientIpResolver.resolve(request, properties.trustForwardedHeader());
     }
 
     /**

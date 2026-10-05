@@ -210,16 +210,20 @@ if sleepScore >= 80: xp += 20   # 수면 품질 보너스
 | 대상 | 키 | 기본 한도 | 설정 키 |
 |---|---|---|---|
 | `POST /api/health-activities/sync` | 인증 주체(userId) | 분당 30회 | `app.rate-limit.sync-per-minute` |
-| `/api/auth/**` 전체 | 클라이언트 IP | 분당 20회 | `app.rate-limit.auth-per-minute` |
+| `/api/auth/**` 전체(소셜 로그인 포함) | 클라이언트 IP | 분당 30회 | `app.rate-limit.auth-per-minute` |
 | `/api/auth/login`, `/api/auth/signup` | 클라이언트 IP | 분당 10회(위 한도와 함께) | `app.rate-limit.login-per-minute` |
 
 - 1분 고정 윈도우(첫 요청 시각부터 1분), 단일 인스턴스 인메모리. 한도 0 이하면 해당 제한을 끈다.
 - 초과 시 `429`, `Retry-After: <윈도우가 끝날 때까지 남은 초(올림, 최소 1)>`, 오류 body 형식은 다른 오류와 같다
   (`error.rate-limited`: `"요청이 너무 많아요. N초 후에 다시 시도해 주세요."`).
-- 클라이언트 IP는 연결 주소다. `app.rate-limit.trust-forwarded-header=true`일 때만 `X-Forwarded-For`의 마지막 주소를 쓴다.
+- 클라이언트 IP는 연결 주소다. `app.rate-limit.trust-forwarded-header=true`일 때만 `X-Forwarded-For`의 마지막 줄의
+  마지막 값을 쓰며, 64자를 넘거나 IP 리터럴이 아니면 연결 주소로 돌아간다. IPv6는 /64 접두사 단위로 센다.
+- 메모리의 키 수는 `app.rate-limit.max-keys`(기본 100000)로 제한한다. 가득 차면 만료 키를 먼저 지우고, 그래도 부족하면
+  가장 오래된 윈도우를 내보낸다(새 클라이언트를 거부하지 않는다).
 - CORS preflight(OPTIONS)와 인증 실패(401)한 동기화 요청은 세지 않는다.
-- 아이디 로그인은 같은 아이디로 연속 5회 실패하면 15분 잠긴다(`app.auth.max-failed-logins`, `app.auth.lockout-minutes`).
-  잠금 중 응답은 일반 로그인 실패(400)와 같다.
+- 아이디 로그인은 같은 (아이디, IP)로 5회 실패하면 그 조합이 15분 잠기고(`app.auth.max-failed-logins`), IP와 무관하게
+  한 아이디에 50회 실패가 쌓이면 아이디 전체가 15분 잠긴다(`app.auth.max-failed-logins-per-username`, `app.auth.lockout-minutes`).
+  시도는 비밀번호 비교 전에 먼저 세고, 성공하면 그 (아이디, IP) 기록을 지운다. 잠금 중 응답은 일반 로그인 실패(400)와 같다.
 
 ### 오류 응답 문구
 

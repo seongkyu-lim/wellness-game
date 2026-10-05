@@ -22,7 +22,7 @@ import java.util.Set;
  * HMAC-SHA256 으로 서명한 액세스 토큰을 발급·검증한다. 클레임은 sub(userId), iat, exp, iss, aud 를 둔다.
  *
  * <p>iss·aud 는 검증 때 설정값과 일치해야 한다. 단 #55 이전에 발급돼 iss·aud 가 둘 다 없는 토큰은
- * {@code auth.jwt.accept-legacy-tokens}(기본 true)가 켜져 있는 동안 통과시켜 기존 사용자가 로그아웃되지 않게 한다.
+ * iat 가 {@code auth.jwt.legacy-cutoff} 보다 이전일 때만 통과시켜 기존 사용자가 로그아웃되지 않게 한다.
  */
 @Service
 public class JwtTokenService {
@@ -37,7 +37,7 @@ public class JwtTokenService {
     private final JwtParser parser;
     private final String issuer;
     private final String audience;
-    private final boolean acceptLegacyTokens;
+    private final Instant legacyCutoff;
 
     public JwtTokenService(JwtProperties properties, Clock clock) {
         String secret = properties.secret();
@@ -60,7 +60,7 @@ public class JwtTokenService {
         this.clock = clock;
         this.issuer = properties.issuer();
         this.audience = properties.audience();
-        this.acceptLegacyTokens = properties.acceptLegacyTokens();
+        this.legacyCutoff = properties.legacyCutoff();
         this.parser = Jwts.parser()
                 .verifyWith(key)
                 .clock(() -> Date.from(this.clock.instant()))
@@ -111,13 +111,14 @@ public class JwtTokenService {
         return claims.getSubject();
     }
 
-    /** iss·aud 가 설정값과 맞거나, 둘 다 없는 이전 형식 토큰이고 그런 토큰을 아직 받아 주는 경우. */
+    /** iss·aud 가 설정값과 맞거나, 둘 다 없는 이전 형식 토큰이고 cutoff 이전에 발급된 경우. */
     private boolean hasExpectedIssuerAndAudience(Claims claims) {
         String tokenIssuer = claims.getIssuer();
         Set<String> tokenAudience = claims.getAudience();
         boolean noAudience = tokenAudience == null || tokenAudience.isEmpty();
         if (tokenIssuer == null && noAudience) {
-            return acceptLegacyTokens;
+            Date issuedAt = claims.getIssuedAt();
+            return legacyCutoff != null && issuedAt != null && issuedAt.toInstant().isBefore(legacyCutoff);
         }
         return issuer.equals(tokenIssuer) && !noAudience && tokenAudience.contains(audience);
     }
