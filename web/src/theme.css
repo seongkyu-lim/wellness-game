@@ -241,7 +241,7 @@ h2 {
 }
 
 .sparkle path {
-  stroke: #1f2340;
+  stroke: var(--on-pop);
   stroke-linejoin: round;
 }
 
@@ -330,6 +330,7 @@ h2 {
   background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.45) 0 7px, transparent 7px 14px);
   border-right: var(--line) solid var(--ink);
   transition: width 0.8s ease-out;
+  animation: stripes 1.2s linear infinite;
 }
 
 /* ---------- 스탯 ---------- */
@@ -504,7 +505,7 @@ input {
 
 .btn-kakao {
   background: #fee500;
-  color: #1f2340;
+  color: var(--on-pop);
 }
 
 .btn-naver {
@@ -580,18 +581,14 @@ input {
   animation-delay: 1.1s;
 }
 
-.xp-fill {
-  animation: stripes 1.2s linear infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .bob,
-  .twinkle,
-  .xp-fill {
+  .twinkle {
     animation: none;
   }
 
   .xp-fill {
+    animation: none;
     transition: none;
   }
 }

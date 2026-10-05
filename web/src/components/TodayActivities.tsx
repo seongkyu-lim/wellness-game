@@ -8,7 +8,7 @@ const WORKOUT_LABELS: Record<string, { name: string; icon: ReactNode }> = {
   RUNNING: { name: '달리기', icon: <IconRun size={24} /> },
   WALKING: { name: '걷기', icon: <IconWalk size={24} /> },
   CYCLING: { name: '자전거', icon: <IconBike size={24} /> },
-  STRENGTH_TRAINING: { name: '근력 운동', icon: <IconStrength /> },
+  STRENGTH_TRAINING: { name: '근력 운동', icon: <IconStrength size={24} /> },
   OTHER: { name: '운동', icon: <IconRun size={24} /> },
 }
 
