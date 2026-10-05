@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n/I18nProvider'
 import { growthStage, type StageKey } from '../lib/growthStage'
 
 // 색상 팔레트 (라이트 그린 테마와 어울리는 고정색 — SVG 내부라 다크 모드에서도 유지)
@@ -23,9 +24,10 @@ interface Props {
 
 /** 레벨에 따라 씨앗 → 개화로 자라는 화분 마스코트 '새싹이'. */
 export function CharacterAvatar({ level, size = 76 }: Props) {
+  const { t } = useI18n()
   const stage = growthStage(level)
   return (
-    <svg width={size} height={size} viewBox="0 0 120 120" role="img" aria-label={`${stage.name} 단계 캐릭터`}>
+    <svg width={size} height={size} viewBox="0 0 120 120" role="img" aria-label={t('character.avatarLabel', { stage: t(`stage.${stage.key}`) })}>
       <Plant stage={stage.key} />
       {/* 흙과 화분 — 줄기 아래쪽을 덮도록 식물 뒤에 그린다 */}
       <ellipse cx="60" cy="75" rx="19" ry="4.5" fill={C.soil} />

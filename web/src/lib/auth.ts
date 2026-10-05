@@ -1,4 +1,5 @@
 import { postSocialLogin } from '../api/client'
+import { t } from '../i18n/core'
 
 // iOS 앱과 동일한 provider 집합 (Apple은 유료 개발자 계정 + HTTPS 필요로 웹 미지원)
 export type Provider = 'google' | 'kakao' | 'naver'
@@ -99,12 +100,12 @@ export async function completeLoginFromRedirect(): Promise<Session | null> {
   window.history.replaceState(null, '', window.location.pathname)
 
   if (state !== savedState) {
-    throw new Error('로그인 상태 검증에 실패했습니다. 다시 시도해 주세요.')
+    throw new Error(t('error.stateMismatch'))
   }
 
   const provider = state.split(':')[0]
   if (!isProvider(provider)) {
-    throw new Error('지원하지 않는 로그인 방식입니다.')
+    throw new Error(t('error.unsupportedProvider'))
   }
   const result = await postSocialLogin(provider, code, redirectUri())
   const session: Session = {

@@ -1,4 +1,5 @@
 import type { Character } from '../api/types'
+import { useI18n } from '../i18n/I18nProvider'
 import { growthStage, nextStage } from '../lib/growthStage'
 import { CharacterAvatar } from './CharacterAvatar'
 
@@ -18,10 +19,10 @@ export function xpProgress(character: Character): number {
 }
 
 const STATS = [
-  { key: 'str', title: 'STR', name: '근력', color: 'var(--stat-str)' },
-  { key: 'vit', title: 'VIT', name: '활력', color: 'var(--stat-vit)' },
-  { key: 'discipline', title: 'DISC', name: '절제', color: 'var(--stat-disc)' },
-  { key: 'recovery', title: 'REC', name: '회복', color: 'var(--stat-rec)' },
+  { key: 'str', title: 'STR', color: 'var(--stat-str)' },
+  { key: 'vit', title: 'VIT', color: 'var(--stat-vit)' },
+  { key: 'discipline', title: 'DISC', color: 'var(--stat-disc)' },
+  { key: 'recovery', title: 'REC', color: 'var(--stat-rec)' },
 ] as const
 
 interface Props {
@@ -29,14 +30,15 @@ interface Props {
 }
 
 export function CharacterCard({ character }: Props) {
+  const { t, formatNumber } = useI18n()
   if (!character) {
     return (
       <section className="hero-card">
         <div className="empty-state">
           <CharacterAvatar level={1} size={64} />
           <div>
-            <h2>새싹이가 기다리고 있어요</h2>
-            <p>iPhone 앱에서 건강 데이터를 동기화하면 XP를 얻고 씨앗이 자라나요.</p>
+            <h2>{t('character.emptyTitle')}</h2>
+            <p>{t('character.emptyBody')}</p>
           </div>
         </div>
       </section>
@@ -48,7 +50,7 @@ export function CharacterCard({ character }: Props) {
   const next = nextStage(character.level)
 
   return (
-    <section className="hero-card" aria-label="내 캐릭터">
+    <section className="hero-card" aria-label={t('character.label')}>
       <div className="hero-row">
         <div className="ring-wrap">
           <svg width="110" height="110" viewBox="0 0 110 110" aria-hidden>
@@ -79,13 +81,15 @@ export function CharacterCard({ character }: Props) {
         </div>
         <div className="hero-meta">
           <span className="pill lime">
-            Lv.{character.level} · {stage.name} 단계
+            {t('character.stageBadge', { level: character.level, stage: t(`stage.${stage.key}`) })}
           </span>
           <span className="xp">
-            {character.currentXp.toLocaleString()} / {character.nextLevelXp.toLocaleString()} XP
+            {formatNumber(character.currentXp)} / {formatNumber(character.nextLevelXp)} XP
           </span>
           <span className="hint">
-            {next ? `Lv.${next.minLevel}이 되면 ${next.name} 단계로 자라나요` : '마지막 단계까지 모두 자랐어요 🌸'}
+            {next
+              ? t('character.nextStage', { level: next.minLevel, stage: t(`stage.${next.key}`) })
+              : t('character.maxStage')}
           </span>
         </div>
       </div>
@@ -96,7 +100,7 @@ export function CharacterCard({ character }: Props) {
               {character.stats[stat.key]}
             </div>
             <div className="name">
-              {stat.title} · {stat.name}
+              {stat.title} · {t(`stat.${stat.key}`)}
             </div>
           </div>
         ))}

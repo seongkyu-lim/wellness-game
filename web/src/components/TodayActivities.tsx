@@ -1,19 +1,19 @@
 import type { ActivityEntry } from '../api/types'
+import { useI18n } from '../i18n/I18nProvider'
 
-const WORKOUT_LABELS: Record<string, { name: string; emoji: string }> = {
-  SWIMMING: { name: '수영', emoji: '🏊' },
-  RUNNING: { name: '달리기', emoji: '🏃' },
-  WALKING: { name: '걷기', emoji: '🚶' },
-  CYCLING: { name: '자전거', emoji: '🚴' },
-  STRENGTH_TRAINING: { name: '근력 운동', emoji: '🏋️' },
-  OTHER: { name: '운동', emoji: '💪' },
-}
+const WORKOUT_EMOJIS = {
+  SWIMMING: '🏊',
+  RUNNING: '🏃',
+  WALKING: '🚶',
+  CYCLING: '🚴',
+  STRENGTH_TRAINING: '🏋️',
+  OTHER: '💪',
+} as const
 
-export function sleepDurationText(minutes: number | null): string {
-  if (minutes == null) {
-    return '기록 없음'
-  }
-  return `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`
+type WorkoutKey = keyof typeof WORKOUT_EMOJIS
+
+function workoutKey(source: string): WorkoutKey {
+  return source in WORKOUT_EMOJIS ? (source as WorkoutKey) : 'OTHER'
 }
 
 interface Props {
@@ -25,25 +25,33 @@ interface Props {
 }
 
 export function TodayActivities({ date, onDateChange, activities, onRefresh, loading }: Props) {
+  const { t, formatNumber } = useI18n()
   const today = new Date().toISOString().slice(0, 10)
   const steps = activities.find((a) => a.type === 'STEPS')
   const sleep = activities.find((a) => a.type === 'SLEEP')
   const workouts = activities.filter((a) => a.type === 'WORKOUT')
+  const sleepText =
+    sleep?.sleepMinutes == null
+      ? t('activity.noRecord')
+      : t('activity.sleepDuration', {
+          hours: Math.floor(sleep.sleepMinutes / 60),
+          minutes: sleep.sleepMinutes % 60,
+        })
 
   return (
-    <section className="card" aria-label="활동 기록">
+    <section className="card" aria-label={t('activity.label')}>
       <div className="section-head">
-        <h2 className="section-title">☀️ 활동 기록</h2>
+        <h2 className="section-title">{t('activity.title')}</h2>
         <div className="section-tools">
           <input
             type="date"
-            aria-label="조회 날짜"
+            aria-label={t('activity.dateLabel')}
             value={date}
             max={today}
             onChange={(e) => onDateChange(e.target.value)}
           />
           <button className="btn btn-secondary btn-compact" onClick={onRefresh} disabled={loading}>
-            새로고침
+            {t('activity.refresh')}
           </button>
         </div>
       </div>
@@ -54,11 +62,8 @@ export function TodayActivities({ date, onDateChange, activities, onRefresh, loa
             📱
           </span>
           <div>
-            <h2>아직 동기화된 기록이 없어요</h2>
-            <p>
-              iPhone 앱이 HealthKit 데이터를 자동으로 수집해요. 앱에서 &lsquo;서버에 동기화&rsquo;를 누르면 이곳에
-              바로 표시됩니다.
-            </p>
+            <h2>{t('activity.emptyTitle')}</h2>
+            <p>{t('activity.emptyBody')}</p>
           </div>
         </div>
       ) : (
@@ -68,25 +73,25 @@ export function TodayActivities({ date, onDateChange, activities, onRefresh, loa
               <span className="metric-icon" aria-hidden>
                 👟
               </span>
-              <span className="metric-value">{steps?.steps?.toLocaleString() ?? '기록 없음'}</span>
-              <span className="metric-name">걸음 수</span>
+              <span className="metric-value">{steps?.steps != null ? formatNumber(steps.steps) : t('activity.noRecord')}</span>
+              <span className="metric-name">{t('activity.steps')}</span>
             </div>
             <div className="metric-card">
               <span className="metric-icon" aria-hidden>
                 🌙
               </span>
-              <span className="metric-value">{sleepDurationText(sleep?.sleepMinutes ?? null)}</span>
-              <span className="metric-name">수면</span>
+              <span className="metric-value">{sleepText}</span>
+              <span className="metric-name">{t('activity.sleep')}</span>
             </div>
           </div>
 
           {workouts.map((workout, index) => {
-            const label = WORKOUT_LABELS[workout.source] ?? WORKOUT_LABELS.OTHER
+            const key = workoutKey(workout.source)
             return (
               <div className="result-row" key={`${workout.source}-${workout.startedAt ?? index}`}>
                 <span className="message">
-                  {label.emoji} {label.name}
-                  {workout.durationMinutes != null && ` · ${workout.durationMinutes}분`}
+                  {WORKOUT_EMOJIS[key]} {t(`workout.${key}`)}
+                  {workout.durationMinutes != null && ` · ${t('activity.minutes', { n: workout.durationMinutes })}`}
                   {workout.calories != null && Number(workout.calories) > 0 && ` · ${Math.round(Number(workout.calories))} kcal`}
                 </span>
                 <span className="pill lime">+{workout.gainedXp} XP</span>
@@ -95,7 +100,7 @@ export function TodayActivities({ date, onDateChange, activities, onRefresh, loa
           })}
 
           <div className="result-row">
-            <span className="message hint">이 날짜에 얻은 XP</span>
+            <span className="message hint">{t('activity.totalXp')}</span>
             <span className="pill lime">+{activities.reduce((sum, a) => sum + a.gainedXp, 0)} XP</span>
           </div>
         </>
