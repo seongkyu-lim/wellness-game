@@ -100,6 +100,29 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 - Apple 교환은 `{"identityToken", "fullName"(선택)}`을 받고 Apple JWKS로 서명·`iss`·`aud`·`exp`를 검증합니다. `fullName`은 100자를 넘으면 잘라서 씁니다.
 - 로그인 방식별로 별도 계정입니다(`kakao:`, `naver:`, `google:`, `apple:`, `password:` 접두사). 같은 사람이 여러 방식으로 가입해도 계정을 합치지 않습니다.
 
+### 레이트 리밋·로그인 잠금·JWT 설정 (#48, #55)
+
+| 설정 키 (환경변수) | 기본값 | 설명 |
+|---|---|---|
+| `app.rate-limit.sync-per-minute` (`APP_RATE_LIMIT_SYNC_PER_MINUTE`) | `30` | `POST /api/health-activities/sync`, 인증 주체(userId)별 분당 한도 |
+| `app.rate-limit.auth-per-minute` (`APP_RATE_LIMIT_AUTH_PER_MINUTE`) | `20` | `/api/auth/**` 전체, 클라이언트 IP별 분당 한도 |
+| `app.rate-limit.login-per-minute` (`APP_RATE_LIMIT_LOGIN_PER_MINUTE`) | `10` | `/api/auth/login`·`/api/auth/signup`, IP별 분당 한도(위 한도와 함께 적용) |
+| `app.rate-limit.trust-forwarded-header` (`APP_RATE_LIMIT_TRUST_FORWARDED_HEADER`) | `false` | `true`면 `X-Forwarded-For`의 **마지막** 주소를 클라이언트 IP로 사용. 신뢰하는 리버스 프록시 한 단 뒤에서만 켤 것 |
+| `app.auth.max-failed-logins` (`APP_AUTH_MAX_FAILED_LOGINS`) | `5` | 같은 아이디 연속 로그인 실패 허용 횟수 |
+| `app.auth.lockout-minutes` (`APP_AUTH_LOCKOUT_MINUTES`) | `15` | 잠금 시간(분) |
+| `auth.jwt.issuer` (`AUTH_JWT_ISSUER`) | `wellness-game` | 발급 토큰 `iss`, 검증 시 일치 필요 |
+| `auth.jwt.audience` (`AUTH_JWT_AUDIENCE`) | `wellness-game-api` | 발급 토큰 `aud`, 검증 시 포함 필요 |
+| `auth.jwt.accept-legacy-tokens` (`AUTH_JWT_ACCEPT_LEGACY_TOKENS`) | `true` | `iss`·`aud`가 둘 다 없는 이전 발급 토큰 허용 |
+
+- 레이트 리밋 한도를 `0` 이하로 두면 해당 제한이 꺼지고, `max-failed-logins`를 `0` 이하로 두면 잠금이 꺼집니다.
+- 한도를 넘으면 `429 Too Many Requests`, `Retry-After`(초) 헤더, 기존 오류 body(`timestamp`·`status`·`error`·`message`)로 응답합니다. CORS 응답에도 `Retry-After`를 노출합니다.
+- 1분 **고정 윈도우**라서 경계 직전·직후에 몰리면 순간적으로 한도의 최대 2배까지 통과할 수 있습니다.
+- 로그인 잠금 중에는 올바른 비밀번호도 기존 실패와 같은 `400 "아이디 또는 비밀번호가 올바르지 않습니다."`로 거부합니다. 없는 아이디도 같은 횟수 뒤 같은 방식으로 반응하고, 없는 아이디도 bcrypt 비교를 한 번 거쳐 응답 시간으로 아이디 존재가 드러나지 않게 합니다. 성공하면 실패 횟수가 초기화됩니다. 가입의 "이미 사용 중인 아이디" 응답은 클라이언트 UX를 위해 유지하되 IP 레이트 리밋으로 열거 속도를 제한합니다.
+- `AUTH_JWT_SECRET`은 32바이트 이상이어야 하고, 서로 다른 문자가 8종류 미만인 단순한 값(같은 문자 반복 등)이면 기동에 실패합니다. `openssl rand -base64 48` 같은 무작위 값을 쓰세요.
+- **`accept-legacy-tokens` 제거 계획:** 이 변경 배포 전에 발급된 토큰에는 `iss`·`aud`가 없습니다. 기존 사용자가 로그아웃되지 않도록 기본값을 `true`로 두고, 배포 후 토큰 TTL(`AUTH_JWT_TTL`, 기본 30일)이 지나면 `false`로 바꾼 뒤 다음 릴리스에서 옵션과 이전 형식 처리 코드를 제거합니다. `iss`나 `aud` 중 하나만 있는 토큰은 이 옵션과 무관하게 거부합니다.
+
+> **단일 인스턴스 한계:** 레이트 리밋 카운터와 로그인 실패·잠금 상태는 서버 메모리에만 있습니다. 재시작하면 초기화되고, 인스턴스를 여러 대 띄우면 인스턴스마다 따로 세므로 실제 한도가 대수만큼 늘어납니다. 수평 확장 시에는 Redis 등 공용 저장소 기반으로 바꿔야 합니다. 만료된 키는 주기적으로 정리해 메모리에 쌓이지 않습니다.
+
 ## API
 
 ### `POST /api/health-activities/sync`
