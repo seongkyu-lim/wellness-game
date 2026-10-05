@@ -108,6 +108,11 @@ public class HealthActivity {
         this.endedAt = endedAt;
     }
 
+    /** 날짜별 1건인 SLEEP 로그의 externalKey({@code userId|yyyy-MM-dd|SLEEP}). */
+    public static String sleepKey(String userId, LocalDate activityDate) {
+        return String.join("|", userId, activityDate.toString(), ActivityType.SLEEP.name());
+    }
+
     @PrePersist
     void onCreate() {
         createdAt = Instant.now();
@@ -136,6 +141,22 @@ public class HealthActivity {
         this.startedAt = startedAt;
         this.endedAt = endedAt;
         this.gainedXp = gainedXp;
+    }
+
+    public UUID getId() {
+        return id;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public LocalDate getActivityDate() {
+        return activityDate;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
     }
 
     public String getExternalKey() {

@@ -1,5 +1,6 @@
 package com.wellnessgame.activity;
 
+import com.wellnessgame.error.BadRequestException;
 import com.wellnessgame.api.HealthActivitySyncRequest;
 import com.wellnessgame.api.HealthActivitySyncRequest.ActivityPayload;
 import com.wellnessgame.i18n.LocalizedMessage;
@@ -18,7 +19,7 @@ import java.util.Optional;
  * 동기화 요청 검증. 두 단계로 나뉜다.
  * <ul>
  *   <li>{@link #validate}: 구조 오류(필수 필드 누락, 종료 < 시작, 활동 개수 초과, 동기화 날짜가 오늘 ±1일 밖).
- *       IllegalArgumentException 을 던지며 요청 전체가 400 으로 거부된다.</li>
+ *       BadRequestException 을 던지며 요청 전체가 400 으로 거부된다.</li>
  *   <li>{@link #rejectionReason}: 값 범위 위반(상한 초과, 분 값이 구간보다 김, 미래 시각, 날짜 창 이탈 등).
  *       사유(메시지 키 + 인자)를 반환하며 서비스는 해당 항목만 건너뛴다.</li>
  * </ul>
@@ -206,7 +207,7 @@ public class HealthActivitySyncValidator {
 
     private static void require(boolean condition, String messageCode, Object... args) {
         if (!condition) {
-            throw new IllegalArgumentException(Messages.get(messageCode, args));
+            throw new BadRequestException(Messages.get(messageCode, args));
         }
     }
 }

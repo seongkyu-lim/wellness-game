@@ -1,5 +1,7 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.error.BadRequestException;
+import com.wellnessgame.error.ServiceUnavailableException;
 import com.wellnessgame.i18n.Messages;
 import org.slf4j.Logger;
 
@@ -12,15 +14,15 @@ final class NativeAuthSupport {
     }
 
     /** 미설정(503). 호출부에서 {@code throw NativeAuthSupport.unavailable(...)} 로 쓴다. */
-    static IllegalStateException unavailable(Logger log, String provider, String settingHint, String messageCode) {
+    static ServiceUnavailableException unavailable(Logger log, String provider, String settingHint, String messageCode) {
         log.error("{} 네이티브 로그인 설정 없음: {} 를 확인하세요.", provider, settingHint);
-        return new IllegalStateException(Messages.get(messageCode));
+        return new ServiceUnavailableException(Messages.get(messageCode));
     }
 
     /** 빈 토큰(400). */
     static void requireToken(String token, String messageCode) {
         if (token == null || token.isBlank()) {
-            throw new IllegalArgumentException(Messages.get(messageCode));
+            throw new BadRequestException(Messages.get(messageCode));
         }
     }
 

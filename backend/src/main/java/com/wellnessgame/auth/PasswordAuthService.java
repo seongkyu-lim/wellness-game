@@ -1,5 +1,6 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.error.BadRequestException;
 import com.wellnessgame.i18n.Messages;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,7 +22,7 @@ public class PasswordAuthService {
     public PasswordAuthResult signUp(String username, String rawPassword, String displayName) {
         String normalizedUsername = username == null ? "" : username.trim();
         if (repository.existsByUsername(normalizedUsername)) {
-            throw new IllegalArgumentException(Messages.get("auth.username-taken"));
+            throw new BadRequestException(Messages.get("auth.username-taken"));
         }
 
         String resolvedDisplayName = displayName == null || displayName.isBlank()
@@ -42,7 +43,7 @@ public class PasswordAuthService {
         String normalizedUsername = username == null ? "" : username.trim();
         UserCredential credential = repository.findByUsername(normalizedUsername)
                 .filter(found -> passwordEncoder.matches(rawPassword, found.getPasswordHash()))
-                .orElseThrow(() -> new IllegalArgumentException(Messages.get("auth.invalid-credentials")));
+                .orElseThrow(() -> new BadRequestException(Messages.get("auth.invalid-credentials")));
         return new PasswordAuthResult(credential.getUserIdentifier(), credential.getDisplayName());
     }
 }

@@ -114,6 +114,7 @@ class SocialAuthServiceTest {
 
         assertThatIllegalStateException()
                 .isThrownBy(() -> unconfigured.authenticate("kakao", "code", "http://localhost:5173"))
-                .withMessageContaining("kakao");
+                .withMessage("이 로그인 방식은 지금 사용할 수 없어요.")
+                .withMessageNotContaining("OAUTH_");
     }
 }
