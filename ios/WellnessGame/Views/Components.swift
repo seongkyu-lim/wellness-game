@@ -391,14 +391,6 @@ extension ButtonStyle where Self == CelButtonStyle {
 
 // MARK: - Display logic
 
-extension CharacterState {
-    /// 현재 레벨에서의 XP 진행률 (0...1). nextLevelXp가 0 이하이면 0.
-    var xpProgress: Double {
-        guard nextLevelXp > 0 else { return 0 }
-        return min(max(Double(currentXp) / Double(nextLevelXp), 0), 1)
-    }
-}
-
 extension DailyHealthSnapshot {
     /// 수면 시간 표시 문자열. 수면 기록이나 분 데이터가 없으면 "기록 없음".
     var sleepDurationText: String {

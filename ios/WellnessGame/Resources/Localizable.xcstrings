@@ -35,23 +35,6 @@
         }
       }
     },
-    "%@ 단계 캐릭터" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Character, %@ stage"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 단계 캐릭터"
-          }
-        }
-      }
-    },
     "%@ 사용자" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -358,23 +341,6 @@
         }
       }
     },
-    "개화" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Blossom"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "개화"
-          }
-        }
-      }
-    },
     "건강 데이터 읽기 권한이 필요합니다. 설정 앱에서 권한을 확인해 주세요." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -558,23 +524,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "기록 없음"
-          }
-        }
-      }
-    },
-    "나무" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tree"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "나무"
           }
         }
       }
@@ -1021,23 +970,6 @@
         }
       }
     },
-    "새싹" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sprout"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "새싹"
-          }
-        }
-      }
-    },
     "새싹이" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1140,23 +1072,6 @@
         }
       }
     },
-    "씨앗" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Seed"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "씨앗"
-          }
-        }
-      }
-    },
     "아이디" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1204,23 +1119,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "알 수 없는 오류"
-          }
-        }
-      }
-    },
-    "어린나무" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sapling"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "어린나무"
           }
         }
       }
@@ -1374,23 +1272,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "절제"
-          }
-        }
-      }
-    },
-    "줄기" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stem"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "줄기"
           }
         }
       }

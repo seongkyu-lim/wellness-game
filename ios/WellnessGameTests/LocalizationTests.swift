@@ -20,7 +20,6 @@ final class LocalizationTests: XCTestCase {
         "로그인", "로그아웃", "회원가입", "계정", "오늘의 퀘스트", "걸음 수", "수면", "획득 내역",
         "새싹이가 기다리고 있어요", "로그인하고 새싹이를 키워 보세요",
         "근력", "활력", "절제", "회복",
-        "씨앗", "새싹", "줄기", "어린나무", "나무", "개화",
         "수영", "달리기", "걷기", "자전거", "근력 운동", "운동",
         "서버 응답을 확인하지 못했습니다.", "알 수 없는 오류",
         "건강 데이터 읽기 권한이 필요합니다. 설정 앱에서 권한을 확인해 주세요.",
@@ -50,6 +49,18 @@ final class LocalizationTests: XCTestCase {
         for key in keys {
             XCTAssertEqual(ko.localizedString(forKey: key, value: nil, table: nil), key)
         }
+    }
+
+    /// iOS·Watch·위젯이 함께 쓰는 `Shared` 테이블(Shared/Resources/Shared.xcstrings).
+    func test_sharedTable_translatesGrowthStagesAndAvatarLabel() {
+        let en = Bundle.localized("en")
+        let ko = Bundle.localized("ko")
+        for key in ["씨앗", "새싹", "줄기", "어린나무", "나무", "개화"] {
+            XCTAssertEqual(ko.localizedString(forKey: key, value: nil, table: "Shared"), key)
+            XCTAssertNotEqual(en.localizedString(forKey: key, value: nil, table: "Shared"), key, "en: '\(key)'이 번역되지 않았습니다")
+        }
+        let label = en.localizedString(forKey: "%@ 단계 캐릭터", value: nil, table: "Shared")
+        XCTAssertEqual(String(format: label, "Sprout"), "Character, Sprout stage")
     }
 
     func test_formatStrings_keepPlaceholdersInEnglish() {

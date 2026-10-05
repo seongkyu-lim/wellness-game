@@ -61,7 +61,100 @@
 		A100000000000000000CA04 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB04 /* InfoPlist.xcstrings */; };
 		A200000000000000000CA05 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB03 /* Localizable.xcstrings */; };
 		A20000000000000000000015 /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000007 /* LocalizationTests.swift */; };
+		7B0000000000000000000029 /* GrowthStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000004 /* GrowthStage.swift */; };
+		7B000000000000000000002A /* ThemePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000005 /* ThemePalette.swift */; };
+		7B000000000000000000002B /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000006 /* AppLanguage.swift */; };
+		7B000000000000000000002C /* ServerEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000007 /* ServerEnvironment.swift */; };
+		7B000000000000000000002D /* WatchAuthContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000008 /* WatchAuthContext.swift */; };
+		7B000000000000000000002E /* LevelProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000003 /* LevelProgress.swift */; };
+		7B000000000000000000002F /* WatchAuthRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000009 /* WatchAuthRelay.swift */; };
+		7B0000000000000000000030 /* Shared.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000014 /* Shared.xcstrings */; };
+		7B0000000000000000000031 /* GrowthStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000004 /* GrowthStage.swift */; };
+		7B0000000000000000000032 /* ThemePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000005 /* ThemePalette.swift */; };
+		7B0000000000000000000033 /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000006 /* AppLanguage.swift */; };
+		7B0000000000000000000034 /* ServerEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000007 /* ServerEnvironment.swift */; };
+		7B0000000000000000000035 /* WatchAuthContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000008 /* WatchAuthContext.swift */; };
+		7B0000000000000000000036 /* LevelProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000003 /* LevelProgress.swift */; };
+		7B0000000000000000000037 /* WatchAuthRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000009 /* WatchAuthRelay.swift */; };
+		7B0000000000000000000038 /* CharacterSummaryResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000001 /* CharacterSummaryResponse.swift */; };
+		7B0000000000000000000039 /* CharacterSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000002 /* CharacterSnapshot.swift */; };
+		7B000000000000000000003A /* WatchCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000000B /* WatchCredentialStore.swift */; };
+		7B000000000000000000003B /* WatchAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000000C /* WatchAPIClient.swift */; };
+		7B000000000000000000003C /* WatchConnectivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000012 /* WatchConnectivityTests.swift */; };
+		7B000000000000000000003D /* WatchCompanionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000013 /* WatchCompanionTests.swift */; };
+		7B000000000000000000003E /* Shared.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000014 /* Shared.xcstrings */; };
+		7B000000000000000000003F /* WellnessGameWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000000A /* WellnessGameWatchApp.swift */; };
+		7B0000000000000000000040 /* WatchCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000000B /* WatchCredentialStore.swift */; };
+		7B0000000000000000000041 /* WatchAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000000C /* WatchAPIClient.swift */; };
+		7B0000000000000000000042 /* WatchAuthReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000000D /* WatchAuthReceiver.swift */; };
+		7B0000000000000000000043 /* WatchDashboardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000000E /* WatchDashboardModel.swift */; };
+		7B0000000000000000000044 /* WatchContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000000F /* WatchContentView.swift */; };
+		7B0000000000000000000045 /* WatchTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000010 /* WatchTheme.swift */; };
+		7B0000000000000000000046 /* CharacterResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* CharacterResponse.swift */; };
+		7B0000000000000000000047 /* CharacterSummaryResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000001 /* CharacterSummaryResponse.swift */; };
+		7B0000000000000000000048 /* CharacterSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000002 /* CharacterSnapshot.swift */; };
+		7B0000000000000000000049 /* LevelProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000003 /* LevelProgress.swift */; };
+		7B000000000000000000004A /* GrowthStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000004 /* GrowthStage.swift */; };
+		7B000000000000000000004B /* CharacterAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* CharacterAvatarView.swift */; };
+		7B000000000000000000004C /* ThemePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000005 /* ThemePalette.swift */; };
+		7B000000000000000000004D /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000006 /* AppLanguage.swift */; };
+		7B000000000000000000004E /* ServerEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000007 /* ServerEnvironment.swift */; };
+		7B000000000000000000004F /* WatchAuthContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000008 /* WatchAuthContext.swift */; };
+		7B0000000000000000000050 /* KeychainTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB02 /* KeychainTokenStore.swift */; };
+		7B0000000000000000000051 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000015 /* Localizable.xcstrings */; };
+		7B0000000000000000000052 /* Shared.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000014 /* Shared.xcstrings */; };
+		7B0000000000000000000053 /* WellnessGameWatchWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000011 /* WellnessGameWatchWidgets.swift */; };
+		7B0000000000000000000054 /* CharacterSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000002 /* CharacterSnapshot.swift */; };
+		7B0000000000000000000055 /* LevelProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000003 /* LevelProgress.swift */; };
+		7B0000000000000000000056 /* GrowthStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000004 /* GrowthStage.swift */; };
+		7B0000000000000000000057 /* ThemePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000005 /* ThemePalette.swift */; };
+		7B0000000000000000000058 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000016 /* Localizable.xcstrings */; };
+		7B0000000000000000000059 /* Shared.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000014 /* Shared.xcstrings */; };
+		7B000000000000000000005A /* WellnessGameWatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000001C /* WellnessGameWatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7B000000000000000000005B /* WellnessGameWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000001B /* WellnessGameWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		7C0000000000000000000064 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E10000000000000000000002 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7E000000000000000000001D;
+			remoteInfo = WellnessGameWatch;
+		};
+		7C0000000000000000000065 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E10000000000000000000002 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7E0000000000000000000023;
+			remoteInfo = WellnessGameWatchWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7E0000000000000000000028 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				7B000000000000000000005B /* WellnessGameWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7E0000000000000000000021 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				7B000000000000000000005A /* WellnessGameWatchWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		B10000000000000000000001 /* WellnessGameApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessGameApp.swift; sourceTree = "<group>"; };
@@ -99,6 +192,34 @@
 		B100000000000000000CB03 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		B100000000000000000CB04 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		B20000000000000000000007 /* LocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationTests.swift; sourceTree = "<group>"; };
+		7F0000000000000000000001 /* CharacterSummaryResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterSummaryResponse.swift; sourceTree = "<group>"; };
+		7F0000000000000000000002 /* CharacterSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterSnapshot.swift; sourceTree = "<group>"; };
+		7F0000000000000000000003 /* LevelProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelProgress.swift; sourceTree = "<group>"; };
+		7F0000000000000000000004 /* GrowthStage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrowthStage.swift; sourceTree = "<group>"; };
+		7F0000000000000000000005 /* ThemePalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemePalette.swift; sourceTree = "<group>"; };
+		7F0000000000000000000006 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
+		7F0000000000000000000007 /* ServerEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerEnvironment.swift; sourceTree = "<group>"; };
+		7F0000000000000000000008 /* WatchAuthContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAuthContext.swift; sourceTree = "<group>"; };
+		7F0000000000000000000009 /* WatchAuthRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAuthRelay.swift; sourceTree = "<group>"; };
+		7F000000000000000000000A /* WellnessGameWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessGameWatchApp.swift; sourceTree = "<group>"; };
+		7F000000000000000000000B /* WatchCredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchCredentialStore.swift; sourceTree = "<group>"; };
+		7F000000000000000000000C /* WatchAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAPIClient.swift; sourceTree = "<group>"; };
+		7F000000000000000000000D /* WatchAuthReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAuthReceiver.swift; sourceTree = "<group>"; };
+		7F000000000000000000000E /* WatchDashboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchDashboardModel.swift; sourceTree = "<group>"; };
+		7F000000000000000000000F /* WatchContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchContentView.swift; sourceTree = "<group>"; };
+		7F0000000000000000000010 /* WatchTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTheme.swift; sourceTree = "<group>"; };
+		7F0000000000000000000011 /* WellnessGameWatchWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WellnessGameWatchWidgets.swift; sourceTree = "<group>"; };
+		7F0000000000000000000012 /* WatchConnectivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectivityTests.swift; sourceTree = "<group>"; };
+		7F0000000000000000000013 /* WatchCompanionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchCompanionTests.swift; sourceTree = "<group>"; };
+		7F0000000000000000000014 /* Shared.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Shared.xcstrings; sourceTree = "<group>"; };
+		7F0000000000000000000015 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		7F0000000000000000000016 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		7F0000000000000000000017 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		7F0000000000000000000018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		7F0000000000000000000019 /* WellnessGameWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WellnessGameWatch.entitlements; sourceTree = "<group>"; };
+		7F000000000000000000001A /* WellnessGameWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WellnessGameWatchWidgets.entitlements; sourceTree = "<group>"; };
+		7F000000000000000000001B /* WellnessGameWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WellnessGameWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7F000000000000000000001C /* WellnessGameWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WellnessGameWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +243,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7E0000000000000000000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7E0000000000000000000026 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -132,7 +267,10 @@
 				D20000000000000000000001 /* WellnessGameTests */,
 				D10000000000000000000008 /* Frameworks */,
 				D10000000000000000000009 /* Products */,
-			);
+							7D000000000000000000005C /* Shared */,
+				7D000000000000000000005F /* WellnessGameWatch */,
+				7D0000000000000000000063 /* WellnessGameWatchWidgets */,
+);
 			sourceTree = "<group>";
 		};
 		D10000000000000000000002 /* WellnessGame */ = {
@@ -154,7 +292,6 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000004 /* HealthActivityDTO.swift */,
-				B10000000000000000000005 /* CharacterResponse.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -193,7 +330,6 @@
 				B10000000000000000000002 /* ContentView.swift */,
 				B10000000000000000000011 /* Theme.swift */,
 				B10000000000000000000012 /* Components.swift */,
-				B10000000000000000000013 /* CharacterAvatarView.swift */,
 				B10000000000000000000015 /* LoginSheetView.swift */,
 			);
 			path = Views;
@@ -212,7 +348,9 @@
 			children = (
 				B1000000000000000000000E /* WellnessGame.app */,
 				B20000000000000000000003 /* WellnessGameTests.xctest */,
-			);
+							7F000000000000000000001B /* WellnessGameWatch.app */,
+				7F000000000000000000001C /* WellnessGameWatchWidgets.appex */,
+);
 			name = Products;
 			sourceTree = "<group>";
 		};
@@ -226,7 +364,9 @@
 				B20000000000000000000006 /* AuthNetworkingTests.swift */,
 				B20000000000000000000007 /* LocalizationTests.swift */,
 				B200000000000000000CB13 /* SocialLoginTests.swift */,
-			);
+							7F0000000000000000000012 /* WatchConnectivityTests.swift */,
+				7F0000000000000000000013 /* WatchCompanionTests.swift */,
+);
 			path = WellnessGameTests;
 			sourceTree = "<group>";
 		};
@@ -249,9 +389,96 @@
 				B100000000000000000CB01 /* CredentialAuthService.swift */,
 				B100000000000000000CB11 /* LoginProviderPolicy.swift */,
 				B100000000000000000CB12 /* SocialSignIn.swift */,
-				B100000000000000000CB02 /* KeychainTokenStore.swift */,
-			);
+							7F0000000000000000000009 /* WatchAuthRelay.swift */,
+);
 			path = Authentication;
+			sourceTree = "<group>";
+		};
+		7D000000000000000000005C /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				7D000000000000000000005D /* Models */,
+				7F0000000000000000000004 /* GrowthStage.swift */,
+				B10000000000000000000013 /* CharacterAvatarView.swift */,
+				7F0000000000000000000005 /* ThemePalette.swift */,
+				7F0000000000000000000006 /* AppLanguage.swift */,
+				7F0000000000000000000007 /* ServerEnvironment.swift */,
+				7F0000000000000000000008 /* WatchAuthContext.swift */,
+				B100000000000000000CB02 /* KeychainTokenStore.swift */,
+				7D000000000000000000005E /* Resources */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		7D000000000000000000005D /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000005 /* CharacterResponse.swift */,
+				7F0000000000000000000001 /* CharacterSummaryResponse.swift */,
+				7F0000000000000000000002 /* CharacterSnapshot.swift */,
+				7F0000000000000000000003 /* LevelProgress.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		7D000000000000000000005E /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				7F0000000000000000000014 /* Shared.xcstrings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		7D000000000000000000005F /* WellnessGameWatch */ = {
+			isa = PBXGroup;
+			children = (
+				7F000000000000000000000A /* WellnessGameWatchApp.swift */,
+				7D0000000000000000000060 /* Core */,
+				7D0000000000000000000061 /* Views */,
+				7D0000000000000000000062 /* Resources */,
+			);
+			path = WellnessGameWatch;
+			sourceTree = "<group>";
+		};
+		7D0000000000000000000060 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				7F000000000000000000000B /* WatchCredentialStore.swift */,
+				7F000000000000000000000C /* WatchAPIClient.swift */,
+				7F000000000000000000000D /* WatchAuthReceiver.swift */,
+				7F000000000000000000000E /* WatchDashboardModel.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		7D0000000000000000000061 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				7F000000000000000000000F /* WatchContentView.swift */,
+				7F0000000000000000000010 /* WatchTheme.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		7D0000000000000000000062 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				7F0000000000000000000017 /* Info.plist */,
+				7F0000000000000000000019 /* WellnessGameWatch.entitlements */,
+				7F0000000000000000000015 /* Localizable.xcstrings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		7D0000000000000000000063 /* WellnessGameWatchWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				7F0000000000000000000011 /* WellnessGameWatchWidgets.swift */,
+				7F0000000000000000000018 /* Info.plist */,
+				7F000000000000000000001A /* WellnessGameWatchWidgets.entitlements */,
+				7F0000000000000000000016 /* Localizable.xcstrings */,
+			);
+			path = WellnessGameWatchWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -264,11 +491,13 @@
 				C10000000000000000000002 /* Sources */,
 				C10000000000000000000001 /* Frameworks */,
 				C10000000000000000000003 /* Resources */,
-			);
+							7E0000000000000000000028 /* Embed Watch Content */,
+);
 			buildRules = (
 			);
 			dependencies = (
-			);
+							7C0000000000000000000066 /* PBXTargetDependency */,
+);
 			name = WellnessGame;
 			packageProductDependencies = (
 				H10000000000000000000001 /* GoogleSignIn */,
@@ -298,6 +527,42 @@
 			productReference = B20000000000000000000003 /* WellnessGameTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		7E000000000000000000001D /* WellnessGameWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7E0000000000000000000022 /* Build configuration list for PBXNativeTarget "WellnessGameWatch" */;
+			buildPhases = (
+				7E000000000000000000001E /* Sources */,
+				7E0000000000000000000020 /* Frameworks */,
+				7E000000000000000000001F /* Resources */,
+				7E0000000000000000000021 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7C0000000000000000000067 /* PBXTargetDependency */,
+			);
+			name = WellnessGameWatch;
+			productName = WellnessGameWatch;
+			productReference = 7F000000000000000000001B /* WellnessGameWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+		7E0000000000000000000023 /* WellnessGameWatchWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7E0000000000000000000027 /* Build configuration list for PBXNativeTarget "WellnessGameWatchWidgets" */;
+			buildPhases = (
+				7E0000000000000000000024 /* Sources */,
+				7E0000000000000000000026 /* Frameworks */,
+				7E0000000000000000000025 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WellnessGameWatchWidgets;
+			productName = WellnessGameWatchWidgets;
+			productReference = 7F000000000000000000001C /* WellnessGameWatchWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -310,6 +575,12 @@
 				TargetAttributes = {
 					E10000000000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					7E000000000000000000001D = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					7E0000000000000000000023 = {
+						CreatedOnToolsVersion = 26.5;
 					};
 				};
 			};
@@ -334,7 +605,9 @@
 			targets = (
 				E10000000000000000000001 /* WellnessGame */,
 				E20000000000000000000001 /* WellnessGameTests */,
-			);
+							7E000000000000000000001D /* WellnessGameWatch */,
+				7E0000000000000000000023 /* WellnessGameWatchWidgets */,
+);
 		};
 /* End PBXProject section */
 
@@ -345,7 +618,8 @@
 			files = (
 				A100000000000000000CA03 /* Localizable.xcstrings in Resources */,
 				A100000000000000000CA04 /* InfoPlist.xcstrings in Resources */,
-			);
+							7B0000000000000000000030 /* res */,
+);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C20000000000000000000003 /* Resources */ = {
@@ -353,6 +627,25 @@
 			buildActionMask = 2147483647;
 			files = (
 				A200000000000000000CA05 /* Localizable.xcstrings in Resources */,
+							7B000000000000000000003E /* res */,
+);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7E000000000000000000001F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B0000000000000000000051 /* res */,
+				7B0000000000000000000052 /* res */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7E0000000000000000000025 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B0000000000000000000058 /* res */,
+				7B0000000000000000000059 /* res */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -384,7 +677,14 @@
 				A10000000000000000000015 /* CharacterAvatarView.swift in Sources */,
 				A10000000000000000000016 /* AutoSyncPolicy.swift in Sources */,
 				A10000000000000000000017 /* LoginSheetView.swift in Sources */,
-			);
+							7B0000000000000000000029 /* src */,
+				7B000000000000000000002A /* src */,
+				7B000000000000000000002B /* src */,
+				7B000000000000000000002C /* src */,
+				7B000000000000000000002D /* src */,
+				7B000000000000000000002E /* src */,
+				7B000000000000000000002F /* src */,
+);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C20000000000000000000001 /* Sources */ = {
@@ -415,10 +715,73 @@
 				A200000000000000000CA13 /* SocialLoginTests.swift in Sources */,
 				A200000000000000000CA11 /* LoginProviderPolicy.swift in Sources */,
 				A200000000000000000CA12 /* SocialSignIn.swift in Sources */,
+							7B0000000000000000000031 /* src */,
+				7B0000000000000000000032 /* src */,
+				7B0000000000000000000033 /* src */,
+				7B0000000000000000000034 /* src */,
+				7B0000000000000000000035 /* src */,
+				7B0000000000000000000036 /* src */,
+				7B0000000000000000000037 /* src */,
+				7B0000000000000000000038 /* src */,
+				7B0000000000000000000039 /* src */,
+				7B000000000000000000003A /* src */,
+				7B000000000000000000003B /* src */,
+				7B000000000000000000003C /* src */,
+				7B000000000000000000003D /* src */,
+);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7E000000000000000000001E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B000000000000000000003F /* src */,
+				7B0000000000000000000040 /* src */,
+				7B0000000000000000000041 /* src */,
+				7B0000000000000000000042 /* src */,
+				7B0000000000000000000043 /* src */,
+				7B0000000000000000000044 /* src */,
+				7B0000000000000000000045 /* src */,
+				7B0000000000000000000046 /* src */,
+				7B0000000000000000000047 /* src */,
+				7B0000000000000000000048 /* src */,
+				7B0000000000000000000049 /* src */,
+				7B000000000000000000004A /* src */,
+				7B000000000000000000004B /* src */,
+				7B000000000000000000004C /* src */,
+				7B000000000000000000004D /* src */,
+				7B000000000000000000004E /* src */,
+				7B000000000000000000004F /* src */,
+				7B0000000000000000000050 /* src */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7E0000000000000000000024 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B0000000000000000000053 /* src */,
+				7B0000000000000000000054 /* src */,
+				7B0000000000000000000055 /* src */,
+				7B0000000000000000000056 /* src */,
+				7B0000000000000000000057 /* src */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		7C0000000000000000000066 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7E000000000000000000001D /* WellnessGameWatch */;
+			targetProxy = 7C0000000000000000000064 /* PBXContainerItemProxy */;
+		};
+		7C0000000000000000000067 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7E0000000000000000000023 /* WellnessGameWatchWidgets */;
+			targetProxy = 7C0000000000000000000065 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		F10000000000000000000003 /* Debug */ = {
@@ -582,6 +945,116 @@
 			};
 			name = Release;
 		};
+		7A0000000000000000000068 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = WellnessGameWatch/Resources/WellnessGameWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WellnessGameWatch/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.WellnessGame.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		7A0000000000000000000069 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = WellnessGameWatch/Resources/WellnessGameWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WellnessGameWatch/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.WellnessGame.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		7A000000000000000000006A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = WellnessGameWatchWidgets/WellnessGameWatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WellnessGameWatchWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Wellness Game";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.WellnessGame.watchkitapp.complications;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		7A000000000000000000006B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = WellnessGameWatchWidgets/WellnessGameWatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WellnessGameWatchWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Wellness Game";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.WellnessGame.watchkitapp.complications;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -608,6 +1081,24 @@
 			buildConfigurations = (
 				F20000000000000000000001 /* Debug */,
 				F20000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7E0000000000000000000022 /* Build configuration list for PBXNativeTarget "WellnessGameWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A0000000000000000000068 /* Debug */,
+				7A0000000000000000000069 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7E0000000000000000000027 /* Build configuration list for PBXNativeTarget "WellnessGameWatchWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A000000000000000000006A /* Debug */,
+				7A000000000000000000006B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
