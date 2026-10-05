@@ -16,13 +16,18 @@ enum GrowthStage: CaseIterable {
     }
 
     var displayName: String {
+        displayName(in: .main)
+    }
+
+    /// 지정한 번들(언어)로 만든 단계 이름.
+    func displayName(in bundle: Bundle) -> String {
         switch self {
-        case .seed: "씨앗"
-        case .sprout: "새싹"
-        case .sapling: "줄기"
-        case .young: "어린나무"
-        case .tree: "나무"
-        case .blossom: "개화"
+        case .seed: String(localized: "씨앗", bundle: bundle)
+        case .sprout: String(localized: "새싹", bundle: bundle)
+        case .sapling: String(localized: "줄기", bundle: bundle)
+        case .young: String(localized: "어린나무", bundle: bundle)
+        case .tree: String(localized: "나무", bundle: bundle)
+        case .blossom: String(localized: "개화", bundle: bundle)
         }
     }
 
@@ -49,7 +54,7 @@ struct CharacterAvatarView: View {
             Self.drawPot(&context)
         }
         .frame(width: size, height: size)
-        .accessibilityLabel("\(GrowthStage.stage(for: level).displayName) 단계 캐릭터")
+        .accessibilityLabel(String(localized: "\(GrowthStage.stage(for: level).displayName) 단계 캐릭터"))
     }
 
     // MARK: - 팔레트 (SVG와 동일한 고정색)

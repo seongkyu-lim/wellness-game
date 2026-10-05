@@ -82,7 +82,7 @@ struct ContentView: View {
                 Text("Wellness Game")
                     .font(.system(.title2, design: .rounded).weight(.bold))
                     .foregroundStyle(Theme.textPrimary)
-                Text(Date.now.formatted(.dateTime.locale(Locale(identifier: "ko_KR")).month(.wide).day().weekday(.wide)))
+                Text(Date.now.formatted(.dateTime.month(.wide).day().weekday(.wide)))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -91,7 +91,7 @@ struct ContentView: View {
                 showLoginSheet = true
             } label: {
                 if userSession.isSignedIn {
-                    Label(userSession.provider?.displayName ?? "계정", systemImage: "person.crop.circle.fill.badge.checkmark")
+                    Label(userSession.provider?.displayName ?? String(localized: "계정"), systemImage: "person.crop.circle.fill.badge.checkmark")
                         .font(.footnote.weight(.semibold))
                 } else {
                     Text("로그인")
@@ -119,12 +119,12 @@ struct ContentView: View {
 
                 VStack(spacing: 8) {
                     HStack(spacing: 8) {
-                        PillBadge(text: "Lv.\(character.level) · \(GrowthStage.stage(for: character.level).displayName) 단계")
+                        PillBadge(text: String(localized: "Lv.\(character.level) · \(GrowthStage.stage(for: character.level).displayName) 단계"))
                         if response.gainedXp > 0 {
-                            PillBadge(text: "+\(response.gainedXp) XP", color: Theme.primary)
+                            PillBadge(text: "+\(response.gainedXp.formatted()) XP", color: Theme.primary)
                         }
                         if response.levelUp {
-                            PillBadge(text: "레벨업! ✨", color: Theme.amber)
+                            PillBadge(text: String(localized: "레벨업! ✨"), color: Theme.amber)
                         }
                     }
                     Text("\(character.currentXp.formatted()) / \(character.nextLevelXp.formatted()) XP")
@@ -132,8 +132,8 @@ struct ContentView: View {
                         .foregroundStyle(Theme.textPrimary)
                     Text(
                         GrowthStage.next(after: character.level).map {
-                            "Lv.\($0.minLevel)이 되면 \($0.displayName) 단계로 자라나요"
-                        } ?? "마지막 단계까지 모두 자랐어요 🌸"
+                            String(localized: "Lv.\($0.minLevel)이 되면 \($0.displayName) 단계로 자라나요")
+                        } ?? String(localized: "마지막 단계까지 모두 자랐어요 🌸")
                     )
                     .font(.caption)
                     .foregroundStyle(Theme.textSecondary)
@@ -158,9 +158,9 @@ struct ContentView: View {
                             .multilineTextAlignment(.center)
                     }
                     HStack(spacing: 8) {
-                        PillBadge(text: "Lv.1 · \(GrowthStage.seed.displayName) 단계")
+                        PillBadge(text: String(localized: "Lv.\(1) · \(GrowthStage.seed.displayName) 단계"))
                         if let next = GrowthStage.next(after: 1) {
-                            PillBadge(text: "다음 단계 · \(next.displayName) Lv.\(next.minLevel)", color: Theme.textSecondary)
+                            PillBadge(text: String(localized: "다음 단계 · \(next.displayName) Lv.\(next.minLevel)"), color: Theme.textSecondary)
                         }
                     }
                     .padding(.bottom, 12)
@@ -181,7 +181,7 @@ struct ContentView: View {
                 Text("로그인하고 새싹이를 키워 보세요")
                     .font(.system(.title3, design: .rounded).weight(.bold))
                     .foregroundStyle(Theme.textPrimary)
-                Text(userSession.reloginNotice ?? "로그인하면 걸음 · 운동 · 수면이 자동으로 XP가 되어\n캐릭터가 자라나요")
+                Text(userSession.reloginNotice ?? String(localized: "로그인하면 걸음 · 운동 · 수면이 자동으로 XP가 되어\n캐릭터가 자라나요"))
                     .font(.footnote)
                     .foregroundStyle(userSession.reloginNotice == nil ? Theme.textSecondary : Theme.statStrength)
                     .multilineTextAlignment(.center)
@@ -232,7 +232,7 @@ struct ContentView: View {
                             .frame(width: 38, height: 38)
                             .background(Theme.surfaceTint, in: RoundedRectangle(cornerRadius: Theme.chipRadius, style: .continuous))
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(workout.workoutType?.displayName ?? "운동")
+                            Text(workout.workoutType?.displayName ?? String(localized: "운동"))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(Theme.textPrimary)
                             Text("\(workout.durationMinutes ?? 0)분")
@@ -240,7 +240,7 @@ struct ContentView: View {
                                 .foregroundStyle(Theme.textSecondary)
                         }
                         Spacer()
-                        PillBadge(text: "\(Int(workout.calories ?? 0)) kcal", color: Theme.statStrength)
+                        PillBadge(text: "\(Int(workout.calories ?? 0).formatted()) kcal", color: Theme.statStrength)
                     }
                 }
             } else {
@@ -277,7 +277,7 @@ struct ContentView: View {
                                     .font(.caption)
                                     .foregroundStyle(Theme.textSecondary)
                             } else {
-                                PillBadge(text: "+\(result.gainedXp) XP")
+                                PillBadge(text: "+\(result.gainedXp.formatted()) XP")
                             }
                         }
                     }

@@ -60,7 +60,7 @@ struct LoginSheetView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer()
-                PillBadge(text: userSession.provider?.displayName ?? "로그인", color: Theme.primary)
+                PillBadge(text: userSession.provider?.displayName ?? String(localized: "로그인"), color: Theme.primary)
             }
             .padding(16)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -141,9 +141,9 @@ struct LoginSheetView: View {
     }
 
     private func credentialField(
-        title: String,
+        title: LocalizedStringKey,
         text: Binding<String>,
-        prompt: String,
+        prompt: LocalizedStringKey,
         isSecure: Bool
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -181,7 +181,7 @@ struct LoginSheetView: View {
             SignInWithAppleButton(.signIn) { request in
                 request.requestedScopes = [.fullName, .email]
             } onCompletion: { _ in
-                userSession.updateStatus("Apple 로그인은 아직 지원하지 않습니다.")
+                userSession.updateStatus(String(localized: "Apple 로그인은 아직 지원하지 않습니다."))
             }
             .signInWithAppleButtonStyle(.black)
             .frame(height: 48)
@@ -215,7 +215,7 @@ struct LoginSheetView: View {
     private static let disabledOpacity = 0.4
 
     private func socialButton(
-        text: String,
+        text: LocalizedStringKey,
         prefix: String? = nil,
         textColor: Color,
         background: Color,

@@ -39,22 +39,25 @@ final class SleepDurationTextTests: XCTestCase {
 
     func test_sleepDurationText_formatsHoursAndMinutes() {
         let snapshot = makeSnapshot(sleep: HealthActivityDTO(type: .sleep, sleepMinutes: 450))
-        XCTAssertEqual(snapshot.sleepDurationText, "7시간 30분")
+        XCTAssertEqual(snapshot.sleepDurationText(in: .localized("ko")), "7시간 30분")
+        XCTAssertEqual(snapshot.sleepDurationText(in: .localized("en")), "7h 30m")
     }
 
     func test_sleepDurationText_formatsUnderOneHour() {
         let snapshot = makeSnapshot(sleep: HealthActivityDTO(type: .sleep, sleepMinutes: 45))
-        XCTAssertEqual(snapshot.sleepDurationText, "0시간 45분")
+        XCTAssertEqual(snapshot.sleepDurationText(in: .localized("ko")), "0시간 45분")
+        XCTAssertEqual(snapshot.sleepDurationText(in: .localized("en")), "0h 45m")
     }
 
     func test_sleepDurationText_returnsPlaceholderWhenNoSleepRecord() {
         let snapshot = makeSnapshot(sleep: nil)
-        XCTAssertEqual(snapshot.sleepDurationText, "기록 없음")
+        XCTAssertEqual(snapshot.sleepDurationText(in: .localized("ko")), "기록 없음")
+        XCTAssertEqual(snapshot.sleepDurationText(in: .localized("en")), "No data")
     }
 
     func test_sleepDurationText_returnsPlaceholderWhenSleepMinutesMissing() {
         let snapshot = makeSnapshot(sleep: HealthActivityDTO(type: .sleep, sleepMinutes: nil))
-        XCTAssertEqual(snapshot.sleepDurationText, "기록 없음")
+        XCTAssertEqual(snapshot.sleepDurationText(in: .localized("ko")), "기록 없음")
     }
 }
 
@@ -74,12 +77,23 @@ final class XPRingFractionTests: XCTestCase {
 
 final class WorkoutTypePresentationTests: XCTestCase {
     func test_displayName_mapsEveryWorkoutTypeToKorean() {
-        XCTAssertEqual(WorkoutType.swimming.displayName, "수영")
-        XCTAssertEqual(WorkoutType.running.displayName, "달리기")
-        XCTAssertEqual(WorkoutType.walking.displayName, "걷기")
-        XCTAssertEqual(WorkoutType.cycling.displayName, "자전거")
-        XCTAssertEqual(WorkoutType.strengthTraining.displayName, "근력 운동")
-        XCTAssertEqual(WorkoutType.other.displayName, "운동")
+        let ko = Bundle.localized("ko")
+        XCTAssertEqual(WorkoutType.swimming.displayName(in: ko), "수영")
+        XCTAssertEqual(WorkoutType.running.displayName(in: ko), "달리기")
+        XCTAssertEqual(WorkoutType.walking.displayName(in: ko), "걷기")
+        XCTAssertEqual(WorkoutType.cycling.displayName(in: ko), "자전거")
+        XCTAssertEqual(WorkoutType.strengthTraining.displayName(in: ko), "근력 운동")
+        XCTAssertEqual(WorkoutType.other.displayName(in: ko), "운동")
+    }
+
+    func test_displayName_mapsEveryWorkoutTypeToEnglish() {
+        let en = Bundle.localized("en")
+        XCTAssertEqual(WorkoutType.swimming.displayName(in: en), "Swimming")
+        XCTAssertEqual(WorkoutType.running.displayName(in: en), "Running")
+        XCTAssertEqual(WorkoutType.walking.displayName(in: en), "Walking")
+        XCTAssertEqual(WorkoutType.cycling.displayName(in: en), "Cycling")
+        XCTAssertEqual(WorkoutType.strengthTraining.displayName(in: en), "Strength training")
+        XCTAssertEqual(WorkoutType.other.displayName(in: en), "Workout")
     }
 
     func test_iconName_mapsEveryWorkoutTypeToValidSFSymbol() {

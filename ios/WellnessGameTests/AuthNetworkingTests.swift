@@ -148,6 +148,22 @@ final class NetworkClientAuthTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer abc.def")
     }
 
+    func test_requests_sendAcceptLanguage() async throws {
+        StubURLProtocol.setStub(status: 200, json: Fixture.passwordLogin)
+        _ = try await makeClient(tokenStore: nil).logIn(LoginRequest(username: "alice", password: "password1"))
+        let header = StubURLProtocol.requests.last?.value(forHTTPHeaderField: "Accept-Language")
+        XCTAssertEqual(header, NetworkClient.acceptLanguage())
+        XCTAssertTrue(["ko", "en"].contains(header ?? ""))
+    }
+
+    func test_acceptLanguage_picksFirstSupportedLanguage() {
+        XCTAssertEqual(NetworkClient.acceptLanguage(preferredLanguages: ["ko-KR", "en-US"]), "ko")
+        XCTAssertEqual(NetworkClient.acceptLanguage(preferredLanguages: ["en-GB", "ko-KR"]), "en")
+        XCTAssertEqual(NetworkClient.acceptLanguage(preferredLanguages: ["ja-JP", "ko-KR"]), "ko")
+        XCTAssertEqual(NetworkClient.acceptLanguage(preferredLanguages: ["zh-Hans-CN"]), "en")
+        XCTAssertEqual(NetworkClient.acceptLanguage(preferredLanguages: []), "en")
+    }
+
     func test_sync_omitsAuthorization_whenNoToken() async throws {
         StubURLProtocol.setStub(status: 200, json: Fixture.syncResponse)
         let client = makeClient(tokenStore: InMemoryTokenStore())

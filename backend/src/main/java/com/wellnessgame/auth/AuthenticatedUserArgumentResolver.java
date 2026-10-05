@@ -1,5 +1,6 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.i18n.Messages;
 import org.springframework.core.MethodParameter;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.support.WebDataBinderFactory;
@@ -30,6 +31,6 @@ public class AuthenticatedUserArgumentResolver implements HandlerMethodArgumentR
         if (userId instanceof String value && !value.isBlank()) {
             return value;
         }
-        throw new UnauthorizedException("인증이 필요합니다. 로그인해 주세요.");
+        throw new UnauthorizedException(Messages.get("auth.login-required"));
     }
 }

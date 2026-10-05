@@ -30,11 +30,15 @@ final class GrowthStageTests: XCTestCase {
     }
 
     func test_displayName_mapsEveryStageToKorean() {
-        XCTAssertEqual(GrowthStage.seed.displayName, "씨앗")
-        XCTAssertEqual(GrowthStage.sprout.displayName, "새싹")
-        XCTAssertEqual(GrowthStage.sapling.displayName, "줄기")
-        XCTAssertEqual(GrowthStage.young.displayName, "어린나무")
-        XCTAssertEqual(GrowthStage.tree.displayName, "나무")
-        XCTAssertEqual(GrowthStage.blossom.displayName, "개화")
+        let ko = Bundle.localized("ko")
+        XCTAssertEqual(GrowthStage.seed.displayName(in: ko), "씨앗")
+        XCTAssertEqual(GrowthStage.sprout.displayName(in: ko), "새싹")
+        XCTAssertEqual(GrowthStage.sapling.displayName(in: ko), "줄기")
+        XCTAssertEqual(GrowthStage.young.displayName(in: ko), "어린나무")
+        XCTAssertEqual(GrowthStage.tree.displayName(in: ko), "나무")
+        XCTAssertEqual(GrowthStage.blossom.displayName(in: ko), "개화")
+        let en = Bundle.localized("en")
+        XCTAssertEqual(GrowthStage.allCases.map { $0.displayName(in: en) },
+                       ["Seed", "Sprout", "Stem", "Sapling", "Tree", "Blossom"])
     }
 }

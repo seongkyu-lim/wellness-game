@@ -57,6 +57,16 @@ VITE_API_BASE_URL=http://192.168.0.10:8080 npm run dev
 
 Apple 로그인은 Apple Developer 유료 계정 + HTTPS 도메인 + Services ID 등록이 선행돼야 해서 웹에서는 아직 지원하지 않습니다.
 
+## 다국어 (ko / en)
+
+- UI는 한국어(ko)와 영어(en)를 지원합니다. 외부 라이브러리 없이 `src/i18n/`의 사전(`dictionaries.ts`)과
+  `useI18n` 훅·`I18nProvider`로 구현했고, 날짜·숫자 포맷은 `Intl`을 사용합니다.
+- 언어 결정 순서: localStorage(`wellness.lang`) 저장값 → `navigator.language`(ko로 시작하면 ko, 아니면 en).
+  헤더 우측의 한/EN 토글로 수동 전환하며, 선택은 저장되고 `<html lang>`에 반영됩니다.
+- 모든 API 요청에 `Accept-Language: ko|en`을 보내며, 서버 오류 메시지는 서버가 해당 언어로 번역합니다.
+- 문구를 추가할 때는 ko·en 사전에 같은 키를 함께 추가하세요(누락하면 타입 체크가 실패합니다).
+  영어 용어(캐릭터·단계·스탯)는 [GLOSSARY.md](GLOSSARY.md)를 따릅니다.
+
 ## 빌드
 
 ```bash

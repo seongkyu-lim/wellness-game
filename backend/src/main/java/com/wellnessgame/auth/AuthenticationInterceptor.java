@@ -1,5 +1,6 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.i18n.Messages;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
@@ -30,14 +31,14 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         }
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (header == null || header.isBlank()) {
-            throw new UnauthorizedException("인증이 필요합니다. 로그인해 주세요.");
+            throw new UnauthorizedException(Messages.get("auth.login-required"));
         }
         if (!header.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX.length())) {
-            throw new UnauthorizedException("토큰이 유효하지 않습니다.");
+            throw new UnauthorizedException(Messages.get("auth.token-invalid"));
         }
         String token = header.substring(BEARER_PREFIX.length()).trim();
         if (token.isEmpty()) {
-            throw new UnauthorizedException("토큰이 유효하지 않습니다.");
+            throw new UnauthorizedException(Messages.get("auth.token-invalid"));
         }
         request.setAttribute(USER_ID_ATTRIBUTE, tokenService.verify(token));
         return true;

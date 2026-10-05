@@ -4,12 +4,14 @@ import type { ActivityEntry, Character } from './api/types'
 import { AccountSection } from './components/AccountSection'
 import { CharacterCard } from './components/CharacterCard'
 import { TodayActivities } from './components/TodayActivities'
+import { useI18n } from './i18n/I18nProvider'
+import { LanguageToggle } from './components/LanguageToggle'
 import { clearSession, completeLoginFromRedirect, loadSession, type Session } from './lib/auth'
 
 const REFRESH_INTERVAL_MS = 30_000
-const SESSION_EXPIRED_MESSAGE = '로그인이 만료되었습니다. 다시 로그인해 주세요.'
 
 export default function App() {
+  const { t, formatDate } = useI18n()
   const [session, setSession] = useState<Session | null>(loadSession)
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [character, setCharacter] = useState<Character | null>(null)
@@ -30,7 +32,7 @@ export default function App() {
           setSession(newSession)
         }
       })
-      .catch((e) => setError(e instanceof Error ? e.message : '로그인에 실패했습니다.'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('error.loginFailed')))
   }, [])
 
   const signOut = useCallback((message: string | null) => {
@@ -63,16 +65,16 @@ export default function App() {
         return
       }
       if (isUnauthorized(e)) {
-        signOut(SESSION_EXPIRED_MESSAGE)
+        signOut(t('error.sessionExpired'))
         return
       }
-      setError(e instanceof Error ? e.message : '서버에 연결할 수 없습니다. 백엔드가 실행 중인지 확인해 주세요.')
+      setError(e instanceof Error ? e.message : t('error.network'))
     } finally {
       if (activeTokenRef.current === accessToken) {
         setLoading(false)
       }
     }
-  }, [session, date, signOut])
+  }, [session, date, signOut, t])
 
   // 앱이 동기화하면 자동으로 반영되도록 주기적으로 새로고침한다. 로그인 상태에서만 동작한다.
   useEffect(() => {
@@ -84,7 +86,7 @@ export default function App() {
     return () => clearInterval(timer)
   }, [session, refresh])
 
-  const dateLabel = new Date().toLocaleDateString('ko-KR', {
+  const dateLabel = formatDate(new Date(), {
     month: 'long',
     day: 'numeric',
     weekday: 'long',
@@ -93,10 +95,15 @@ export default function App() {
   return (
     <main className="container">
       <header className="header">
-        <h1 className="brand">
-          Wellness <span>Game</span>
-        </h1>
-        <p className="date">{dateLabel}</p>
+        <div className="header-top">
+          <div>
+            <h1 className="brand">
+              Wellness <span>Game</span>
+            </h1>
+            <p className="date">{dateLabel}</p>
+          </div>
+          <LanguageToggle />
+        </div>
       </header>
 
       {error && (

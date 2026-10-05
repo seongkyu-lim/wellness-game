@@ -1,5 +1,6 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.i18n.Messages;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jws;
@@ -70,22 +71,22 @@ public class JwtTokenService {
      */
     public String verify(String token) {
         if (token == null || token.isBlank()) {
-            throw new UnauthorizedException("인증이 필요합니다. 로그인해 주세요.");
+            throw new UnauthorizedException(Messages.get("auth.login-required"));
         }
         Jws<Claims> jws;
         try {
             jws = parser.parseSignedClaims(token);
         } catch (ExpiredJwtException e) {
-            throw new UnauthorizedException("토큰이 만료되었습니다. 다시 로그인해 주세요.", e);
+            throw new UnauthorizedException(Messages.get("auth.token-expired"), e);
         } catch (JwtException | IllegalArgumentException e) {
-            throw new UnauthorizedException("토큰이 유효하지 않습니다.", e);
+            throw new UnauthorizedException(Messages.get("auth.token-invalid"), e);
         }
         Claims claims = jws.getPayload();
         if (!ALGORITHM.equals(jws.getHeader().getAlgorithm())
                 || claims.getExpiration() == null
                 || claims.getSubject() == null
                 || claims.getSubject().isBlank()) {
-            throw new UnauthorizedException("토큰이 유효하지 않습니다.");
+            throw new UnauthorizedException(Messages.get("auth.token-invalid"));
         }
         return claims.getSubject();
     }

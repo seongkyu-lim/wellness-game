@@ -22,7 +22,7 @@ public record HealthActivitySyncRequest(
         @NotNull LocalDate date,
         @NotEmpty
         @Size(max = HealthActivitySyncValidator.MAX_ACTIVITIES_PER_REQUEST,
-                message = "한 번에 최대 {max}개의 활동까지 동기화할 수 있습니다.")
+                message = "{validation.activities.size}")
         List<@Valid ActivityPayload> activities
 ) {
     /** 토큰 주체로 확정된 userId 를 담은 사본. */

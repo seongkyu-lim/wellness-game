@@ -1,5 +1,6 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.i18n.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,10 +43,10 @@ public class GoogleNativeAuthService {
     public SocialLoginResult authenticate(String idToken) {
         if (allowedAudiences.isEmpty()) {
             log.error("구글 로그인 설정 없음: OAUTH_GOOGLE_IOS_CLIENT_ID 또는 OAUTH_GOOGLE_CLIENT_ID 환경변수를 확인하세요.");
-            throw new IllegalStateException("구글 로그인을 사용할 수 없습니다.");
+            throw new IllegalStateException(Messages.get("auth.google.unavailable"));
         }
         if (idToken == null || idToken.isBlank()) {
-            throw new IllegalArgumentException("idToken이 비어 있습니다.");
+            throw new IllegalArgumentException(Messages.get("auth.google.id-token-blank"));
         }
 
         JsonNode info;
@@ -55,27 +56,27 @@ public class GoogleNativeAuthService {
                     .retrieve()
                     .body(JsonNode.class);
         } catch (HttpClientErrorException e) {
-            throw new UnauthorizedException("구글 ID 토큰이 유효하지 않습니다.", e);
+            throw new UnauthorizedException(Messages.get("auth.google.id-token-invalid"), e);
         } catch (RestClientException e) {
-            throw new IllegalStateException("구글 ID 토큰을 검증하지 못했습니다. 잠시 후 다시 시도해 주세요.", e);
+            throw new IllegalStateException(Messages.get("auth.google.verification-failed"), e);
         }
         if (info == null) {
-            throw new UnauthorizedException("구글 ID 토큰이 유효하지 않습니다.");
+            throw new UnauthorizedException(Messages.get("auth.google.id-token-invalid"));
         }
 
         if (!allowedAudiences.contains(info.path("aud").asText(""))) {
-            throw new UnauthorizedException("이 앱에 발급된 구글 ID 토큰이 아닙니다.");
+            throw new UnauthorizedException(Messages.get("auth.google.wrong-audience"));
         }
         if (!GOOGLE_ISSUERS.contains(info.path("iss").asText(""))) {
-            throw new UnauthorizedException("구글 ID 토큰 발급자가 올바르지 않습니다.");
+            throw new UnauthorizedException(Messages.get("auth.google.wrong-issuer"));
         }
         long exp = parseEpochSeconds(info.path("exp"));
         if (!Instant.ofEpochSecond(exp).isAfter(clock.instant())) {
-            throw new UnauthorizedException("구글 ID 토큰이 만료되었습니다. 다시 로그인해 주세요.");
+            throw new UnauthorizedException(Messages.get("auth.google.id-token-expired"));
         }
         String sub = info.path("sub").asText("");
         if (sub.isBlank()) {
-            throw new UnauthorizedException("구글 ID 토큰이 유효하지 않습니다.");
+            throw new UnauthorizedException(Messages.get("auth.google.id-token-invalid"));
         }
         // iOS: GIDGoogleUser.userID == OIDC sub (SocialAuthService 의 웹 규칙과 동일)
         return new SocialLoginResult("google:" + sub, info.path("name").asText(null));
@@ -86,7 +87,7 @@ public class GoogleNativeAuthService {
         try {
             return Long.parseLong(node.asText(""));
         } catch (NumberFormatException e) {
-            throw new UnauthorizedException("구글 ID 토큰이 유효하지 않습니다.", e);
+            throw new UnauthorizedException(Messages.get("auth.google.id-token-invalid"), e);
         }
     }
 

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { Character } from '../api/types'
+import { useI18n } from '../i18n/I18nProvider'
 import { growthStage, nextStage } from '../lib/growthStage'
 import { CharacterAvatar } from './CharacterAvatar'
 import { IconHeart, IconMoon, IconStrength, IconTarget, Sparkle } from './Icons'
@@ -11,11 +12,11 @@ export function xpProgress(character: Character): number {
   return Math.min(Math.max(character.currentXp / character.nextLevelXp, 0), 1)
 }
 
-const STATS: { key: 'str' | 'vit' | 'discipline' | 'recovery'; title: string; name: string; color: string; icon: ReactNode }[] = [
-  { key: 'str', title: 'STR', name: '근력', color: 'var(--stat-str)', icon: <IconStrength /> },
-  { key: 'vit', title: 'VIT', name: '활력', color: 'var(--stat-vit)', icon: <IconHeart /> },
-  { key: 'discipline', title: 'DISC', name: '절제', color: 'var(--stat-disc)', icon: <IconTarget /> },
-  { key: 'recovery', title: 'REC', name: '회복', color: 'var(--stat-rec)', icon: <IconMoon /> },
+const STATS: { key: 'str' | 'vit' | 'discipline' | 'recovery'; title: string; color: string; icon: ReactNode }[] = [
+  { key: 'str', title: 'STR', color: 'var(--stat-str)', icon: <IconStrength /> },
+  { key: 'vit', title: 'VIT', color: 'var(--stat-vit)', icon: <IconHeart /> },
+  { key: 'discipline', title: 'DISC', color: 'var(--stat-disc)', icon: <IconTarget /> },
+  { key: 'recovery', title: 'REC', color: 'var(--stat-rec)', icon: <IconMoon /> },
 ]
 
 interface Props {
@@ -23,18 +24,21 @@ interface Props {
 }
 
 export function CharacterCard({ character }: Props) {
+  const { t } = useI18n()
   const level = character?.level ?? 1
   const stage = growthStage(level)
   const next = nextStage(level)
 
-  let bubble = 'iPhone 앱에서 동기화하면 나도 깨어날게!'
+  let bubble = t('character.bubbleEmpty')
   if (character) {
-    bubble = next ? `Lv.${next.minLevel}이 되면 ${next.name} 단계로 자랄 거야!` : '활짝 피었어! 늘 함께해 줘서 고마워!'
+    bubble = next
+      ? t('character.bubbleNext', { level: next.minLevel, stage: t(`stage.${next.key}`) })
+      : t('character.bubbleMax')
   }
 
   return (
     <>
-      <section className="hero" aria-label="내 캐릭터">
+      <section className="hero" aria-label={t('character.label')}>
         <svg className="hills" viewBox="0 0 390 110" preserveAspectRatio="none" aria-hidden>
           <path className="hill" d="M0 52 Q70 24 150 46 T300 40 T390 50 V110 H0Z" />
           <path className="hill-deep" d="M0 74 Q90 58 190 72 T390 70 V110 H0Z" />
@@ -47,15 +51,19 @@ export function CharacterCard({ character }: Props) {
           <CharacterAvatar level={level} size={210} />
         </div>
         <div className="nameplate">
-          <span className="name-tag">새싹이</span>
-          <span className="level-chip">{character ? `Lv.${level} · ${stage.name} 단계` : '아직 동기화 전'}</span>
+          <span className="name-tag">{t('character.name')}</span>
+          <span className="level-chip">{character ? t('character.stageBadge', { level, stage: t(`stage.${stage.key}`) }) : t('character.notSynced')}</span>
         </div>
       </section>
 
-      {character && <XpCard character={character} nextLabel={next ? `${next.name}까지 Lv.${next.minLevel}` : '최종 단계'} />}
+      {character && <XpCard character={character} nextLabel={
+            next
+              ? t('character.nextStageLabel', { stage: t(`stage.${next.key}`), level: next.minLevel })
+              : t('character.finalStage')
+          } />}
 
       {character && (
-        <section className="stat-grid" aria-label="스탯">
+        <section className="stat-grid" aria-label={t('character.statsLabel')}>
           {STATS.map((stat) => (
             <div className="stat-tile" key={stat.key}>
               <div className="stat-band" style={{ background: stat.color }}>
@@ -63,7 +71,7 @@ export function CharacterCard({ character }: Props) {
               </div>
               <span className="stat-value">{character.stats[stat.key]}</span>
               <span className="stat-name">
-                {stat.title} {stat.name}
+                {stat.title} {t(`stat.${stat.key}`)}
               </span>
             </div>
           ))}
@@ -74,27 +82,28 @@ export function CharacterCard({ character }: Props) {
 }
 
 function XpCard({ character, nextLabel }: { character: Character; nextLabel: string }) {
+  const { t, formatNumber } = useI18n()
   const percent = xpProgress(character) * 100
   return (
-    <section className="card xp-card" aria-label="경험치">
+    <section className="card xp-card" aria-label={t('character.xpLabel')}>
       <div className="xp-head">
         <span className="xp-label">EXP</span>
-        <span className="chip pink">누적 {character.totalXp.toLocaleString()} XP</span>
+        <span className="chip pink">{t('character.xpTotal', { xp: formatNumber(character.totalXp) })}</span>
       </div>
       <div
         className="xp-bar"
         role="progressbar"
-        aria-label="다음 레벨까지 경험치"
+        aria-label={t('character.xpBarLabel')}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(percent)}
-        aria-valuetext={`${character.currentXp.toLocaleString()} / ${character.nextLevelXp.toLocaleString()} XP`}
+        aria-valuetext={`${formatNumber(character.currentXp)} / ${formatNumber(character.nextLevelXp)} XP`}
       >
         <div className="xp-fill" style={{ width: `${percent}%` }} />
       </div>
       <div className="xp-foot">
         <span>
-          {character.currentXp.toLocaleString()} / {character.nextLevelXp.toLocaleString()} XP
+          {formatNumber(character.currentXp)} / {formatNumber(character.nextLevelXp)} XP
         </span>
         <span className="hint">{nextLabel}</span>
       </div>

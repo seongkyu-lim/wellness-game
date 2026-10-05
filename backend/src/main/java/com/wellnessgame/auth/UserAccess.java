@@ -1,5 +1,7 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.i18n.Messages;
+
 /**
  * 요청에 실린 userId(body/경로/쿼리)를 토큰 주체와 대조한다.
  */
@@ -17,7 +19,7 @@ public final class UserAccess {
             return authenticatedUserId;
         }
         if (!requestedUserId.equals(authenticatedUserId)) {
-            throw new ForbiddenException("다른 사용자의 데이터입니다.");
+            throw new ForbiddenException(Messages.get("auth.forbidden"));
         }
         return authenticatedUserId;
     }

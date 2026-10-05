@@ -14,7 +14,7 @@ final class CredentialAuthService: ObservableObject {
     }
 
     func signUp(username: String, password: String, into session: UserSession) async {
-        await authenticate(session: session, statusMessage: "회원가입을 진행하고 있습니다.") {
+        await authenticate(session: session, statusMessage: String(localized: "회원가입을 진행하고 있습니다.")) {
             try await self.networkClient.signUp(
                 SignUpRequest(username: username, password: password, displayName: nil)
             )
@@ -22,7 +22,7 @@ final class CredentialAuthService: ObservableObject {
     }
 
     func logIn(username: String, password: String, into session: UserSession) async {
-        await authenticate(session: session, statusMessage: "로그인을 진행하고 있습니다.") {
+        await authenticate(session: session, statusMessage: String(localized: "로그인을 진행하고 있습니다.")) {
             try await self.networkClient.logIn(
                 LoginRequest(username: username, password: password)
             )

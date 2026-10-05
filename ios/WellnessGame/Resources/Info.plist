@@ -64,9 +64,9 @@
     <key>NAVER_URL_SCHEME</key>
     <string>$(NAVER_URL_SCHEME)</string>
     <key>NSHealthShareUsageDescription</key>
-    <string>걸음 수, 운동, 활동 에너지, 심박수 및 수면 요약을 XP와 캐릭터 성장으로 변환하기 위해 건강 데이터를 읽습니다.</string>
+    <string>Reads your steps, workouts, active energy, heart rate, and sleep summary to turn them into XP and character growth.</string>
     <key>NSHealthUpdateUsageDescription</key>
-    <string>이 앱은 건강 데이터를 기록하지 않으며 읽기 권한만 사용합니다.</string>
+    <string>This app doesn't write any health data. It only uses read access.</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsLocalNetworking</key>

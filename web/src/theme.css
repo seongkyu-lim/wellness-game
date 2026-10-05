@@ -595,3 +595,42 @@ input {
     transition: none;
   }
 }
+
+/* 언어 전환 토글 */
+.header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lang-toggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  border: 2.5px solid var(--field-border);
+  border-radius: 999px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+.lang-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 2px 12px;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.lang-btn.active {
+  background: var(--xp);
+  color: var(--on-pop);
+}
+
+.lang-btn:focus-visible {
+  outline: 3px solid var(--brand-green);
+  outline-offset: 2px;
+}

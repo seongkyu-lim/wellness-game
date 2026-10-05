@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n/I18nProvider'
 import { growthStage, type StageKey } from '../lib/growthStage'
 
 // 셀 애니메이션풍 고정색 — SVG 내부라 다크 모드에서도 유지한다. (디자인 캔버스 '성장 설정화'와 동일)
@@ -45,13 +46,14 @@ interface Props {
 
 /** 레벨에 따라 씨앗 → 개화로 자라는 화분 마스코트 '새싹이'. */
 export function CharacterAvatar({ level, size = 76, decorative = false }: Props) {
+  const { t } = useI18n()
   const stage = growthStage(level)
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 120 120"
-      {...(decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': `${stage.name} 단계의 새싹이` })}
+      {...(decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': t('character.avatarLabel', { stage: t(`stage.${stage.key}`) }) })}
     >
       <ellipse cx="60" cy="112" rx="30" ry="4" fill={C.ink} opacity="0.18" />
       <g stroke={C.ink} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round">

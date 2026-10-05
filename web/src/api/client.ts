@@ -1,3 +1,4 @@
+import { getLanguage, t } from '../i18n/core'
 import type { CharacterSummary, DailyActivitiesResponse } from './types'
 
 const BASE_URL: string = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
@@ -17,8 +18,13 @@ export function isUnauthorized(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401
 }
 
+/** 서버가 응답 메시지를 번역하도록 현재 언어(ko|en)를 항상 함께 보낸다. */
+function languageHeaders(): Record<string, string> {
+  return { 'Accept-Language': getLanguage() }
+}
+
 function authHeaders(accessToken: string): HeadersInit {
-  return { Authorization: `Bearer ${accessToken}` }
+  return { ...languageHeaders(), Authorization: `Bearer ${accessToken}` }
 }
 
 /** 로그인한 본인의 캐릭터 조회. 아직 캐릭터가 없으면 null. */
@@ -64,7 +70,7 @@ export interface TokenResponse {
 export async function postSocialLogin(provider: string, code: string, redirectUri: string): Promise<TokenResponse> {
   const res = await fetch(`${BASE_URL}/api/auth/${encodeURIComponent(provider)}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...languageHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ code, redirectUri }),
   })
   if (!res.ok) {
@@ -72,7 +78,7 @@ export async function postSocialLogin(provider: string, code: string, redirectUr
   }
   const body = (await res.json()) as Partial<TokenResponse>
   if (typeof body.accessToken !== 'string' || !body.accessToken || typeof body.userId !== 'string') {
-    throw new ApiError(res.status, '서버가 인증 토큰을 반환하지 않았습니다.')
+    throw new ApiError(res.status, t('error.noToken'))
   }
   return body as TokenResponse
 }
@@ -80,8 +86,8 @@ export async function postSocialLogin(provider: string, code: string, redirectUr
 async function errorMessage(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { message?: string }
-    return body.message ?? `요청에 실패했습니다. (${res.status})`
+    return body.message ?? t('error.request', { status: res.status })
   } catch {
-    return `요청에 실패했습니다. (${res.status})`
+    return t('error.request', { status: res.status })
   }
 }

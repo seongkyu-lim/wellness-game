@@ -9,11 +9,11 @@ enum NetworkError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "서버 응답을 확인하지 못했습니다."
+            return String(localized: "서버 응답을 확인하지 못했습니다.")
         case let .unauthorized(message):
-            return message.isEmpty ? "인증이 필요합니다. 다시 로그인해 주세요." : message
+            return message.isEmpty ? String(localized: "인증이 필요합니다. 다시 로그인해 주세요.") : message
         case let .server(status, message):
-            return "서버 오류(\(status)): \(message)"
+            return String(localized: "서버 오류(\(status)): \(message)")
         }
     }
 }
@@ -32,6 +32,18 @@ struct NetworkClient {
         self.baseURL = baseURL
         self.session = session
         self.tokenStore = tokenStore
+    }
+
+    /// 서버가 메시지를 번역할 수 있도록 보내는 `Accept-Language` 값. 서버가 지원하는 ko·en만 보낸다.
+    /// 기기 선호 언어 순서대로 처음 만나는 ko/en을 쓰고, 둘 다 없으면 개발 언어(en)로 대체한다.
+    static func acceptLanguage(preferredLanguages: [String] = Locale.preferredLanguages) -> String {
+        for identifier in preferredLanguages {
+            let code = Locale(identifier: identifier).language.languageCode?.identifier
+            if code == "ko" || code == "en" {
+                return code ?? "en"
+            }
+        }
+        return "en"
     }
 
     func sync(_ requestBody: HealthActivitySyncRequest) async throws -> HealthActivitySyncResponse {
@@ -64,6 +76,7 @@ struct NetworkClient {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(Self.acceptLanguage(), forHTTPHeaderField: "Accept-Language")
         if authorized, let token = tokenStore?.loadToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -83,7 +96,7 @@ struct NetworkClient {
             }
             let message = serverMessage
                 ?? String(data: data, encoding: .utf8)
-                ?? "알 수 없는 오류"
+                ?? String(localized: "알 수 없는 오류")
             throw NetworkError.server(status: httpResponse.statusCode, message: message)
         }
         return try JSONDecoder().decode(Response.self, from: data)

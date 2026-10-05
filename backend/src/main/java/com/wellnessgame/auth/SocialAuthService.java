@@ -1,5 +1,6 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.i18n.Messages;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -30,7 +31,7 @@ public class SocialAuthService {
 
     public SocialLoginResult authenticate(String providerName, String code, String redirectUri) {
         if (!SUPPORTED.contains(providerName)) {
-            throw new IllegalArgumentException("지원하지 않는 로그인 제공자입니다: " + providerName);
+            throw new IllegalArgumentException(Messages.get("auth.social.unsupported-provider", providerName));
         }
         OAuthProperties.Provider provider = switch (providerName) {
             case "kakao" -> properties.kakao();
@@ -39,7 +40,7 @@ public class SocialAuthService {
         };
         if (provider == null || !provider.configured()) {
             throw new IllegalStateException(
-                    providerName + " 로그인이 서버에 설정되어 있지 않습니다. OAUTH_" + providerName.toUpperCase() + "_* 환경변수를 확인하세요.");
+                    Messages.get("auth.social.not-configured", providerName, providerName.toUpperCase()));
         }
 
         try {
@@ -51,7 +52,7 @@ public class SocialAuthService {
                     .body(JsonNode.class);
             return toResult(providerName, profile);
         } catch (RestClientException e) {
-            throw new IllegalStateException(providerName + " 인증에 실패했습니다. 코드가 만료되었거나 설정이 올바르지 않습니다.", e);
+            throw new IllegalStateException(Messages.get("auth.social.failed", providerName), e);
         }
     }
 
@@ -74,7 +75,7 @@ public class SocialAuthService {
 
         String accessToken = response == null ? null : response.path("access_token").asText(null);
         if (accessToken == null) {
-            throw new IllegalStateException("소셜 로그인 토큰 발급에 실패했습니다.");
+            throw new IllegalStateException(Messages.get("auth.social.token-issue-failed"));
         }
         return accessToken;
     }
