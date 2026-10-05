@@ -67,6 +67,33 @@ struct NetworkClient {
         )
     }
 
+    /// Kakao SDK가 발급한 액세스 토큰을 서버 토큰으로 교환한다.
+    func signInWithKakao(accessToken: String) async throws -> AuthTokenResponse {
+        try await post(
+            path: "api/auth/kakao/native",
+            body: SocialAccessTokenRequest(accessToken: accessToken),
+            authorized: false
+        )
+    }
+
+    /// Naver SDK가 발급한 액세스 토큰을 서버 토큰으로 교환한다.
+    func signInWithNaver(accessToken: String) async throws -> AuthTokenResponse {
+        try await post(
+            path: "api/auth/naver/native",
+            body: SocialAccessTokenRequest(accessToken: accessToken),
+            authorized: false
+        )
+    }
+
+    /// Sign in with Apple의 identity token(과 최초 로그인 시에만 오는 이름)을 서버 토큰으로 교환한다.
+    func signInWithApple(identityToken: String, fullName: String?) async throws -> AuthTokenResponse {
+        try await post(
+            path: "api/auth/apple/native",
+            body: AppleNativeLoginRequest(identityToken: identityToken, fullName: fullName),
+            authorized: false
+        )
+    }
+
     private func post<Body: Encodable, Response: Decodable>(
         path: String,
         body: Body,
@@ -116,6 +143,17 @@ struct LoginRequest: Encodable {
 
 struct GoogleNativeLoginRequest: Encodable {
     let idToken: String
+}
+
+/// Kakao·Naver 네이티브 로그인 요청. SDK가 발급한 액세스 토큰만 보낸다.
+struct SocialAccessTokenRequest: Encodable {
+    let accessToken: String
+}
+
+/// Apple 네이티브 로그인 요청. `fullName`은 Apple이 최초 인증에만 주므로 없으면 생략한다.
+struct AppleNativeLoginRequest: Encodable {
+    let identityToken: String
+    let fullName: String?
 }
 
 /// 로그인·회원가입·구글 토큰 교환의 공통 응답.

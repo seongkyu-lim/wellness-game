@@ -17,11 +17,6 @@ enum LoginProvider: String {
         case .password: String(localized: "계정")
         }
     }
-
-    /// 서버 토큰 발급을 지원하는 로그인 방식.
-    var supportsServerToken: Bool {
-        self == .google || self == .password
-    }
 }
 
 /// 서버가 발급한 토큰과 사용자 ID로 로그인 상태를 관리한다.
@@ -137,7 +132,7 @@ final class UserSession: ObservableObject {
         let expiresAt = defaults.object(forKey: Key.expiresAt) as? Date
         let isExpired = expiresAt.map { $0 <= now() } ?? false
 
-        if let storedProvider, storedProvider.supportsServerToken,
+        if let storedProvider,
            let storedUserId, token != nil, !isExpired {
             provider = storedProvider
             userId = storedUserId

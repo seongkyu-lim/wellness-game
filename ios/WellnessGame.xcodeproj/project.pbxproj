@@ -20,6 +20,11 @@
 		A1000000000000000000000B /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* HealthKit.framework */; };
 		A1000000000000000000000C /* UserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* UserSession.swift */; };
 		A1000000000000000000000D /* SocialLoginService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* SocialLoginService.swift */; };
+		A100000000000000000CA11 /* LoginProviderPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB11 /* LoginProviderPolicy.swift */; };
+		A100000000000000000CA12 /* SocialSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB12 /* SocialSignIn.swift */; };
+		A200000000000000000CA11 /* LoginProviderPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB11 /* LoginProviderPolicy.swift */; };
+		A200000000000000000CA12 /* SocialSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB12 /* SocialSignIn.swift */; };
+		A200000000000000000CA13 /* SocialLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000000000000000CB13 /* SocialLoginTests.swift */; };
 		A100000000000000000CA01 /* CredentialAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB01 /* CredentialAuthService.swift */; };
 		A1000000000000000000000E /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = H10000000000000000000001 /* GoogleSignIn */; };
 		A1000000000000000000000F /* KakaoSDKCommon in Frameworks */ = {isa = PBXBuildFile; productRef = H10000000000000000000002 /* KakaoSDKCommon */; };
@@ -75,6 +80,9 @@
 		B1000000000000000000000E /* WellnessGame.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WellnessGame.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1000000000000000000000F /* UserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSession.swift; sourceTree = "<group>"; };
 		B10000000000000000000010 /* SocialLoginService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialLoginService.swift; sourceTree = "<group>"; };
+		B100000000000000000CB11 /* LoginProviderPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginProviderPolicy.swift; sourceTree = "<group>"; };
+		B100000000000000000CB12 /* SocialSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialSignIn.swift; sourceTree = "<group>"; };
+		B200000000000000000CB13 /* SocialLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialLoginTests.swift; sourceTree = "<group>"; };
 		B100000000000000000CB01 /* CredentialAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialAuthService.swift; sourceTree = "<group>"; };
 		B10000000000000000000011 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		B10000000000000000000012 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
@@ -217,6 +225,7 @@
 				B20000000000000000000005 /* AutoSyncPolicyTests.swift */,
 				B20000000000000000000006 /* AuthNetworkingTests.swift */,
 				B20000000000000000000007 /* LocalizationTests.swift */,
+				B200000000000000000CB13 /* SocialLoginTests.swift */,
 			);
 			path = WellnessGameTests;
 			sourceTree = "<group>";
@@ -238,6 +247,8 @@
 				B1000000000000000000000F /* UserSession.swift */,
 				B10000000000000000000010 /* SocialLoginService.swift */,
 				B100000000000000000CB01 /* CredentialAuthService.swift */,
+				B100000000000000000CB11 /* LoginProviderPolicy.swift */,
+				B100000000000000000CB12 /* SocialSignIn.swift */,
 				B100000000000000000CB02 /* KeychainTokenStore.swift */,
 			);
 			path = Authentication;
@@ -365,6 +376,8 @@
 				A1000000000000000000000C /* UserSession.swift in Sources */,
 				A1000000000000000000000D /* SocialLoginService.swift in Sources */,
 				A100000000000000000CA01 /* CredentialAuthService.swift in Sources */,
+				A100000000000000000CA11 /* LoginProviderPolicy.swift in Sources */,
+				A100000000000000000CA12 /* SocialSignIn.swift in Sources */,
 				A100000000000000000CA02 /* KeychainTokenStore.swift in Sources */,
 				A10000000000000000000013 /* Theme.swift in Sources */,
 				A10000000000000000000014 /* Components.swift in Sources */,
@@ -399,6 +412,9 @@
 				A20000000000000000000013 /* HealthKitManager.swift in Sources */,
 				A20000000000000000000014 /* AuthNetworkingTests.swift in Sources */,
 				A20000000000000000000015 /* LocalizationTests.swift in Sources */,
+				A200000000000000000CA13 /* SocialLoginTests.swift in Sources */,
+				A200000000000000000CA11 /* LoginProviderPolicy.swift in Sources */,
+				A200000000000000000CA12 /* SocialSignIn.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

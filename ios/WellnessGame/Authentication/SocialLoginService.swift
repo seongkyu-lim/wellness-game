@@ -1,8 +1,10 @@
+import AuthenticationServices
 import Combine
 import Foundation
 import GoogleSignIn
 import KakaoSDKAuth
 import KakaoSDKCommon
+import KakaoSDKUser
 import NidThirdPartyLogin
 import UIKit
 
@@ -100,19 +102,56 @@ final class SocialLoginService: ObservableObject {
         }
     }
 
-    /// Kakao·Naver·Apple은 서버 토큰 발급이 준비되지 않아 비활성화돼 있다.
+    /// Kakao SDK 로그인(카카오톡 앱 → 카카오계정 순) 후 액세스 토큰을 서버(`/api/auth/kakao/native`)에서 교환한다.
     func signInWithKakao(_ session: UserSession) {
-        session.updateStatus(String(localized: "Kakao 로그인은 아직 지원하지 않습니다."))
+        guard Self.configurationValue(for: "KAKAO_NATIVE_APP_KEY") != nil else {
+            session.updateStatus(String(localized: "\(LoginProvider.kakao.displayName) 로그인 설정을 먼저 확인해 주세요."))
+            return
+        }
+        perform { flow in
+            await flow.signInWithKakao(tokenProvider: KakaoTokenProvider(), session: session)
+        }
     }
 
+    /// Naver SDK 로그인 후 액세스 토큰을 서버(`/api/auth/naver/native`)에서 교환한다.
     func signInWithNaver(_ session: UserSession) {
-        session.updateStatus(String(localized: "Naver 로그인은 아직 지원하지 않습니다."))
+        guard Self.isNaverConfigured else {
+            session.updateStatus(String(localized: "\(LoginProvider.naver.displayName) 로그인 설정을 먼저 확인해 주세요."))
+            return
+        }
+        perform { flow in
+            await flow.signInWithNaver(tokenProvider: NaverTokenProvider(), session: session)
+        }
+    }
+
+    /// `SignInWithAppleButton` 완료 결과를 서버(`/api/auth/apple/native`)로 교환한다. 사용자가 취소하면 조용히 돌아간다.
+    func signInWithApple(_ result: Result<ASAuthorization, Error>, session: UserSession) {
+        perform { flow in
+            await flow.signInWithApple(result: result, session: session)
+        }
+    }
+
+    private func perform(_ work: @escaping @MainActor (SocialSignInFlow) async -> Void) {
+        guard !isLoading else { return }
+        isLoading = true
+        let flow = SocialSignInFlow(networkClient: networkClient)
+        Task { @MainActor in
+            await work(flow)
+            isLoading = false
+        }
     }
 
     /// 로그아웃: SDK 세션을 정리하고 Keychain 토큰을 포함한 앱 세션을 지운다.
     func signOut(_ session: UserSession) {
-        if session.provider == .google {
+        switch session.provider {
+        case .google:
             GIDSignIn.sharedInstance.signOut()
+        case .kakao:
+            UserApi.shared.logout { _ in }
+        case .naver:
+            NidOAuth.shared.logout()
+        case .apple, .password, nil:
+            break
         }
         session.signOut()
     }
@@ -144,5 +183,62 @@ final class SocialLoginService: ObservableObject {
             presenter = presented
         }
         return presenter
+    }
+}
+
+/// Kakao SDK로 로그인해 액세스 토큰을 얻는다. 카카오톡 앱이 있으면 앱 로그인, 없거나 실패하면 카카오계정 로그인.
+@MainActor
+struct KakaoTokenProvider: SocialAccessTokenProviding {
+    func fetchAccessToken() async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            let finish: (OAuthToken?, Error?) -> Void = { token, error in
+                if let error {
+                    continuation.resume(throwing: Self.isCancellation(error) ? SocialLoginError.cancelled : error)
+                } else if let accessToken = token?.accessToken {
+                    continuation.resume(returning: accessToken)
+                } else {
+                    continuation.resume(throwing: SocialLoginError.missingToken)
+                }
+            }
+            if UserApi.isKakaoTalkLoginAvailable() {
+                UserApi.shared.loginWithKakaoTalk { token, error in
+                    if let error, !Self.isCancellation(error) {
+                        UserApi.shared.loginWithKakaoAccount(completion: finish)
+                    } else {
+                        finish(token, error)
+                    }
+                }
+            } else {
+                UserApi.shared.loginWithKakaoAccount(completion: finish)
+            }
+        }
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if case SdkError.ClientFailed(.Cancelled, _) = error {
+            return true
+        }
+        return false
+    }
+}
+
+/// Naver SDK로 로그인해 액세스 토큰을 얻는다.
+@MainActor
+struct NaverTokenProvider: SocialAccessTokenProviding {
+    func fetchAccessToken() async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            NidOAuth.shared.requestLogin { result in
+                switch result {
+                case let .success(login):
+                    continuation.resume(returning: login.accessToken.tokenString)
+                case let .failure(error):
+                    if case .clientError(.canceledByUser) = error {
+                        continuation.resume(throwing: SocialLoginError.cancelled)
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+        }
     }
 }
