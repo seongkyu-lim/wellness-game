@@ -25,11 +25,12 @@ struct ContentView: View {
                 VStack(spacing: Theme.sectionSpacing) {
                     header
                     characterHero
+                    characterDetails
                     healthSummary
                     activityResults
                     footer
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 18)
                 .padding(.vertical, 12)
             }
             .background(Theme.background)
@@ -66,9 +67,10 @@ struct ContentView: View {
             .overlay {
                 if viewModel.isLoading || socialLogin.isLoading || credentialLogin.isLoading {
                     ProgressView()
-                        .tint(Theme.primary)
+                        .controlSize(.large)
+                        .tint(Theme.textPrimary)
                         .padding(24)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .celOutline(radius: 18, shadow: 4)
                 }
             }
         }
@@ -77,31 +79,37 @@ struct ContentView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .center) {
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Wellness Game")
-                    .font(.system(.title2, design: .rounded).weight(.bold))
+                (Text(verbatim: "Wellness ") + Text(verbatim: "Game").foregroundStyle(Theme.primary))
+                    .font(.display(.title))
                     .foregroundStyle(Theme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
                 Text(Date.now.formatted(.dateTime.month(.wide).day().weekday(.wide)))
-                    .font(.caption.weight(.semibold))
+                    .font(.rounded(.subheadline, weight: .medium))
                     .foregroundStyle(Theme.textSecondary)
             }
-            Spacer()
+            Spacer(minLength: 0)
             Button {
                 showLoginSheet = true
             } label: {
                 if userSession.isSignedIn {
                     Label(userSession.provider?.displayName ?? String(localized: "계정"), systemImage: "person.crop.circle.fill.badge.checkmark")
-                        .font(.footnote.weight(.semibold))
                 } else {
-                    Text("로그인")
-                        .font(.footnote.weight(.semibold))
+                    Label("로그인", systemImage: "person.fill")
                 }
             }
-            .foregroundStyle(Theme.primary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(Theme.surfaceTint, in: Capsule())
+            .buttonStyle(
+                CelButtonStyle(
+                    fill: Theme.surface,
+                    foreground: Theme.textPrimary,
+                    height: 44,
+                    radius: 22,
+                    shadow: CGSize(width: 3, height: 3),
+                    font: .rounded(.subheadline, weight: .bold),
+                    expands: false
+                )
+            )
         }
         .padding(.top, 8)
     }
@@ -109,180 +117,149 @@ struct ContentView: View {
     // MARK: - Character hero
 
     private var characterHero: some View {
-        VStack(spacing: 18) {
-            if !userSession.isSignedIn {
-                signInPrompt
-            } else if let response = viewModel.syncResponse {
-                let character = response.character
-                XPRingView(level: character.level, progress: character.xpProgress, size: 158, lineWidth: 13)
-                    .padding(.top, 6)
-
-                VStack(spacing: 8) {
-                    HStack(spacing: 8) {
-                        PillBadge(text: String(localized: "Lv.\(character.level) · \(GrowthStage.stage(for: character.level).displayName) 단계"))
-                        if response.gainedXp > 0 {
-                            PillBadge(text: "+\(response.gainedXp.formatted()) XP", color: Theme.primary)
-                        }
-                        if response.levelUp {
-                            PillBadge(text: String(localized: "레벨업! ✨"), color: Theme.amber)
-                        }
-                    }
-                    Text("\(character.currentXp.formatted()) / \(character.nextLevelXp.formatted()) XP")
-                        .font(.system(.title3, design: .rounded).weight(.bold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text(
-                        GrowthStage.next(after: character.level).map {
-                            String(localized: "Lv.\($0.minLevel)이 되면 \($0.displayName) 단계로 자라나요")
-                        } ?? String(localized: "마지막 단계까지 모두 자랐어요 🌸")
-                    )
-                    .font(.caption)
-                    .foregroundStyle(Theme.textSecondary)
-                }
-
-                HStack(spacing: 8) {
-                    StatTile(title: "STR", subtitle: "근력", value: character.stats.str, icon: "dumbbell.fill", color: Theme.statStrength)
-                    StatTile(title: "VIT", subtitle: "활력", value: character.stats.vit, icon: "heart.fill", color: Theme.statVitality)
-                    StatTile(title: "DISC", subtitle: "절제", value: character.stats.discipline, icon: "target", color: Theme.statDiscipline)
-                    StatTile(title: "REC", subtitle: "회복", value: character.stats.recovery, icon: "moon.zzz.fill", color: Theme.statRecovery)
-                }
-            } else {
-                VStack(spacing: 22) {
-                    CharacterAvatarView(level: 1, size: 190)
-                    VStack(spacing: 8) {
-                        Text("새싹이가 기다리고 있어요")
-                            .font(.system(.title3, design: .rounded).weight(.bold))
-                            .foregroundStyle(Theme.textPrimary)
-                        Text("걸음 · 운동 · 수면이 자동으로 XP가 되어\n캐릭터가 자라나요")
-                            .font(.footnote)
-                            .foregroundStyle(Theme.textSecondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    HStack(spacing: 8) {
-                        PillBadge(text: String(localized: "Lv.\(1) · \(GrowthStage.seed.displayName) 단계"))
-                        if let next = GrowthStage.next(after: 1) {
-                            PillBadge(text: String(localized: "다음 단계 · \(next.displayName) Lv.\(next.minLevel)"), color: Theme.textSecondary)
-                        }
-                    }
-                    .padding(.bottom, 12)
-                }
-            }
+        let character = viewModel.syncResponse?.character
+        let level = character?.level ?? 1
+        let bubble: String
+        if !userSession.isSignedIn {
+            bubble = String(localized: "로그인하면 나도 깨어날게!")
+        } else if character == nil {
+            bubble = String(localized: "동기화하면 나도 깨어날게!")
+        } else if let next = GrowthStage.next(after: level) {
+            bubble = String(localized: "Lv.\(next.minLevel)이 되면 \(next.displayName) 단계로 자랄 거야!")
+        } else {
+            bubble = String(localized: "활짝 피었어! 늘 함께해 줘서 고마워!")
         }
-        .frame(maxWidth: .infinity, minHeight: viewModel.syncResponse == nil ? 460 : 0)
-        .padding(20)
-        .background(Theme.heroGradient, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
-        .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
+
+        return CharacterHero(
+            level: level,
+            bubble: bubble,
+            levelChip: character.map {
+                String(localized: "Lv.\($0.level) · \(GrowthStage.stage(for: $0.level).displayName) 단계")
+            } ?? String(localized: "아직 동기화 전"),
+            gainedXp: viewModel.syncResponse?.gainedXp ?? 0,
+            levelUp: viewModel.syncResponse?.levelUp ?? false
+        )
+    }
+
+    // MARK: - EXP · stats (또는 로그인/동기화 안내)
+
+    @ViewBuilder
+    private var characterDetails: some View {
+        if !userSession.isSignedIn {
+            signInPrompt
+        } else if let character = viewModel.syncResponse?.character {
+            XPCard(character: character)
+            HStack(spacing: 8) {
+                StatTile(title: "STR", subtitle: "근력", value: character.stats.str, icon: "dumbbell.fill", color: Theme.statStrength)
+                StatTile(title: "VIT", subtitle: "활력", value: character.stats.vit, icon: "heart.fill", color: Theme.statVitality)
+                StatTile(title: "DISC", subtitle: "절제", value: character.stats.discipline, icon: "target", color: Theme.statDiscipline)
+                StatTile(title: "REC", subtitle: "회복", value: character.stats.recovery, icon: "moon.zzz.fill", color: Theme.statRecovery)
+            }
+        } else {
+            waitingCard
+        }
     }
 
     /// 로그인 전 상태 — 동기화하지 않고 로그인 시트로 유도한다.
     private var signInPrompt: some View {
-        VStack(spacing: 22) {
-            CharacterAvatarView(level: 1, size: 170)
-            VStack(spacing: 8) {
-                Text("로그인하고 새싹이를 키워 보세요")
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundStyle(Theme.textPrimary)
-                Text(userSession.reloginNotice ?? String(localized: "로그인하면 걸음 · 운동 · 수면이 자동으로 XP가 되어\n캐릭터가 자라나요"))
-                    .font(.footnote)
-                    .foregroundStyle(userSession.reloginNotice == nil ? Theme.textSecondary : Theme.statStrength)
-                    .multilineTextAlignment(.center)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("로그인하고 새싹이를 키워 보세요")
+                .font(.display(.title3))
+                .foregroundStyle(Theme.textPrimary)
+            if let notice = userSession.reloginNotice {
+                DangerNotice(text: notice, systemImage: "exclamationmark.circle.fill")
+            } else {
+                Text("로그인하면 걸음 · 운동 · 수면이 자동으로 XP가 되어\n캐릭터가 자라나요")
+                    .font(.rounded(.footnote, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
             }
             Button("로그인하기") {
                 showLoginSheet = true
             }
-            .buttonStyle(PrimaryActionButtonStyle())
-            .padding(.bottom, 12)
+            .buttonStyle(.celPrimary)
+            .padding(.top, 4)
+            .padding(.bottom, 5)
         }
+        .celCard()
     }
 
-    // MARK: - Health summary
+    /// 로그인했지만 아직 동기화 결과가 없는 상태.
+    private var waitingCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("새싹이가 기다리고 있어요")
+                .font(.display(.title3))
+                .foregroundStyle(Theme.textPrimary)
+            Text("걸음 · 운동 · 수면이 자동으로 XP가 되어\n캐릭터가 자라나요")
+                .font(.rounded(.footnote, weight: .medium))
+                .foregroundStyle(Theme.textSecondary)
+            HStack(spacing: 8) {
+                PillBadge.muted(String(localized: "Lv.\(1) · \(GrowthStage.seed.displayName) 단계"))
+                if let next = GrowthStage.next(after: 1) {
+                    PillBadge(text: String(localized: "다음 단계 · \(next.displayName) Lv.\(next.minLevel)"), fill: Theme.mint)
+                }
+            }
+        }
+        .celCard()
+    }
+
+    // MARK: - Health summary (오늘의 퀘스트)
 
     @ViewBuilder
     private var healthSummary: some View {
         if let snapshot = viewModel.snapshot {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(title: "오늘의 활동", icon: "sun.max.fill")
-                HStack(spacing: 12) {
-                    MetricCard(
-                        title: "걸음 수",
-                        value: snapshot.steps.formatted(),
-                        icon: "figure.walk",
-                        color: Theme.statVitality
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader(title: "오늘의 퀘스트")
+                QuestCard(
+                    icon: "figure.walk",
+                    tint: Theme.mint,
+                    title: String(localized: "걸음 수"),
+                    subtitle: String(localized: "\(snapshot.steps.formatted())걸음")
+                )
+                QuestCard(icon: "moon.zzz.fill", tint: Theme.lilac, title: String(localized: "수면"), subtitle: snapshot.sleepDurationText)
+                if snapshot.workouts.isEmpty {
+                    QuestCard(
+                        icon: "figure.walk.motion",
+                        // 아이콘은 항상 잉크색이라 다크 모드 카드색 위에서는 안 보인다. 밝은 틴트를 쓴다.
+                        tint: Theme.mint,
+                        title: String(localized: "오늘 운동 기록이 없어요"),
+                        subtitle: String(localized: "가볍게 몸을 움직여 볼까요?")
                     )
-                    MetricCard(
-                        title: "수면",
-                        value: snapshot.sleepDurationText,
-                        icon: "moon.zzz.fill",
-                        color: Theme.statRecovery
-                    )
-                }
-                workoutList
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var workoutList: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if let workouts = viewModel.snapshot?.workouts, !workouts.isEmpty {
-                ForEach(workouts) { workout in
-                    HStack(spacing: 12) {
-                        Image(systemName: workout.workoutType?.iconName ?? "figure.mixed.cardio")
-                            .font(.headline)
-                            .foregroundStyle(Theme.primary)
-                            .frame(width: 38, height: 38)
-                            .background(Theme.surfaceTint, in: RoundedRectangle(cornerRadius: Theme.chipRadius, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(workout.workoutType?.displayName ?? String(localized: "운동"))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(Theme.textPrimary)
-                            Text("\(workout.durationMinutes ?? 0)분")
-                                .font(.caption)
-                                .foregroundStyle(Theme.textSecondary)
+                } else {
+                    ForEach(snapshot.workouts) { workout in
+                        QuestCard(
+                            icon: workout.workoutType?.iconName ?? "figure.mixed.cardio",
+                            tint: Theme.peach,
+                            title: workout.workoutType?.displayName ?? String(localized: "운동"),
+                            subtitle: String(localized: "\(workout.durationMinutes ?? 0)분")
+                        ) {
+                            PillBadge.muted("\(Int(workout.calories ?? 0).formatted()) kcal")
                         }
-                        Spacer()
-                        PillBadge(text: "\(Int(workout.calories ?? 0).formatted()) kcal", color: Theme.statStrength)
                     }
                 }
-            } else {
-                HStack(spacing: 10) {
-                    Image(systemName: "figure.walk.motion")
-                        .foregroundStyle(Theme.textSecondary)
-                    Text("오늘 운동 기록이 없어요. 가볍게 몸을 움직여 볼까요?")
-                        .font(.footnote)
-                        .foregroundStyle(Theme.textSecondary)
-                }
             }
         }
-        .wellnessCard()
     }
 
-    // MARK: - Activity results
+    // MARK: - Activity results (획득 내역)
 
     @ViewBuilder
     private var activityResults: some View {
         if let results = viewModel.syncResponse?.activityResults, !results.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(title: "획득 내역", icon: "sparkles")
-                VStack(spacing: 12) {
-                    ForEach(results) { result in
-                        HStack(spacing: 10) {
-                            Image(systemName: result.duplicate ? "checkmark.circle.fill" : "plus.circle.fill")
-                                .foregroundStyle(result.duplicate ? Theme.textSecondary : Theme.lime)
-                            Text(result.message)
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.textPrimary)
-                            Spacer()
-                            if result.duplicate {
-                                Text("반영됨")
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.textSecondary)
-                            } else {
-                                PillBadge(text: "+\(result.gainedXp.formatted()) XP")
-                            }
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader(title: "획득 내역")
+                ForEach(results) { result in
+                    QuestCard(
+                        icon: result.duplicate ? "checkmark" : "sparkles",
+                        tint: result.duplicate ? Theme.lilac : Theme.yellow,
+                        title: result.message
+                    ) {
+                        if result.duplicate {
+                            PillBadge.muted(String(localized: "반영됨"))
+                        } else {
+                            PillBadge(text: "+\(result.gainedXp.formatted()) XP")
                         }
                     }
                 }
-                .wellnessCard()
             }
         }
     }
@@ -292,11 +269,11 @@ struct ContentView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(viewModel.statusMessage)
-                .font(.caption2)
+                .font(.rounded(.caption, weight: .medium))
                 .foregroundStyle(Theme.textSecondary)
             Toggle(isOn: $viewModel.useMockData) {
                 Label("Mock 데이터 사용", systemImage: "wrench.and.screwdriver")
-                    .font(.footnote)
+                    .font(.rounded(.footnote, weight: .medium))
                     .foregroundStyle(Theme.textSecondary)
             }
             .tint(Theme.primary)
@@ -304,7 +281,238 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 4)
+        .padding(.top, 4)
         .padding(.bottom, 8)
+    }
+}
+
+// MARK: - Hero
+
+/// 하늘(하프톤 점) + 언덕 + 말풍선 + 반짝이 + 둥실거리는 새싹이 + 이름표.
+private struct CharacterHero: View {
+    let level: Int
+    let bubble: String
+    let levelChip: String
+    let gainedXp: Int
+    let levelUp: Bool
+
+    private var hasBadges: Bool { levelUp || gainedXp > 0 }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+        HeroBackdrop()
+            .frame(height: 372)
+            .overlay(alignment: .top) {
+                CharacterAvatarView(level: level, size: 210)
+                    .bobbing()
+                    .padding(.top, 92)
+            }
+            .overlay(alignment: .topLeading) {
+                SparkleView(size: 18, color: Theme.sparklePink, period: 1.0)
+                    .padding(.leading, 48)
+                    .padding(.top, 150)
+            }
+            .overlay(alignment: .topTrailing) {
+                SparkleView(size: 16, color: .white, period: 1.15)
+                    .padding(.trailing, 78)
+                    .padding(.top, 84)
+            }
+            .overlay(alignment: .topTrailing) {
+                if hasBadges {
+                    VStack(alignment: .trailing, spacing: 6) {
+                        if levelUp {
+                            PillBadge(text: String(localized: "레벨업!"))
+                        }
+                        if gainedXp > 0 {
+                            PillBadge(text: "+\(gainedXp.formatted()) XP", fill: Theme.xp)
+                        }
+                    }
+                    .padding([.top, .trailing], 16)
+                } else {
+                    SparkleView(size: 26, color: Theme.yellow, period: 0.9)
+                        .padding(.trailing, 34)
+                        .padding(.top, 26)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                SpeechBubble(text: bubble)
+                    .frame(maxWidth: 200, alignment: .leading)
+                    .padding(16)
+            }
+            .overlay(alignment: .bottom) {
+                HStack(spacing: 8) {
+                    Text("새싹이")
+                        .font(.display(.title3))
+                        .foregroundStyle(Theme.onPop)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 4)
+                        .celOutline(radius: 12, fill: Theme.yellow, lineWidth: 2.5)
+                        .skewedX(degrees: -8)
+                    Spacer(minLength: 0)
+                    Text(levelChip)
+                        .font(.rounded(.subheadline))
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Theme.surface))
+                        .overlay(Capsule().strokeBorder(Theme.ink, lineWidth: Theme.line))
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
+            }
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Theme.ink, lineWidth: Theme.line))
+            .background(shape.fill(Theme.popShadow).offset(x: 6, y: 6))
+            // 고정 높이 장면 위에 글자가 겹쳐 놓이므로, 아주 큰 글자 크기에서 말풍선이 새싹이를 덮지 않게 상한을 둔다.
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("내 캐릭터")
+    }
+}
+
+/// 하늘색 바탕 + 흰 하프톤 점 + 두 겹 언덕.
+private struct HeroBackdrop: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Theme.sky
+            Canvas { context, size in
+                var dots = Path()
+                for x in stride(from: CGFloat(6), to: size.width, by: 12) {
+                    for y in stride(from: CGFloat(6), to: size.height, by: 12) {
+                        dots.addEllipse(in: CGRect(x: x - 1.6, y: y - 1.6, width: 3.2, height: 3.2))
+                    }
+                }
+                context.fill(dots, with: .color(.white.opacity(colorScheme == .dark ? 0.22 : 0.55)))
+            }
+            ZStack {
+                HillShape(kind: .back)
+                    .fill(Theme.hill)
+                    .overlay(HillShape(kind: .back).stroke(Theme.ink, style: StrokeStyle(lineWidth: Theme.line, lineJoin: .round)))
+                HillShape(kind: .front)
+                    .fill(Theme.hillDeep)
+            }
+            .frame(height: 110)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// 웹 CharacterCard.tsx의 언덕 경로(viewBox 390×110, preserveAspectRatio none)를 영역 크기에 맞춰 늘린다.
+private struct HillShape: Shape {
+    enum Kind { case back, front }
+    let kind: Kind
+
+    func path(in rect: CGRect) -> Path {
+        let sx = rect.width / 390, sy = rect.height / 110
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * sx, y: rect.minY + y * sy) }
+
+        var path = Path()
+        switch kind {
+        case .back:
+            // M0 52 Q70 24 150 46 T300 40 T390 50 V110 H0Z (T의 제어점은 직전 제어점의 반사점)
+            path.move(to: p(0, 52))
+            path.addQuadCurve(to: p(150, 46), control: p(70, 24))
+            path.addQuadCurve(to: p(300, 40), control: p(230, 68))
+            path.addQuadCurve(to: p(390, 50), control: p(370, 12))
+        case .front:
+            // M0 74 Q90 58 190 72 T390 70 V110 H0Z
+            path.move(to: p(0, 74))
+            path.addQuadCurve(to: p(190, 72), control: p(90, 58))
+            path.addQuadCurve(to: p(390, 70), control: p(290, 86))
+        }
+        path.addLine(to: p(390, 110))
+        path.addLine(to: p(0, 110))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// 꼬리 달린 말풍선.
+private struct SpeechBubble: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.rounded(.subheadline))
+            .foregroundStyle(Theme.textPrimary)
+            .lineLimit(4)
+            .minimumScaleFactor(0.8)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .celOutline(radius: 18)
+            .overlay(alignment: .bottomLeading) {
+                BubbleTail()
+                    .frame(width: 26, height: 20)
+                    .offset(x: 31, y: 16.5)
+                    .accessibilityHidden(true)
+            }
+    }
+}
+
+/// 말풍선 꼬리 — 위쪽 테두리를 카드색으로 덮어 말풍선과 이어 보이게 한다.
+private struct BubbleTail: View {
+    var body: some View {
+        Canvas { context, _ in
+            // 꼬리 좌표계의 y=0이 말풍선 테두리 선의 중심(캔버스 y=2)에 오도록 옮긴다.
+            context.translateBy(x: 0, y: 2)
+            var edge = Path()
+            edge.move(to: CGPoint(x: 2, y: 0))
+            edge.addLine(to: CGPoint(x: 12, y: 16))
+            edge.addLine(to: CGPoint(x: 22, y: 0))
+
+            // 삼각형과 덮개 사각형은 감기는 방향이 달라 한 경로로 합치면 겹친 부분이 비므로 따로 채운다.
+            context.fill(edge, with: .color(Theme.surface))
+            context.fill(Path(CGRect(x: 3, y: -1.6, width: 18, height: 3.2)), with: .color(Theme.surface))
+            context.stroke(edge, with: .color(Theme.ink), style: StrokeStyle(lineWidth: Theme.line, lineCap: .round, lineJoin: .round))
+        }
+    }
+}
+
+// MARK: - EXP card
+
+private struct XPCard: View {
+    let character: CharacterState
+
+    private var nextLabel: String {
+        GrowthStage.next(after: character.level).map { String(localized: "\($0.displayName)까지 Lv.\($0.minLevel)") } ?? String(localized: "최종 단계")
+    }
+
+    var body: some View {
+        let xpText = "\(character.currentXp.formatted()) / \(character.nextLevelXp.formatted()) XP"
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(verbatim: "EXP")
+                    .font(.display(.title2))
+                    .tracking(1)
+                    .foregroundStyle(Theme.textPrimary)
+                    .accessibilityHidden(true)
+                Spacer(minLength: 0)
+                PillBadge(text: String(localized: "누적 \(character.totalXp.formatted()) XP"), fill: Theme.pink)
+            }
+            XPBarView(progress: character.xpProgress)
+                .accessibilityElement()
+                .accessibilityLabel("다음 레벨까지 경험치")
+                .accessibilityValue(xpText)
+            HStack(spacing: 8) {
+                Text(xpText)
+                    .foregroundStyle(Theme.textPrimary)
+                    .contentTransition(.numericText())
+                    // 진행바의 accessibilityValue와 같은 내용이라 VoiceOver에서 두 번 읽지 않게 한다.
+                    .accessibilityHidden(true)
+                Spacer(minLength: 0)
+                Text(nextLabel)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            .font(.rounded(.subheadline))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+        }
+        .celCard(radius: 20)
     }
 }
 

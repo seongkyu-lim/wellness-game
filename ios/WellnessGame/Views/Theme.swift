@@ -1,75 +1,97 @@
 import SwiftUI
 import UIKit
 
-/// 라이트 그린 웰니스 디자인 시스템의 컬러 · 수치 토큰.
+/// 셀 애니메이션('애니') 스타일 디자인 토큰. 웹(web/src/theme.css)과 동일한 팔레트를 쓴다.
+/// 라이트 = 크림 종이 + 하늘, 다크 = 밤하늘 + 네온 보라 그림자.
 enum Theme {
-    // MARK: - Core palette
+    // MARK: - Surfaces
 
-    /// 화면 배경 — 연한 연두빛 크림
-    static let background = Color(light: 0xF3F8EC, dark: 0x141812)
+    /// 화면 배경 — 크림 종이 / 밤하늘 남색
+    static let background = Color(light: 0xFFF7E8, dark: 0x14172B)
     /// 카드 표면
-    static let surface = Color(light: 0xFFFFFF, dark: 0x1C221A)
-    /// 옅은 연두 틴트 — 칩, 아이콘 배경, 프로그레스 트랙
-    static let surfaceTint = Color(light: 0xE7F3DA, dark: 0x27311F)
+    static let surface = Color(light: 0xFFFFFF, dark: 0x262B4D)
+    /// 굵은 외곽선(잉크)
+    static let ink = Color(light: 0x1F2340, dark: 0x070914)
+    /// 카드 뒤 하드 오프셋 그림자 — 다크에서는 네온 보라
+    static let popShadow = Color(light: 0x1F2340, dark: 0x6C5CE7)
+    /// 진행바 트랙
+    static let track = Color(light: 0xE6ECFA, dark: 0x3A4070)
+    /// 입력칸 테두리 — 다크 모드에서도 3:1 이상 보이게 한다
+    static let fieldBorder = Color(light: 0x1F2340, dark: 0x8A90C8)
 
-    /// 주요 텍스트 — 딥 포레스트
-    static let textPrimary = Color(light: 0x24382A, dark: 0xE9F1E4)
-    /// 보조 텍스트
-    static let textSecondary = Color(light: 0x6D806E, dark: 0x9CAB9B)
+    // MARK: - Text
 
-    /// 브랜드 그린 — 주요 버튼, 강조
-    static let primary = Color(light: 0x4C8C46, dark: 0x6FBE62)
-    /// 라임 액센트 — XP, 성장 표현
-    static let lime = Color(light: 0x7CC142, dark: 0x93D65A)
-    /// 레벨업 · 하이라이트
-    static let amber = Color(light: 0xE89B2D, dark: 0xF0B35B)
+    static let textPrimary = Color(light: 0x1F2340, dark: 0xF3F0FF)
+    static let textSecondary = Color(light: 0x4A5080, dark: 0xB4B9E0)
+    /// 채색 면(칩·밴드·노란 버튼) 위의 글자색 — 라이트/다크 모두 잉크
+    static let onPop = Color(hex: 0x1F2340)
 
-    // MARK: - Stat colors
+    // MARK: - Brand · accents
 
-    static let statStrength = Color(light: 0xE07A4F, dark: 0xE8936F)
-    static let statVitality = Color(light: 0x55A85E, dark: 0x74C57D)
-    static let statDiscipline = Color(light: 0x4E86C6, dark: 0x74A6D9)
-    static let statRecovery = Color(light: 0x8A70CE, dark: 0xA692DC)
+    /// 브랜드 그린 — 섹션 마크, 'Game' 글자, 강조
+    static let primary = Color(light: 0x3F8F3A, dark: 0x8ED65A)
+    static let xp = Color(hex: 0x9BE15D)
+    static let yellow = Color(hex: 0xFFE066)
+    static let pink = Color(hex: 0xFFB3CF)
+    static let mint = Color(hex: 0xCFF3B5)
+    static let peach = Color(hex: 0xFFD9C7)
+    static let lilac = Color(hex: 0xE3D9FF)
+    /// 반짝이 장식 분홍
+    static let sparklePink = Color(hex: 0xFF9EC4)
 
-    // MARK: - Gradients
+    static let dangerBackground = Color(light: 0xFFD6D0, dark: 0x5A2230)
+    static let dangerText = Color(light: 0x8A1F12, dark: 0xFFD6D0)
 
-    /// 캐릭터 히어로 카드 배경 — 연둣빛 그라데이션
-    static let heroGradient = LinearGradient(
-        colors: [Color(light: 0xDFF2C6, dark: 0x2A3820), Color(light: 0xC2E69A, dark: 0x35482A)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-    /// XP 링 그라데이션
-    static let xpGradient = AngularGradient(
-        colors: [Color(light: 0x9BD65C, dark: 0xA8E06C), Color(light: 0x5CA843, dark: 0x74C25A)],
-        center: .center,
-        startAngle: .degrees(-90),
-        endAngle: .degrees(270)
-    )
+    // MARK: - Hero scene
+
+    static let sky = Color(light: 0xBFE6FF, dark: 0x2B3470)
+    static let hill = Color(light: 0x9BDB6A, dark: 0x3E7A4A)
+    static let hillDeep = Color(light: 0x7CC44E, dark: 0x2F6239)
+
+    // MARK: - Stat colors (채색 밴드 — 위 글자/아이콘은 onPop)
+
+    static let statStrength = Color(hex: 0xFF9A6C)
+    static let statVitality = Color(hex: 0x7DD484)
+    static let statDiscipline = Color(hex: 0x7FB8F7)
+    static let statRecovery = Color(hex: 0xB9A2F5)
 
     // MARK: - Metrics
 
-    static let cardRadius: CGFloat = 20
-    static let chipRadius: CGFloat = 12
-    static let sectionSpacing: CGFloat = 16
+    /// 외곽선 두께
+    static let line: CGFloat = 3
+    static let cardRadius: CGFloat = 22
+    static let chipRadius: CGFloat = 14
+    static let sectionSpacing: CGFloat = 18
+}
+
+// MARK: - Typography
+
+extension Font {
+    /// 제목·숫자용 굵은 둥근 글꼴 (웹의 Black Han Sans 대응). Dynamic Type을 따른다.
+    static func display(_ style: Font.TextStyle) -> Font {
+        .system(style, design: .rounded).weight(.black)
+    }
+
+    /// 본문용 둥근 글꼴 (웹의 Jua 대응).
+    static func rounded(_ style: Font.TextStyle, weight: Font.Weight = .semibold) -> Font {
+        .system(style, design: .rounded).weight(weight)
+    }
 }
 
 extension Color {
     /// 라이트/다크 모드에 따라 다른 hex 값을 쓰는 색상.
     init(light: UInt32, dark: UInt32) {
         self.init(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light)
+            UIColor(Color(hex: traits.userInterfaceStyle == .dark ? dark : light))
         })
     }
-}
 
-private extension UIColor {
-    convenience init(hex: UInt32) {
+    /// 모드와 상관없이 같은 hex 색상.
+    init(hex: UInt32) {
         self.init(
-            red: CGFloat((hex >> 16) & 0xFF) / 255,
-            green: CGFloat((hex >> 8) & 0xFF) / 255,
-            blue: CGFloat(hex & 0xFF) / 255,
-            alpha: 1
+            red: Double((hex >> 16) & 0xFF) / 255,
+            green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255
         )
     }
 }
