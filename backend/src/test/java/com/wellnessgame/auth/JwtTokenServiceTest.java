@@ -23,7 +23,7 @@ class JwtTokenServiceTest {
     private final JwtTokenService service = new JwtTokenService(new JwtProperties(SECRET, Duration.ofDays(30)), clock);
 
     @Test
-    void issuesBearerTokenWithSubjectIatAndExpOnly() {
+    void issuesBearerTokenWithSubjectIssuerAudienceIatAndExp() {
         IssuedToken token = service.issue("google:123");
 
         assertThat(token.tokenType()).isEqualTo("Bearer");
@@ -34,7 +34,7 @@ class JwtTokenServiceTest {
         String header = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
         String payload = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
         assertThat(header).contains("\"alg\":\"HS256\"");
-        assertThat(payload).isEqualTo("{\"sub\":\"google:123\",\"iat\":" + NOW.getEpochSecond()
+        assertThat(payload).isEqualTo("{\"sub\":\"google:123\",\"iss\":\"wellness-game\",\"aud\":[\"wellness-game-api\"],\"iat\":" + NOW.getEpochSecond()
                 + ",\"exp\":" + NOW.plus(Duration.ofDays(30)).getEpochSecond() + "}");
     }
 
@@ -131,7 +131,8 @@ class JwtTokenServiceTest {
 
     @Test
     void accepts32ByteSecret() {
-        JwtTokenService minimal = new JwtTokenService(new JwtProperties("x".repeat(32), Duration.ofDays(30)), clock);
+        JwtTokenService minimal = new JwtTokenService(
+                new JwtProperties("0123456789abcdefghijklmnopqrstuv", Duration.ofDays(30)), clock);
 
         assertThat(minimal.verify(minimal.issue("google:1").accessToken())).isEqualTo("google:1");
     }
@@ -140,5 +141,88 @@ class JwtTokenServiceTest {
     void failsFastWhenTtlNotPositive() {
         assertThatIllegalStateException()
                 .isThrownBy(() -> new JwtTokenService(new JwtProperties(SECRET, Duration.ZERO), clock));
+    }
+
+    // ---- #55 iss/aud 와 약한 시크릿 ----
+
+    @Test
+    void acceptsLegacyTokenWithoutIssuerAndAudienceByDefault() {
+        String legacy = legacyToken("password:abc");
+
+        assertThat(service.verify(legacy)).isEqualTo("password:abc");
+    }
+
+    @Test
+    void rejectsLegacyTokenWhenLegacyTokensDisabled() {
+        JwtTokenService strict = new JwtTokenService(
+                new JwtProperties(SECRET, Duration.ofDays(30), null, null, false), clock);
+
+        assertThatThrownBy(() -> strict.verify(legacyToken("password:abc")))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessageContaining("유효하지 않습니다");
+        assertThat(strict.verify(strict.issue("password:abc").accessToken())).isEqualTo("password:abc");
+    }
+
+    @Test
+    void rejectsTokenFromAnotherIssuerOrAudience() {
+        JwtTokenService otherIssuer = new JwtTokenService(
+                new JwtProperties(SECRET, Duration.ofDays(30), "someone-else", null, true), clock);
+        JwtTokenService otherAudience = new JwtTokenService(
+                new JwtProperties(SECRET, Duration.ofDays(30), null, "another-api", true), clock);
+
+        assertThatThrownBy(() -> service.verify(otherIssuer.issue("google:1").accessToken()))
+                .isInstanceOf(UnauthorizedException.class);
+        assertThatThrownBy(() -> service.verify(otherAudience.issue("google:1").accessToken()))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void rejectsTokenWithOnlyOneOfIssuerOrAudienceEvenInLegacyMode() {
+        String issuerOnly = Jwts.builder()
+                .subject("google:1")
+                .issuer("wellness-game")
+                .issuedAt(Date.from(NOW))
+                .expiration(Date.from(NOW.plusSeconds(60)))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
+                .compact();
+
+        assertThatThrownBy(() -> service.verify(issuerOnly)).isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void defaultsBlankIssuerAndAudience() {
+        JwtProperties properties = new JwtProperties(SECRET, null, " ", "", null);
+
+        assertThat(properties.issuer()).isEqualTo("wellness-game");
+        assertThat(properties.audience()).isEqualTo("wellness-game-api");
+        assertThat(properties.acceptLegacyTokens()).isTrue();
+    }
+
+    @Test
+    void failsFastWhenSecretIsTrivial() {
+        for (String weak : new String[]{"x".repeat(32), "ab".repeat(20), "1234".repeat(10), "abcdefg".repeat(5)}) {
+            assertThatIllegalStateException()
+                    .as(weak)
+                    .isThrownBy(() -> new JwtTokenService(new JwtProperties(weak, Duration.ofDays(30)), clock))
+                    .withMessageContaining("너무 단순")
+                    .withMessageNotContaining(weak);
+        }
+    }
+
+    @Test
+    void acceptsProjectFixedSecrets() {
+        for (String fixed : new String[]{SECRET, "test-only-jwt-secret-0123456789abcdef",
+                "local-dev-only-jwt-secret-change-me-0123456789"}) {
+            new JwtTokenService(new JwtProperties(fixed, Duration.ofDays(30)), clock);
+        }
+    }
+
+    private static String legacyToken(String subject) {
+        return Jwts.builder()
+                .subject(subject)
+                .issuedAt(Date.from(NOW))
+                .expiration(Date.from(NOW.plus(Duration.ofDays(30))))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
+                .compact();
     }
 }
