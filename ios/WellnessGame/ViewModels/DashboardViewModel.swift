@@ -84,9 +84,12 @@ final class DashboardViewModel: ObservableObject {
     private func perform(_ operation: () async throws -> Void) async {
         isLoading = true
         defer { isLoading = false }
+        let requestUserId = userSession.userId
         do {
             try await operation()
         } catch NetworkError.unauthorized {
+            // 요청 도중 계정이 바뀌었다면 늦게 도착한 401로 새 세션을 지우지 않는다.
+            guard userSession.userId == requestUserId else { return }
             userSession.handleUnauthorized()
             reset()
         } catch {
