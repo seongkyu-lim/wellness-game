@@ -3,6 +3,7 @@ import { fetchDailyActivities, fetchMyCharacter, isUnauthorized } from './api/cl
 import type { ActivityEntry, Character } from './api/types'
 import { AccountSection } from './components/AccountSection'
 import { CharacterCard } from './components/CharacterCard'
+import { Landing } from './components/Landing'
 import { TodayActivities } from './components/TodayActivities'
 import { useI18n } from './i18n/I18nProvider'
 import { LanguageToggle } from './components/LanguageToggle'
@@ -93,7 +94,7 @@ export default function App() {
   })
 
   return (
-    <main className="container">
+    <main className={session ? 'container' : 'container wide'}>
       <header className="header">
         <div className="header-top">
           <div>
@@ -112,7 +113,7 @@ export default function App() {
         </div>
       )}
 
-      {session && (
+      {session ? (
         <>
           <CharacterCard character={character} />
           <TodayActivities
@@ -122,9 +123,11 @@ export default function App() {
             onRefresh={() => void refresh()}
             loading={loading}
           />
+          <AccountSection session={session} onLogout={() => signOut(null)} />
         </>
+      ) : (
+        <Landing account={<AccountSection session={null} onLogout={() => signOut(null)} />} />
       )}
-      <AccountSection session={session} onLogout={() => signOut(null)} />
     </main>
   )
 }
