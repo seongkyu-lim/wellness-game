@@ -2,7 +2,7 @@ import AuthenticationServices
 import SwiftUI
 
 /// 로그인 시트 — 메인 화면을 단순하게 유지하기 위해 로그인 UI를 분리한다.
-/// 동기화는 로그인한 사용자(ID/비밀번호 또는 Google)만 할 수 있다.
+/// 동기화는 로그인한 사용자(ID/비밀번호 또는 소셜 계정)만 할 수 있다.
 struct LoginSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var userSession: UserSession
@@ -11,6 +11,22 @@ struct LoginSheetView: View {
 
     @State private var username = ""
     @State private var password = ""
+    @State private var showsOtherProviders = false
+
+    /// 지역별 노출 순서. 시트가 열려 있는 동안 바뀌지 않도록 한 번만 계산한다.
+    private let policy: LoginProviderPolicy
+
+    init(
+        userSession: UserSession,
+        socialLogin: SocialLoginService,
+        credentialLogin: CredentialAuthService,
+        policy: LoginProviderPolicy = LoginProviderPolicy()
+    ) {
+        self.userSession = userSession
+        self.socialLogin = socialLogin
+        self.credentialLogin = credentialLogin
+        self.policy = policy
+    }
 
     private var isBusy: Bool {
         socialLogin.isLoading || credentialLogin.isLoading
@@ -184,51 +200,84 @@ struct LoginSheetView: View {
 
     private var socialButtons: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // 현재 Google 로그인만 지원 — 나머지 제공자는 준비되면 isEnabled를 되돌린다.
+            ForEach(policy.primary, id: \.self) { provider in
+                providerButton(provider)
+            }
+
+            if !policy.secondary.isEmpty {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showsOtherProviders.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("다른 방법으로 로그인")
+                        Image(systemName: showsOtherProviders ? "chevron.up" : "chevron.down")
+                            .font(.rounded(.caption, weight: .bold))
+                            .accessibilityHidden(true)
+                    }
+                    .font(.rounded(.footnote))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(showsOtherProviders ? Text("펼쳐짐") : Text("접힘"))
+
+                if showsOtherProviders {
+                    ForEach(policy.secondary, id: \.self) { provider in
+                        providerButton(provider)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func providerButton(_ provider: LoginProvider) -> some View {
+        switch provider {
+        case .apple:
             SignInWithAppleButton(.signIn) { request in
                 request.requestedScopes = [.fullName, .email]
-            } onCompletion: { _ in
-                userSession.updateStatus(String(localized: "Apple 로그인은 아직 지원하지 않습니다."))
+            } onCompletion: { result in
+                socialLogin.signInWithApple(result, session: userSession)
             }
             .signInWithAppleButtonStyle(.black)
             .frame(height: 54)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.ink, lineWidth: Theme.line))
-            .disabled(true)
-            .opacity(Self.disabledOpacity)
-
+            .disabled(isBusy)
+        case .google:
             socialButton(text: "Google로 로그인", prefix: "G", textColor: Theme.textPrimary, background: Theme.surface) {
                 socialLogin.signInWithGoogle(userSession)
             }
+        case .kakao:
             socialButton(
                 text: "Kakao로 로그인",
                 textColor: Theme.onPop,
-                background: Color(hex: 0xFEE500),
-                isEnabled: false
+                background: Color(hex: 0xFEE500)
             ) {
                 socialLogin.signInWithKakao(userSession)
             }
+        case .naver:
             socialButton(
                 text: "Naver로 로그인",
                 prefix: "N",
                 // 흰 글자는 초록 바탕에서 대비가 부족해 웹과 같이 남색 글자를 쓴다.
                 textColor: Color(hex: 0x14172B),
-                background: Color(hex: 0x03C75A),
-                isEnabled: false
+                background: Color(hex: 0x03C75A)
             ) {
                 socialLogin.signInWithNaver(userSession)
             }
+        case .password:
+            EmptyView()
         }
     }
-
-    private static let disabledOpacity = 0.4
 
     private func socialButton(
         text: LocalizedStringKey,
         prefix: String? = nil,
         textColor: Color,
         background: Color,
-        isEnabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -242,7 +291,6 @@ struct LoginSheetView: View {
             }
         }
         .buttonStyle(CelButtonStyle(fill: background, foreground: textColor))
-        .disabled(!isEnabled || isBusy)
-        .opacity(isEnabled ? 1 : Self.disabledOpacity)
+        .disabled(isBusy)
     }
 }

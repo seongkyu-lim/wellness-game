@@ -81,6 +81,25 @@ cd backend
 
 테스트는 MySQL 호환 모드의 인메모리 H2를 사용합니다.
 
+### 소셜 로그인 서버 환경변수
+
+iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서버 토큰(`{userId, displayName, accessToken, tokenType, expiresIn}`)으로 교환합니다. 값이 비어 있는 공급자의 엔드포인트는 `503`을 반환하고, 어떤 설정이 빠졌는지는 서버 로그에만 남습니다.
+
+| 환경변수 | 쓰는 엔드포인트 | 값 |
+|---|---|---|
+| `OAUTH_GOOGLE_IOS_CLIENT_ID` | `POST /api/auth/google/native` | iOS OAuth 클라이언트 ID(ID 토큰의 `aud`) |
+| `OAUTH_GOOGLE_CLIENT_ID`, `OAUTH_GOOGLE_CLIENT_SECRET` | `POST /api/auth/google`(웹), google/native 허용 `aud` | 웹 OAuth 클라이언트 |
+| `OAUTH_KAKAO_NATIVE_APP_ID` | `POST /api/auth/kakao/native` | Kakao Developers의 **숫자 앱 ID**(`access_token_info`의 `app_id`) |
+| `OAUTH_KAKAO_CLIENT_ID`, `OAUTH_KAKAO_CLIENT_SECRET` | `POST /api/auth/kakao`(웹) | REST API 키와 client secret |
+| `OAUTH_NAVER_CLIENT_ID`, `OAUTH_NAVER_CLIENT_SECRET` | `POST /api/auth/naver`(웹), `POST /api/auth/naver/native` | 네이버 애플리케이션의 클라이언트 아이디·시크릿(iOS 앱과 같은 애플리케이션) |
+| `OAUTH_APPLE_BUNDLE_ID` | `POST /api/auth/apple/native` | 앱 Bundle Identifier(identity token의 `aud`) |
+
+> **카카오 키 주의:** iOS Build Settings의 `KAKAO_NATIVE_APP_KEY`(네이티브 앱 **키**, 문자열)와 서버의 `OAUTH_KAKAO_NATIVE_APP_ID`(앱 **ID**, 숫자)는 서로 다른 값입니다. 앱 ID는 Kakao Developers → 내 애플리케이션 → 앱 설정 → 요약 정보의 "앱 ID"입니다. 서버는 iOS가 보낸 액세스 토큰의 `app_id`가 이 값과 같은지 확인해 다른 앱에서 발급된 토큰을 거부합니다.
+
+- 네이버 네이티브 교환은 `{"accessToken", "refreshToken"}`을 받습니다. 네이버에는 토큰의 발급 앱을 확인하는 API가 없어서, 서버가 `refreshToken`을 자기 client ID·secret으로 갱신해 이 앱에 발급된 토큰인지 확인하고, 새로 받은 access token으로만 프로필을 조회합니다.
+- Apple 교환은 `{"identityToken", "fullName"(선택)}`을 받고 Apple JWKS로 서명·`iss`·`aud`·`exp`를 검증합니다. `fullName`은 100자를 넘으면 잘라서 씁니다.
+- 로그인 방식별로 별도 계정입니다(`kakao:`, `naver:`, `google:`, `apple:`, `password:` 접두사). 같은 사람이 여러 방식으로 가입해도 계정을 합치지 않습니다.
+
 ## API
 
 ### `POST /api/health-activities/sync`
