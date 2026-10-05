@@ -62,3 +62,16 @@ Apple 로그인은 Apple Developer 유료 계정 + HTTPS 도메인 + Services ID
 ```bash
 npm run build   # 타입 체크 + dist/ 생성
 ```
+
+## GitHub Pages 배포
+
+`dev` 브랜치에 `web/` 변경이 push되면 `.github/workflows/web-pages.yml`이 빌드해
+`https://seongkyu-lim.github.io/wellness-game/`에 배포합니다. Actions 탭에서 수동 실행(`workflow_dispatch`)도 가능합니다.
+
+- 하위 경로 배포라 빌드 시 `--base=/<저장소 이름>/`을 지정합니다. 소셜 로그인 Redirect URI도
+  `https://seongkyu-lim.github.io/wellness-game/`로 자동 계산되므로 각 provider 콘솔에 이 주소를 등록합니다.
+- 빌드 환경변수는 저장소 **Settings › Secrets and variables › Actions › Variables**에 설정합니다.
+  (`VITE_API_BASE_URL`, `VITE_GOOGLE_CLIENT_ID`, `VITE_KAKAO_CLIENT_ID`, `VITE_NAVER_CLIENT_ID`)
+  모두 브라우저에 노출되는 공개 값이므로 Secrets가 아닌 Variables를 사용합니다.
+- 백엔드를 배포하기 전에는 API 주소가 없어 로그인 화면까지만 동작합니다. 백엔드 배포 후
+  `VITE_API_BASE_URL`과 백엔드 `CORS_ALLOWED_ORIGINS`(`https://seongkyu-lim.github.io`)를 설정하세요.
