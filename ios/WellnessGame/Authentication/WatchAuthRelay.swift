@@ -22,6 +22,7 @@ protocol WatchAuthPublishing: AnyObject {
 /// - 세션 미지원(iPad 등)이면 아무것도 하지 않는다.
 /// - 활성화 전이거나 페어링된 Watch·Watch 앱이 없으면 보내지 않고, 마지막 값을 들고 있다가
 ///   활성화·Watch 상태 변경(앱 설치, Watch 교체) 시 다시 보낸다. 전송 실패는 조용히 무시한다.
+/// - iPhone 언어(지역 설정)가 바뀌면 마지막 값의 언어만 바꿔 다시 보내 Watch의 `Accept-Language`를 맞춘다.
 /// application context는 최신 값 하나만 유지되므로 마지막 값 하나만 보관한다.
 final class WatchAuthRelay: NSObject, WatchAuthPublishing, @unchecked Sendable {
     static let shared = WatchAuthRelay(session: WCSession.isSupported() ? WCSession.default : nil)
@@ -30,13 +31,29 @@ final class WatchAuthRelay: NSObject, WatchAuthPublishing, @unchecked Sendable {
     private let language: () -> String
     private let lock = NSLock()
     private var latest: [String: Any]?
+    private let notificationCenter: NotificationCenter
+    private var localeObserver: NSObjectProtocol?
 
     init(
         session: WatchContextSession?,
-        language: @escaping () -> String = { AppLanguage.acceptLanguage() }
+        language: @escaping () -> String = { AppLanguage.acceptLanguage() },
+        notificationCenter: NotificationCenter = .default
     ) {
         self.session = session
         self.language = language
+        self.notificationCenter = notificationCenter
+        super.init()
+        localeObserver = notificationCenter.addObserver(
+            forName: NSLocale.currentLocaleDidChangeNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.refreshLanguage()
+        }
+    }
+
+    deinit {
+        localeObserver.map(notificationCenter.removeObserver)
     }
 
     /// 앱 시작 시 한 번 호출한다. 실제 `WCSession`일 때만 delegate를 연결하고 활성화한다.
@@ -50,6 +67,22 @@ final class WatchAuthRelay: NSObject, WatchAuthPublishing, @unchecked Sendable {
         let payload = context?.applicationContext ?? WatchAuthContext.signedOutContext(language: language())
         lock.withLock { latest = payload }
         flush()
+    }
+
+    /// 마지막 값의 언어가 현재 언어와 다르면 바꿔서 다시 보낸다.
+    func refreshLanguage() {
+        let current = language()
+        let changed: Bool = lock.withLock {
+            guard var payload = latest, payload[WatchAuthContext.Key.language] as? String != current else {
+                return false
+            }
+            payload[WatchAuthContext.Key.language] = current
+            latest = payload
+            return true
+        }
+        if changed {
+            flush()
+        }
     }
 
     /// 보낼 수 있는 상태면 마지막 값을 보낸다.

@@ -112,6 +112,12 @@
 		7B0000000000000000000059 /* Shared.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 7F0000000000000000000014 /* Shared.xcstrings */; };
 		7B000000000000000000005A /* WellnessGameWatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000001C /* WellnessGameWatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7B000000000000000000005B /* WellnessGameWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000001B /* WellnessGameWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6B0000000000000000000502 /* WatchAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0000000000000000000501 /* WatchAppDelegate.swift */; };
+		6B0000000000000000000504 /* LevelTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0000000000000000000503 /* LevelTimeline.swift */; };
+		6B0000000000000000000505 /* LevelTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0000000000000000000503 /* LevelTimeline.swift */; };
+		6B0000000000000000000507 /* SharedConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0000000000000000000506 /* SharedConfigurationTests.swift */; };
+		6B0000000000000000000509 /* WatchDashboardModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0000000000000000000508 /* WatchDashboardModelTests.swift */; };
+		6B000000000000000000050A /* WatchDashboardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000000E /* WatchDashboardModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -220,6 +226,12 @@
 		7F000000000000000000001A /* WellnessGameWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WellnessGameWatchWidgets.entitlements; sourceTree = "<group>"; };
 		7F000000000000000000001B /* WellnessGameWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WellnessGameWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7F000000000000000000001C /* WellnessGameWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WellnessGameWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		6F0000000000000000000501 /* WatchAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAppDelegate.swift; sourceTree = "<group>"; };
+		6F0000000000000000000503 /* LevelTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelTimeline.swift; sourceTree = "<group>"; };
+		6F0000000000000000000506 /* SharedConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedConfigurationTests.swift; sourceTree = "<group>"; };
+		6F0000000000000000000508 /* WatchDashboardModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchDashboardModelTests.swift; sourceTree = "<group>"; };
+		6F0000000000000000000601 /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-Debug.plist"; sourceTree = "<group>"; };
+		6F0000000000000000000602 /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-Debug.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -366,6 +378,8 @@
 				B200000000000000000CB13 /* SocialLoginTests.swift */,
 							7F0000000000000000000012 /* WatchConnectivityTests.swift */,
 				7F0000000000000000000013 /* WatchCompanionTests.swift */,
+				6F0000000000000000000506 /* SharedConfigurationTests.swift */,
+				6F0000000000000000000508 /* WatchDashboardModelTests.swift */,
 );
 			path = WellnessGameTests;
 			sourceTree = "<group>";
@@ -377,7 +391,8 @@
 				B1000000000000000000000C /* WellnessGame.entitlements */,
 				B100000000000000000CB03 /* Localizable.xcstrings */,
 				B100000000000000000CB04 /* InfoPlist.xcstrings */,
-			);
+							6F0000000000000000000601 /* Info-Debug.plist */,
+);
 			path = Resources;
 			sourceTree = "<group>";
 		};
@@ -436,7 +451,8 @@
 				7D0000000000000000000060 /* Core */,
 				7D0000000000000000000061 /* Views */,
 				7D0000000000000000000062 /* Resources */,
-			);
+							6F0000000000000000000501 /* WatchAppDelegate.swift */,
+);
 			path = WellnessGameWatch;
 			sourceTree = "<group>";
 		};
@@ -466,7 +482,8 @@
 				7F0000000000000000000017 /* Info.plist */,
 				7F0000000000000000000019 /* WellnessGameWatch.entitlements */,
 				7F0000000000000000000015 /* Localizable.xcstrings */,
-			);
+							6F0000000000000000000602 /* Info-Debug.plist */,
+);
 			path = Resources;
 			sourceTree = "<group>";
 		};
@@ -477,7 +494,8 @@
 				7F0000000000000000000018 /* Info.plist */,
 				7F000000000000000000001A /* WellnessGameWatchWidgets.entitlements */,
 				7F0000000000000000000016 /* Localizable.xcstrings */,
-			);
+							6F0000000000000000000503 /* LevelTimeline.swift */,
+);
 			path = WellnessGameWatchWidgets;
 			sourceTree = "<group>";
 		};
@@ -728,6 +746,10 @@
 				7B000000000000000000003B /* src */,
 				7B000000000000000000003C /* src */,
 				7B000000000000000000003D /* src */,
+				6B0000000000000000000505 /* LevelTimeline.swift in Sources */,
+				6B0000000000000000000507 /* SharedConfigurationTests.swift in Sources */,
+				6B0000000000000000000509 /* WatchDashboardModelTests.swift in Sources */,
+				6B000000000000000000050A /* WatchDashboardModel.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -753,7 +775,8 @@
 				7B000000000000000000004E /* src */,
 				7B000000000000000000004F /* src */,
 				7B0000000000000000000050 /* src */,
-			);
+							6B0000000000000000000502 /* WatchAppDelegate.swift in Sources */,
+);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7E0000000000000000000024 /* Sources */ = {
@@ -765,7 +788,8 @@
 				7B0000000000000000000055 /* src */,
 				7B0000000000000000000056 /* src */,
 				7B0000000000000000000057 /* src */,
-			);
+							6B0000000000000000000504 /* LevelTimeline.swift in Sources */,
+);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
@@ -853,7 +877,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = WellnessGame/Resources/Info.plist;
+				INFOPLIST_FILE = WellnessGame/Resources/Info-Debug.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				GOOGLE_CLIENT_ID = REPLACE_WITH_GOOGLE_IOS_CLIENT_ID;
 				GOOGLE_REVERSED_CLIENT_ID = REPLACE_WITH_REVERSED_GOOGLE_IOS_CLIENT_ID;
@@ -874,6 +898,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
+				API_BASE_URL = "http://127.0.0.1:8080";
 			};
 			name = Debug;
 		};
@@ -906,6 +931,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
+				API_BASE_URL = "https://api.wellnessgame.example";
 			};
 			name = Release;
 		};
@@ -953,7 +979,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = WellnessGameWatch/Resources/Info.plist;
+				INFOPLIST_FILE = WellnessGameWatch/Resources/Info-Debug.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -968,6 +994,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				API_BASE_URL = "http://127.0.0.1:8080";
 			};
 			name = Debug;
 		};
@@ -994,6 +1021,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				API_BASE_URL = "https://api.wellnessgame.example";
 			};
 			name = Release;
 		};

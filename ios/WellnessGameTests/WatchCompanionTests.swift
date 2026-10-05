@@ -29,50 +29,6 @@ final class InMemoryWatchCredentialStore: WatchCredentialStore, @unchecked Senda
     }
 }
 
-/// 경로별로 다른 응답을 돌려주는 URLProtocol stub. Watch는 두 API를 동시에 부른다.
-final class WatchStubURLProtocol: URLProtocol {
-    private static let lock = NSLock()
-    private static var _responses: [String: (status: Int, body: String)] = [:]
-    private static var _requests: [URLRequest] = []
-
-    static func reset(_ responses: [String: (status: Int, body: String)]) {
-        lock.withLock {
-            _responses = responses
-            _requests = []
-        }
-    }
-
-    static var requests: [URLRequest] {
-        lock.withLock { _requests }
-    }
-
-    static func request(forPath path: String) -> URLRequest? {
-        requests.first { $0.url?.path == path }
-    }
-
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        let path = request.url?.path ?? ""
-        let stub = Self.lock.withLock { () -> (status: Int, body: String) in
-            Self._requests.append(request)
-            return Self._responses[path] ?? (404, "")
-        }
-        let response = HTTPURLResponse(
-            url: request.url!,
-            statusCode: stub.status,
-            httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": "application/json"]
-        )!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(stub.body.utf8))
-        client?.urlProtocolDidFinishLoading(self)
-    }
-
-    override func stopLoading() {}
-}
-
 private enum WatchFixture {
     static let characterPath = "/api/characters/me"
     static let activitiesPath = "/api/health-activities"
@@ -179,7 +135,7 @@ final class WatchCredentialStoreTests: XCTestCase {
 final class WatchAPIClientTests: XCTestCase {
     private func makeClient() -> WatchAPIClient {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [WatchStubURLProtocol.self]
+        configuration.protocolClasses = [StubURLProtocol.self]
         return WatchAPIClient(baseURL: URL(string: "http://stub.local")!, session: URLSession(configuration: configuration))
     }
 
@@ -187,15 +143,15 @@ final class WatchAPIClientTests: XCTestCase {
     private let seoul = TimeZone(identifier: "Asia/Seoul")!
 
     func test_requests_sendBearerTokenAndAcceptLanguage() async throws {
-        WatchStubURLProtocol.reset([
-            WatchFixture.characterPath: (200, WatchFixture.character),
-            WatchFixture.activitiesPath: (200, WatchFixture.emptyActivities),
+        StubURLProtocol.setStubs([
+            WatchFixture.characterPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.character),
+            WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.emptyActivities),
         ])
 
         _ = try await makeClient().fetchSnapshot(credentials: WatchFixture.credentials, now: now, timeZone: seoul)
 
-        XCTAssertEqual(WatchStubURLProtocol.requests.count, 2)
-        for request in WatchStubURLProtocol.requests {
+        XCTAssertEqual(StubURLProtocol.requests.count, 2)
+        for request in StubURLProtocol.requests {
             XCTAssertEqual(request.httpMethod, "GET")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer jwt-watch")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept-Language"), "ko")
@@ -203,13 +159,13 @@ final class WatchAPIClientTests: XCTestCase {
     }
 
     func test_dailyActivities_queriesLocalDate() async throws {
-        WatchStubURLProtocol.reset([WatchFixture.activitiesPath: (200, WatchFixture.emptyActivities)])
+        StubURLProtocol.setStubs([WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.emptyActivities)])
         // UTC 2026-10-05 20:00은 서울에서 10월 6일이다.
         let lateEvening = ISO8601DateFormatter().date(from: "2026-10-05T20:00:00Z")!
 
         _ = try await makeClient().fetchDailyActivities(credentials: WatchFixture.credentials, date: lateEvening, timeZone: seoul)
 
-        let request = try XCTUnwrap(WatchStubURLProtocol.request(forPath: WatchFixture.activitiesPath))
+        let request = try XCTUnwrap(StubURLProtocol.request(forPath: WatchFixture.activitiesPath))
         let query = URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems
         XCTAssertEqual(query, [URLQueryItem(name: "date", value: "2026-10-06")])
     }
@@ -220,18 +176,18 @@ final class WatchAPIClientTests: XCTestCase {
     }
 
     func test_acceptLanguage_fallsBackForUnsupportedStoredLanguage() async throws {
-        WatchStubURLProtocol.reset([WatchFixture.characterPath: (200, WatchFixture.character)])
+        StubURLProtocol.setStubs([WatchFixture.characterPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.character)])
         let credentials = WatchAuthContext(accessToken: "t", userId: "u", displayName: nil, expiresAt: nil, language: "en-GB")
 
         _ = try await makeClient().fetchCharacter(credentials: credentials)
 
-        XCTAssertEqual(WatchStubURLProtocol.requests.last?.value(forHTTPHeaderField: "Accept-Language"), "en")
+        XCTAssertEqual(StubURLProtocol.requests.last?.value(forHTTPHeaderField: "Accept-Language"), "en")
     }
 
     func test_unauthorized_throwsUnauthorized() async {
-        WatchStubURLProtocol.reset([
-            WatchFixture.characterPath: (401, WatchFixture.unauthorized),
-            WatchFixture.activitiesPath: (401, WatchFixture.unauthorized),
+        StubURLProtocol.setStubs([
+            WatchFixture.characterPath: StubURLProtocol.Stub(status: 401, json: WatchFixture.unauthorized),
+            WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 401, json: WatchFixture.unauthorized),
         ])
 
         do {
@@ -243,7 +199,7 @@ final class WatchAPIClientTests: XCTestCase {
     }
 
     func test_serverError_throwsServerStatus() async {
-        WatchStubURLProtocol.reset([WatchFixture.activitiesPath: (500, "{}")])
+        StubURLProtocol.setStubs([WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 500, json: "{}")])
 
         do {
             _ = try await makeClient().fetchDailyActivities(credentials: WatchFixture.credentials, date: now, timeZone: seoul)
@@ -254,7 +210,7 @@ final class WatchAPIClientTests: XCTestCase {
     }
 
     func test_missingCharacter_returnsNilSnapshot() async throws {
-        WatchStubURLProtocol.reset([WatchFixture.activitiesPath: (200, WatchFixture.emptyActivities)])
+        StubURLProtocol.setStubs([WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.emptyActivities)])
 
         let snapshot = try await makeClient().fetchSnapshot(credentials: WatchFixture.credentials, now: now, timeZone: seoul)
 
@@ -262,9 +218,9 @@ final class WatchAPIClientTests: XCTestCase {
     }
 
     func test_fetchSnapshot_combinesCharacterAndTodaysQuests() async throws {
-        WatchStubURLProtocol.reset([
-            WatchFixture.characterPath: (200, WatchFixture.character),
-            WatchFixture.activitiesPath: (200, WatchFixture.activities),
+        StubURLProtocol.setStubs([
+            WatchFixture.characterPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.character),
+            WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.activities),
         ])
 
         let snapshot = try await makeClient().fetchSnapshot(credentials: WatchFixture.credentials, now: now, timeZone: seoul)
@@ -352,10 +308,17 @@ final class DailyQuestProgressTests: XCTestCase {
         XCTAssertEqual(DailyQuestProgress(activities: []), DailyQuestProgress(steps: 0, workoutMinutes: 0, sleepMinutes: 0))
     }
 
-    func test_fraction_clampsToUnitRange() {
-        XCTAssertEqual(DailyQuestProgress.fraction(4_000, of: 8_000), 0.5)
-        XCTAssertEqual(DailyQuestProgress.fraction(9_000, of: 8_000), 1)
-        XCTAssertEqual(DailyQuestProgress.fraction(-1, of: 8_000), 0)
-        XCTAssertEqual(DailyQuestProgress.fraction(10, of: 0), 0)
+    func test_questProgress_usesSharedFraction() {
+        let quests = DailyQuestProgress(steps: 4_000, workoutMinutes: 45, sleepMinutes: -1)
+        XCTAssertEqual(quests.stepsProgress, 0.5)
+        XCTAssertEqual(quests.workoutProgress, 1, "목표를 넘으면 1로 자른다")
+        XCTAssertEqual(quests.sleepProgress, 0)
+    }
+
+    func test_levelProgress_clampsAndHandlesZeroTotal() {
+        XCTAssertEqual(LevelProgress.fraction(25, of: 100), 0.25)
+        XCTAssertEqual(LevelProgress.fraction(150, of: 100), 1)
+        XCTAssertEqual(LevelProgress.fraction(-5, of: 100), 0)
+        XCTAssertEqual(LevelProgress.fraction(10, of: 0), 0)
     }
 }

@@ -7,8 +7,14 @@ enum WatchAPIError: Error, Equatable {
     case server(status: Int)
 }
 
+/// Watch 화면이 쓰는 조회 동작. 모델 테스트에서는 가짜 구현으로 대체한다.
+protocol WatchSnapshotFetching: Sendable {
+    /// 캐릭터와 오늘 활동을 받아 스냅샷으로 만든다. 캐릭터가 아직 없으면 nil.
+    func fetchSnapshot(credentials: WatchAuthContext, now: Date) async throws -> CharacterSnapshot?
+}
+
 /// Watch가 서버를 직접 조회하는 클라이언트. iPhone `NetworkClient`와 같은 서버·헤더 규칙을 쓴다.
-struct WatchAPIClient {
+struct WatchAPIClient: WatchSnapshotFetching {
     let baseURL: URL
     let session: URLSession
 
@@ -40,11 +46,15 @@ struct WatchAPIClient {
         return response
     }
 
-    /// 캐릭터와 오늘 활동을 함께 받아 스냅샷으로 만든다. 캐릭터가 아직 없으면 nil.
+    func fetchSnapshot(credentials: WatchAuthContext, now: Date) async throws -> CharacterSnapshot? {
+        try await fetchSnapshot(credentials: credentials, now: now, timeZone: .current)
+    }
+
+    /// 캐릭터와 오늘 활동을 함께 받아 스냅샷으로 만든다. 날짜는 `timeZone` 기준 오늘이다.
     func fetchSnapshot(
         credentials: WatchAuthContext,
-        now: Date = Date(),
-        timeZone: TimeZone = .current
+        now: Date,
+        timeZone: TimeZone
     ) async throws -> CharacterSnapshot? {
         async let summary = fetchCharacter(credentials: credentials)
         async let daily = fetchDailyActivities(credentials: credentials, date: now, timeZone: timeZone)

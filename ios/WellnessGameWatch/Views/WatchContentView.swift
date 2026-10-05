@@ -59,6 +59,11 @@ private struct SignedInView: View {
                 if let snapshot = model.snapshot {
                     CharacterHeader(snapshot: snapshot)
                     QuestList(quests: snapshot.quests)
+                    if model.isSnapshotStale() {
+                        Label("업데이트 필요", systemImage: "exclamationmark.arrow.circlepath")
+                            .font(.watchRounded(.footnote))
+                            .foregroundStyle(WatchTheme.yellow)
+                    }
                     Text("마지막 동기화 \(snapshot.syncedAt.formatted(date: .omitted, time: .shortened))")
                         .font(.watchRounded(.caption2, weight: .regular))
                         .foregroundStyle(WatchTheme.textSecondary)
@@ -149,21 +154,21 @@ private struct QuestList: View {
                 tint: WatchTheme.mint,
                 title: Text("걸음 수"),
                 value: Text(verbatim: "\(quests.steps.formatted()) / \(DailyQuestProgress.stepsGoal.formatted())"),
-                progress: DailyQuestProgress.fraction(quests.steps, of: DailyQuestProgress.stepsGoal)
+                progress: quests.stepsProgress
             )
             QuestRow(
                 icon: "figure.run",
                 tint: WatchTheme.peach,
                 title: Text("운동"),
                 value: Text("\(quests.workoutMinutes) / \(DailyQuestProgress.workoutGoalMinutes)분"),
-                progress: DailyQuestProgress.fraction(quests.workoutMinutes, of: DailyQuestProgress.workoutGoalMinutes)
+                progress: quests.workoutProgress
             )
             QuestRow(
                 icon: "moon.zzz.fill",
                 tint: WatchTheme.lilac,
                 title: Text("수면"),
                 value: Text("\(quests.sleepMinutes) / \(DailyQuestProgress.sleepGoalMinutes)분"),
-                progress: DailyQuestProgress.fraction(quests.sleepMinutes, of: DailyQuestProgress.sleepGoalMinutes)
+                progress: quests.sleepProgress
             )
         }
     }

@@ -8,45 +8,6 @@ struct WellnessGameWatchWidgets: WidgetBundle {
     }
 }
 
-// MARK: - Timeline
-
-struct LevelEntry: TimelineEntry {
-    let date: Date
-    /// nil이면 로그인 전이거나 아직 Watch 앱이 데이터를 받지 않았다.
-    let snapshot: CharacterSnapshot?
-}
-
-/// Watch 앱이 App Group에 캐시한 마지막 스냅샷을 보여 준다.
-/// 데이터는 Watch 앱이 새로 받을 때 `reloadAllTimelines()`로 갱신하므로 스스로 다시 읽지 않는다.
-struct LevelProvider: TimelineProvider {
-    private let store = SnapshotStore()
-
-    func placeholder(in context: Context) -> LevelEntry {
-        LevelEntry(date: Date(), snapshot: .preview)
-    }
-
-    func getSnapshot(in context: Context, completion: @escaping (LevelEntry) -> Void) {
-        completion(LevelEntry(date: Date(), snapshot: context.isPreview ? store.load() ?? .preview : store.load()))
-    }
-
-    func getTimeline(in context: Context, completion: @escaping (Timeline<LevelEntry>) -> Void) {
-        completion(Timeline(entries: [LevelEntry(date: Date(), snapshot: store.load())], policy: .never))
-    }
-}
-
-extension CharacterSnapshot {
-    /// 위젯 갤러리·placeholder용 예시 값.
-    static let preview = CharacterSnapshot(
-        level: 3,
-        currentXp: 40,
-        nextLevelXp: 100,
-        quests: DailyQuestProgress(steps: 5_200, workoutMinutes: 20, sleepMinutes: 400),
-        syncedAt: Date()
-    )
-}
-
-// MARK: - Widget
-
 struct LevelComplication: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "LevelComplication", provider: LevelProvider()) { entry in
@@ -63,9 +24,18 @@ struct LevelComplicationView: View {
     @Environment(\.widgetFamily) private var family
     let entry: LevelEntry
 
-    private var xpColor: Color { Color(hex: ThemePalette.xp) }
+    private let xpColor = Color(hex: ThemePalette.xp)
+    private let signInText = Text("iPhone에서 로그인하세요")
+    private let staleText = Text("업데이트 필요")
 
     var body: some View {
+        content
+            // 잠금·항상 켜짐 화면에서는 레벨·XP를 가린다.
+            .privacySensitive()
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch family {
         case .accessoryCircular:
             circular
@@ -74,6 +44,10 @@ struct LevelComplicationView: View {
         default:
             inline
         }
+    }
+
+    private func percentText(_ snapshot: CharacterSnapshot) -> String {
+        snapshot.xpProgress.formatted(.percent.precision(.fractionLength(0)))
     }
 
     @ViewBuilder
@@ -87,19 +61,20 @@ struct LevelComplicationView: View {
             }
             .gaugeStyle(.accessoryCircular)
             .tint(xpColor)
+            .opacity(entry.isStale ? 0.5 : 1)
             .accessibilityLabel(Text("Lv.\(snapshot.level)"))
-            .accessibilityValue(Text(snapshot.xpProgress.formatted(.percent.precision(.fractionLength(0)))))
+            .accessibilityValue(entry.isStale ? staleText : Text(percentText(snapshot)))
         } else {
             Image(systemName: "leaf.fill")
                 .font(.title3)
-                .accessibilityLabel(Text("iPhone에서 로그인하세요"))
+                .accessibilityLabel(signInText)
         }
     }
 
     @ViewBuilder
     private var rectangular: some View {
-        if let snapshot = entry.snapshot {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 2) {
+            if let snapshot = entry.snapshot {
                 Text("Lv.\(snapshot.level) · \(snapshot.stage.displayName)")
                     .font(.system(.headline, design: .rounded).weight(.black))
                     .widgetAccentable()
@@ -108,30 +83,37 @@ struct LevelComplicationView: View {
                 }
                 .gaugeStyle(.accessoryLinearCapacity)
                 .tint(xpColor)
-                Text("\(snapshot.currentXp) / \(snapshot.nextLevelXp) XP")
-                    .font(.system(.caption2, design: .rounded))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
+                Group {
+                    if entry.isStale {
+                        staleText
+                    } else {
+                        Text("\(snapshot.currentXp) / \(snapshot.nextLevelXp) XP")
+                    }
+                }
+                .font(.system(.caption2, design: .rounded))
+                .foregroundStyle(.secondary)
+            } else {
                 Text(verbatim: "Wellness Game")
                     .font(.system(.headline, design: .rounded).weight(.black))
                     .widgetAccentable()
-                Text("iPhone에서 로그인하세요")
+                signInText
                     .font(.system(.caption2, design: .rounded))
                     .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
     private var inline: some View {
         if let snapshot = entry.snapshot {
-            Text("Lv.\(snapshot.level) · XP \(snapshot.xpProgress.formatted(.percent.precision(.fractionLength(0))))")
+            if entry.isStale {
+                Text("Lv.\(snapshot.level) · 업데이트 필요")
+            } else {
+                Text("Lv.\(snapshot.level) · XP \(percentText(snapshot))")
+            }
         } else {
-            Text("iPhone에서 로그인하세요")
+            signInText
         }
     }
 }

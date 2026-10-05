@@ -70,7 +70,7 @@ final class SocialSignInFlowTests: XCTestCase {
         suiteName = "SocialSignInFlowTests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         store = InMemoryTokenStore()
-        session = UserSession(defaults: defaults, tokenStore: store)
+        session = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
@@ -174,7 +174,7 @@ final class SocialSignInFlowTests: XCTestCase {
         StubURLProtocol.setStub(status: 200, json: response("kakao:1", token: "jwt-kakao"))
         await flow.signInWithKakao(tokenProvider: FakeTokenProvider.access("t"), session: session)
 
-        let restored = UserSession(defaults: defaults, tokenStore: store)
+        let restored = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
 
         XCTAssertEqual(restored.provider, .kakao)
         XCTAssertEqual(restored.userId, "kakao:1")
@@ -230,7 +230,7 @@ final class SocialSignInFlowTests: XCTestCase {
             defaults.set(provider, forKey: "auth.provider")
             defaults.set("\(provider):legacy", forKey: "auth.userId")
 
-            let restored = UserSession(defaults: defaults, tokenStore: InMemoryTokenStore())
+            let restored = UserSession(defaults: defaults, tokenStore: InMemoryTokenStore(), watchPublisher: NoopWatchPublisher())
 
             XCTAssertFalse(restored.isSignedIn, provider)
             XCTAssertEqual(restored.reloginNotice, UserSession.reloginMessage, provider)

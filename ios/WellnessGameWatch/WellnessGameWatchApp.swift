@@ -2,12 +2,11 @@ import SwiftUI
 
 @main
 struct WellnessGameWatchApp: App {
-    @StateObject private var model = WatchDashboardModel()
+    @WKApplicationDelegateAdaptor private var delegate: WatchAppDelegate
 
     var body: some Scene {
         WindowGroup {
-            WatchContentView(model: model)
-                .onAppear { model.start() }
+            WatchContentView(model: delegate.model)
         }
     }
 }

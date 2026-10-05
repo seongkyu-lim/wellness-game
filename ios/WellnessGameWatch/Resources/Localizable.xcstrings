@@ -222,6 +222,23 @@
         }
       }
     },
+    "업데이트 필요" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update needed"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트 필요"
+          }
+        }
+      }
+    },
     "오늘의 퀘스트" : {
       "extractionState" : "manual",
       "localizations" : {

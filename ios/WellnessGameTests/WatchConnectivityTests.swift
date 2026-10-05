@@ -28,6 +28,11 @@ final class SpyWatchPublisher: WatchAuthPublishing {
     }
 }
 
+/// 테스트가 실제 WCSession(`WatchAuthRelay.shared`)을 건드리지 않도록 `UserSession`에 주입한다.
+final class NoopWatchPublisher: WatchAuthPublishing {
+    func publish(_ context: WatchAuthContext?) {}
+}
+
 // MARK: - WatchAuthContext
 
 final class WatchAuthContextTests: XCTestCase {
@@ -175,6 +180,33 @@ final class WatchAuthRelayTests: XCTestCase {
 
         XCTAssertEqual(session.sentContexts.count, 1)
         XCTAssertEqual(WatchAuthContext(applicationContext: try XCTUnwrap(session.sentContexts.first)), context)
+    }
+
+    func test_localeChange_resendsLatestContextWithNewLanguage() throws {
+        let session = FakeWatchContextSession()
+        var language = "ko"
+        let center = NotificationCenter()
+        let relay = WatchAuthRelay(session: session, language: { language }, notificationCenter: center)
+        relay.publish(context)
+
+        language = "en"
+        center.post(name: NSLocale.currentLocaleDidChangeNotification, object: nil)
+
+        XCTAssertEqual(session.sentContexts.count, 2)
+        let resent = try XCTUnwrap(WatchAuthContext(applicationContext: try XCTUnwrap(session.sentContexts.last)))
+        XCTAssertEqual(resent.language, "en")
+        XCTAssertEqual(resent.accessToken, context.accessToken)
+    }
+
+    func test_localeChange_withoutLanguageChange_doesNotResend() {
+        let session = FakeWatchContextSession()
+        let center = NotificationCenter()
+        let relay = WatchAuthRelay(session: session, language: { "ko" }, notificationCenter: center)
+        relay.publish(context)
+
+        center.post(name: NSLocale.currentLocaleDidChangeNotification, object: nil)
+
+        XCTAssertEqual(session.sentContexts.count, 1)
     }
 
     func test_sendFailure_isSwallowed() {

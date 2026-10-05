@@ -42,6 +42,6 @@ struct ActivityXpResult: Identifiable, Decodable {
 extension CharacterState {
     /// 현재 레벨에서의 XP 진행률 (0...1). nextLevelXp가 0 이하이면 0.
     var xpProgress: Double {
-        LevelProgress.fraction(currentXp: currentXp, nextLevelXp: nextLevelXp)
+        LevelProgress.fraction(currentXp, of: nextLevelXp)
     }
 }
