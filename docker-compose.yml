@@ -24,6 +24,9 @@ services:
       DATABASE_URL: jdbc:mysql://mysql:3306/wellness_game?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DATABASE_USERNAME: wellness
       DATABASE_PASSWORD: wellness
+      # 로컬 개발용 기본 키. 운영에서는 반드시 AUTH_JWT_SECRET 환경변수로 32바이트 이상 비밀키를 주입할 것.
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-local-dev-only-secret-change-me-0123456789}
+      OAUTH_GOOGLE_IOS_CLIENT_ID: ${OAUTH_GOOGLE_IOS_CLIENT_ID:-}
     ports:
       - "8080:8080"
     depends_on:
