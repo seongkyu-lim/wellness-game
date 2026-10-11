@@ -9,11 +9,24 @@ final class AppLanguageTests: XCTestCase {
         XCTAssertEqual(AppLanguage.acceptLanguage(preferredLanguages: []), "en")
     }
 
-    /// 기본값은 기기 선호 언어가 아니라 앱이 화면에 쓰는 현지화(`Bundle.main.preferredLocalizations.first`)를 따른다.
-    func test_acceptLanguage_defaultsToDisplayedLocalization() {
-        let displayed = Bundle.main.preferredLocalizations.first
-        XCTAssertEqual(AppLanguage.acceptLanguage(), AppLanguage.normalized(displayed) ?? AppLanguage.fallback)
-        XCTAssertTrue(AppLanguage.supported.contains(AppLanguage.acceptLanguage()))
+    /// 시스템이 실제로 고르는 앱 현지화(ko/en 번들)를 기준으로 Accept-Language가 화면 언어와 같은지 확인한다.
+    /// `Bundle.preferredLocalizations(from:forPreferences:)`는 `Bundle.main.preferredLocalizations`와 같은 규칙으로 고른다.
+    func test_acceptLanguage_matchesLocalizationChosenForUserPreferences() {
+        let available = Bundle.testResources.localizations.filter { $0 != "Base" }
+        XCTAssertEqual(Set(available), ["ko", "en"])
+
+        let cases: [([String], String, String)] = [
+            (["ko-KR"], "ko", "로그인"),
+            (["en-GB", "ko-KR"], "en", "Sign In"),
+            (["ja-JP", "ko-KR"], "ko", "로그인"), // 미지원 언어는 건너뛰고 다음 선호 언어의 현지화로 표시된다
+        ]
+        for (preferences, expected, loginTitle) in cases {
+            let chosen = Bundle.preferredLocalizations(from: available, forPreferences: preferences)
+            let language = AppLanguage.acceptLanguage(preferredLanguages: chosen)
+            XCTAssertEqual(language, expected, "\(preferences)")
+            // 그 언어 번들이 실제로 화면에 그리는 문구와 서버에 보낼 언어가 일치한다.
+            XCTAssertEqual(Bundle.localized(language).string("로그인"), loginTitle, "\(preferences)")
+        }
     }
 
     func test_acceptLanguage_skipsBaseLocalization() {

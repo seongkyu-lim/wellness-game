@@ -21,6 +21,7 @@ export default function App() {
   const [activities, setActivities] = useState<ActivityEntry[]>([])
   const [loading, setLoading] = useState(false)
   // 번역된 문자열이 아니라 Message로 보관해, 언어를 바꾸면 떠 있는 배너도 다시 번역되게 한다.
+  // 한계: 서버 원문({ raw }, 예: 로그인 교환 실패)은 재번역할 수 없고, 로그아웃 상태에서는 자동 새로고침도 없어 이전 언어로 남는다.
   const [error, setError] = useState<Message | null>(null)
   // 소셜 로그인에서 돌아온 직후(?code=)에는 토큰 교환이 끝날 때까지 랜딩을 그리지 않는다.
   const [completingLogin, setCompletingLogin] = useState(() => new URLSearchParams(window.location.search).has('code'))

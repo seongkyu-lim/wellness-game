@@ -33,6 +33,8 @@ jobs:
       - id: pages
         uses: actions/configure-pages@v5
       - run: npm ci
+      - name: Test
+        run: npm test
       - name: Build
         # Pages 하위 경로(https://<owner>.github.io/<repo>/)를 base로 쓴다. 커스텀 도메인이면 base_path가 비어 '/'가 된다.
         run: npm run build -- --base=${{ steps.pages.outputs.base_path }}/

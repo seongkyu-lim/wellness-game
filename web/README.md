@@ -65,7 +65,8 @@ Apple 로그인은 Apple Developer 유료 계정 + HTTPS 도메인 + Services ID
   헤더 우측의 한/EN 토글로 수동 전환하며, 선택은 저장되고 `<html lang>`에 반영됩니다.
 - 모든 API 요청에 `Accept-Language: ko|en`을 보내며, 서버 오류 메시지는 서버가 해당 언어로 번역합니다.
 - 에러·안내 배너는 번역된 문자열이 아니라 `{ key, params } | { raw }`(`Message`)로 보관하고 렌더링할 때 번역하므로,
-  배너가 떠 있는 동안 언어를 바꿔도 새 언어로 다시 그려집니다. 서버 원문(`raw`)은 다음 자동 새로고침 때 새 언어로 갱신됩니다.
+  배너가 떠 있는 동안 언어를 바꿔도 새 언어로 다시 그려집니다. 서버 원문(`raw`)은 다음 자동 새로고침 때 새 언어로 갱신되지만,
+  로그아웃 상태(예: 로그인 교환 실패)의 서버 원문 배너는 새로고침이 없어 이전 언어로 남습니다.
 - 언어 전환은 데이터를 다시 조회하지 않습니다(조회 응답에 서버 번역 문구가 없음, `App.tsx` 주석 참고).
 - 문구를 추가할 때는 ko·en 사전에 같은 키를 함께 추가하세요(누락하면 타입 체크가 실패합니다).
   영어 용어(캐릭터·단계·스탯)는 [GLOSSARY.md](GLOSSARY.md)를 따릅니다.
@@ -77,8 +78,9 @@ npm run build   # 타입 체크 + dist/ 생성 (CSP meta 주입)
 npm test        # Vitest(jsdom) 단위·렌더링 테스트
 ```
 
-테스트는 `src/**/*.test.ts(x)`와 `csp.test.ts`에 있습니다. i18n(언어 감지·번역·`Intl` 포맷·배너 재번역),
+테스트는 `src/**/*.test.ts(x)`, `csp.test.ts`, `build.test.ts`(실제 프로덕션 빌드의 `index.html`에 CSP meta가 폰트·스크립트보다 앞에 오는지)에 있습니다. i18n(언어 감지·번역·`Intl` 포맷·배너 재번역),
 API 클라이언트 헤더·401 처리, 세션 로드·만료(`lib/auth.ts`), 로그인 버튼 배치, CSP 생성을 검사합니다.
+GitHub Pages 워크플로는 빌드 전에 `npm test`를 실행합니다.
 
 ## 보안: CSP와 토큰 저장
 
@@ -93,8 +95,9 @@ font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' <VI
 object-src 'none'; base-uri 'self'; form-action 'self'
 ```
 
-- `connect-src`는 빌드 시점의 `VITE_API_BASE_URL` 오리진(없으면 `http://localhost:8080`)으로 정해집니다.
-  API 주소를 바꾸면 다시 빌드해야 합니다.
+- `connect-src`는 빌드 시점의 `VITE_API_BASE_URL` 오리진으로 정해집니다. API 주소를 바꾸면 다시 빌드해야 합니다.
+  프로덕션 빌드에서 값이 비어 있으면 localhost를 넣지 않고 `'self'`만 허용하며 경고를 출력합니다(API 호출 차단).
+  백엔드 배포 전 Pages 배포(저장소 변수 미설정)가 끊기지 않도록 빌드 실패 대신 경고로 둡니다.
 - 소셜 로그인은 provider 페이지로의 최상위 이동이고 토큰 교환은 백엔드가 하므로 `connect-src`에 provider 도메인이 없습니다.
 - 외부 리소스(스크립트·이미지·폰트 CDN 등)를 추가하면 `csp.ts`의 지시문도 함께 고치세요.
 - **`frame-ancestors`(클릭재킹 방지)는 meta로 지정할 수 없습니다.** 웹을 직접 서빙하는 서버·CDN에서

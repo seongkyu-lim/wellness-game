@@ -1,7 +1,8 @@
+import { DEFAULT_API_BASE_URL } from '../../csp'
 import { getLanguage, LocalizedError, type Message } from '../i18n/core'
 import type { CharacterSummary, DailyActivitiesResponse } from './types'
 
-const BASE_URL: string = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+const BASE_URL: string = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
 
 /** HTTP 실패. 화면 문구는 서버 메시지(raw) 또는 사전 키로 보관해 렌더링 시 번역한다. */
 export class ApiError extends LocalizedError {
