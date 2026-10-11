@@ -41,10 +41,6 @@ public final class Messages {
         return SOURCE.getMessage(code, args, currentLocale());
     }
 
-    public static String get(LocalizedMessage message) {
-        return get(message.code(), message.args());
-    }
-
     /** 현재 요청 로케일을 지원 로케일로 좁힌 값. 요청 밖이면 ko. */
     public static Locale currentLocale() {
         LocaleContext context = LocaleContextHolder.getLocaleContext();
