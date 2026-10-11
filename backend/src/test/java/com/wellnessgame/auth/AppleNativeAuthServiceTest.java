@@ -71,7 +71,7 @@ class AppleNativeAuthServiceTest {
     void verifiesSignedTokenAndUsesSubjectWithFullName() {
         expectJwks(jwks(KID, appleKey));
 
-        SocialLoginResult result = service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), "임성규");
+        SocialLoginResult result = authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), "임성규");
 
         assertThat(result.userId()).isEqualTo("apple:001234.abcdef.0420");
         assertThat(result.displayName()).isEqualTo("임성규");
@@ -83,16 +83,16 @@ class AppleNativeAuthServiceTest {
         expectJwks(jwks(KID, appleKey));
         String token = token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600));
 
-        assertThat(service.authenticate(token, null).displayName()).isEqualTo("Apple 사용자");
+        assertThat(authenticate(token, null).displayName()).isEqualTo("Apple 사용자");
         LocaleContextHolder.setLocale(Locale.ENGLISH);
-        assertThat(service.authenticate(token, "  ").displayName()).isEqualTo("Apple user");
+        assertThat(authenticate(token, "  ").displayName()).isEqualTo("Apple user");
     }
 
     @Test
     void rejectsTokenForAnotherApp() {
         expectJwks(jwks(KID, appleKey));
 
-        assertThatThrownBy(() -> service.authenticate(token(appleKey, KID, "com.other.app", NOW.plusSeconds(600)), null))
+        assertThatThrownBy(() -> authenticate(token(appleKey, KID, "com.other.app", NOW.plusSeconds(600)), null))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("이 앱에 발급된 애플 identity token이 아닙니다.");
     }
@@ -105,7 +105,7 @@ class AppleNativeAuthServiceTest {
                 .subject("sub").expiration(Date.from(NOW.plusSeconds(600)))
                 .signWith(appleKey.getPrivate(), Jwts.SIG.RS256).compact();
 
-        assertThatThrownBy(() -> service.authenticate(token, null))
+        assertThatThrownBy(() -> authenticate(token, null))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("애플 identity token 발급자가 올바르지 않습니다.");
     }
@@ -114,7 +114,7 @@ class AppleNativeAuthServiceTest {
     void rejectsExpiredToken() {
         expectJwks(jwks(KID, appleKey));
 
-        assertThatThrownBy(() -> service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.minusSeconds(1)), null))
+        assertThatThrownBy(() -> authenticate(token(appleKey, KID, BUNDLE_ID, NOW.minusSeconds(1)), null))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("만료");
     }
@@ -126,14 +126,14 @@ class AppleNativeAuthServiceTest {
                 .issuer(AppleNativeAuthService.APPLE_ISSUER).audience().single(BUNDLE_ID).subject("sub")
                 .signWith(appleKey.getPrivate(), Jwts.SIG.RS256).compact();
 
-        assertThatThrownBy(() -> service.authenticate(token, null)).isInstanceOf(UnauthorizedException.class);
+        assertThatThrownBy(() -> authenticate(token, null)).isInstanceOf(UnauthorizedException.class);
     }
 
     @Test
     void rejectsForgedSignatureUsingAppleKid() {
         expectJwks(jwks(KID, appleKey));
 
-        assertThatThrownBy(() -> service.authenticate(token(attackerKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), null))
+        assertThatThrownBy(() -> authenticate(token(attackerKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), null))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("애플 identity token이 유효하지 않습니다.");
     }
@@ -143,8 +143,8 @@ class AppleNativeAuthServiceTest {
         String unsigned = Jwts.builder().issuer(AppleNativeAuthService.APPLE_ISSUER).audience().single(BUNDLE_ID)
                 .subject("sub").expiration(Date.from(NOW.plusSeconds(600))).compact();
 
-        assertThatThrownBy(() -> service.authenticate(unsigned, null)).isInstanceOf(UnauthorizedException.class);
-        assertThatThrownBy(() -> service.authenticate("not-a-jwt", null)).isInstanceOf(UnauthorizedException.class);
+        assertThatThrownBy(() -> authenticate(unsigned, null)).isInstanceOf(UnauthorizedException.class);
+        assertThatThrownBy(() -> authenticate("not-a-jwt", null)).isInstanceOf(UnauthorizedException.class);
     }
 
     @Test
@@ -152,10 +152,10 @@ class AppleNativeAuthServiceTest {
         server.expect(ExpectedCount.twice(), requestTo(JWKS))
                 .andRespond(withSuccess(jwks(KID, appleKey), MediaType.APPLICATION_JSON));
 
-        service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(7200)), null);
-        service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(7200)), null);
+        authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(7200)), null);
+        authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(7200)), null);
         clock.setInstant(NOW.plus(Duration.ofHours(1)).plusSeconds(1));
-        service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(7200)), null);
+        authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(7200)), null);
 
         server.verify();
     }
@@ -163,17 +163,17 @@ class AppleNativeAuthServiceTest {
     @Test
     void refetchesOnUnknownKidOnlyAfterMinimumInterval() {
         expectJwks(jwks(KID, appleKey));
-        service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), null);
+        authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), null);
         String rotated = token(rotatedKey, "apple-kid-2", BUNDLE_ID, NOW.plusSeconds(600));
 
         // 방금 받은 JWKS 에 없는 kid 는 곧바로 재조회하지 않는다(위조 kid 로 Apple 반복 호출 방지).
-        assertThatThrownBy(() -> service.authenticate(rotated, null)).isInstanceOf(UnauthorizedException.class);
+        assertThatThrownBy(() -> authenticate(rotated, null)).isInstanceOf(UnauthorizedException.class);
         server.verify();
 
         server.reset();
         expectJwks(jwks("apple-kid-2", rotatedKey));
-        clock.setInstant(NOW.plus(AppleNativeAuthService.MIN_REFRESH_INTERVAL).plusSeconds(1));
-        assertThat(service.authenticate(rotated, null).userId()).isEqualTo("apple:001234.abcdef.0420");
+        clock.setInstant(NOW.plus(JwksKeyCache.MIN_REFRESH_INTERVAL).plusSeconds(1));
+        assertThat(authenticate(rotated, null).userId()).isEqualTo("apple:001234.abcdef.0420");
         server.verify();
     }
 
@@ -182,7 +182,7 @@ class AppleNativeAuthServiceTest {
         expectJwks(jwks(KID, appleKey));
         String longName = "가".repeat(99) + "😀😀";
 
-        String displayName = service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), longName)
+        String displayName = authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), longName)
                 .displayName();
 
         assertThat(displayName).isEqualTo("가".repeat(99) + "😀");
@@ -191,7 +191,7 @@ class AppleNativeAuthServiceTest {
     @Test
     void keepsUsingExpiredCacheDuringOutageAndSuppressesRetries() {
         expectJwks(jwks(KID, appleKey));
-        service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plus(Duration.ofHours(3))), null);
+        authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plus(Duration.ofHours(3))), null);
         server.verify();
 
         // TTL 이 지난 뒤 Apple 장애: 기존 키로 계속 검증한다.
@@ -200,20 +200,20 @@ class AppleNativeAuthServiceTest {
         Instant outage = NOW.plus(Duration.ofHours(1)).plusSeconds(1);
         clock.setInstant(outage);
         String token = token(appleKey, KID, BUNDLE_ID, NOW.plus(Duration.ofHours(3)));
-        assertThat(service.authenticate(token, null).userId()).isEqualTo("apple:001234.abcdef.0420");
+        assertThat(authenticate(token, null).userId()).isEqualTo("apple:001234.abcdef.0420");
         server.verify();
 
         // 백오프 동안은 Apple 을 다시 부르지 않는다(예상 밖 요청이면 MockRestServiceServer 가 실패시킨다).
         server.reset();
-        clock.setInstant(outage.plus(AppleNativeAuthService.FAILURE_BACKOFF).minusSeconds(1));
-        assertThat(service.authenticate(token, null).userId()).isEqualTo("apple:001234.abcdef.0420");
+        clock.setInstant(outage.plus(JwksKeyCache.FAILURE_BACKOFF).minusSeconds(1));
+        assertThat(authenticate(token, null).userId()).isEqualTo("apple:001234.abcdef.0420");
         server.verify();
 
         // 백오프가 지나면 다시 받는다.
         server.reset();
         expectJwks(jwks(KID, appleKey));
-        clock.setInstant(outage.plus(AppleNativeAuthService.FAILURE_BACKOFF).plusSeconds(1));
-        service.authenticate(token, null);
+        clock.setInstant(outage.plus(JwksKeyCache.FAILURE_BACKOFF).plusSeconds(1));
+        authenticate(token, null);
         server.verify();
     }
 
@@ -222,12 +222,12 @@ class AppleNativeAuthServiceTest {
         server.expect(requestTo(JWKS)).andRespond(withServerError());
         String token = token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600));
 
-        assertThatIllegalStateException().isThrownBy(() -> service.authenticate(token, null));
+        assertThatIllegalStateException().isThrownBy(() -> authenticate(token, null));
         server.verify();
 
         server.reset();
         clock.setInstant(NOW.plusSeconds(10));
-        assertThatIllegalStateException().isThrownBy(() -> service.authenticate(token, null));
+        assertThatIllegalStateException().isThrownBy(() -> authenticate(token, null));
         server.verify();
     }
 
@@ -236,7 +236,7 @@ class AppleNativeAuthServiceTest {
         server.expect(requestTo(JWKS)).andRespond(withServerError());
 
         assertThatIllegalStateException()
-                .isThrownBy(() -> service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), null));
+                .isThrownBy(() -> authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), null));
     }
 
     @Test
@@ -245,8 +245,84 @@ class AppleNativeAuthServiceTest {
                 new AppleNativeProperties("", null, null), clock);
 
         assertThatIllegalStateException()
-                .isThrownBy(() -> unconfigured.authenticate("any", null))
+                .isThrownBy(() -> unconfigured.authenticate("any", null, null))
                 .withMessage("애플 로그인을 사용할 수 없습니다.");
+    }
+
+    // ---- nonce (#64) ----
+
+    @Test
+    void acceptsMatchingNonce() {
+        expectJwks(jwks(KID, appleKey));
+        String raw = "raw-nonce-123";
+
+        SocialLoginResult result = service.authenticate(nonceToken(Sha256.hex(raw)), null, raw);
+
+        assertThat(result.userId()).isEqualTo("apple:001234.abcdef.0420");
+        // SHA-256("abc") 알려진 값으로 해시 규칙(소문자 hex)을 고정한다.
+        assertThat(Sha256.hex("abc")).isEqualTo("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    }
+
+    @Test
+    void rejectsMismatchedNonce() {
+        expectJwks(jwks(KID, appleKey));
+
+        assertThatThrownBy(() -> service.authenticate(nonceToken(Sha256.hex("other")), null, "raw-nonce-123"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("애플 identity token의 nonce가 일치하지 않습니다.");
+    }
+
+    @Test
+    void rejectsNonceWhenTokenHasNoNonceClaimOrRawValue() {
+        expectJwks(jwks(KID, appleKey));
+
+        // 토큰에 nonce 클레임이 없는데 요청이 nonce 를 보냄
+        assertThatThrownBy(() -> service.authenticate(token(appleKey, KID, BUNDLE_ID, NOW.plusSeconds(600)), null, "raw"))
+                .isInstanceOf(UnauthorizedException.class);
+        // 해시가 아닌 원문이 토큰에 들어 있으면 불일치
+        assertThatThrownBy(() -> service.authenticate(nonceToken("raw"), null, "raw"))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void missingNonceIsAllowedUnlessRequired() {
+        expectJwks(jwks(KID, appleKey));
+        String token = nonceToken(Sha256.hex("raw"));
+
+        assertThat(service.authenticate(token, null, null).userId()).isEqualTo("apple:001234.abcdef.0420");
+        assertThat(service.authenticate(token, null, "").userId()).isEqualTo("apple:001234.abcdef.0420");
+    }
+
+    @Test
+    void missingNonceIsRejectedWhenRequired() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer requiredServer = MockRestServiceServer.bindTo(builder).build();
+        requiredServer.expect(requestTo(JWKS)).andRespond(withSuccess(jwks(KID, appleKey), MediaType.APPLICATION_JSON));
+        AppleNativeAuthService required = new AppleNativeAuthService(builder,
+                new AppleNativeProperties(BUNDLE_ID, JWKS, Duration.ofHours(1), true), clock);
+        String token = nonceToken(Sha256.hex("raw"));
+
+        assertThatThrownBy(() -> required.authenticate(token, null, null))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("애플 로그인 nonce가 필요합니다. 앱을 업데이트해 주세요.");
+        assertThat(required.authenticate(token, null, "raw").userId()).isEqualTo("apple:001234.abcdef.0420");
+    }
+
+    private static String nonceToken(String nonceClaim) {
+        return Jwts.builder()
+                .header().keyId(KID).and()
+                .issuer(AppleNativeAuthService.APPLE_ISSUER)
+                .audience().single(BUNDLE_ID)
+                .subject("001234.abcdef.0420")
+                .claim("nonce", nonceClaim)
+                .claim("nonce_supported", true)
+                .expiration(Date.from(NOW.plusSeconds(600)))
+                .signWith(appleKey.getPrivate(), Jwts.SIG.RS256)
+                .compact();
+    }
+
+    private SocialLoginResult authenticate(String identityToken, String fullName) {
+        return service.authenticate(identityToken, fullName, null);
     }
 
     private void expectJwks(String body) {

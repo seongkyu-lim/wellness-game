@@ -2,14 +2,15 @@ import Foundation
 
 /// iPhone이 WatchConnectivity application context로 Watch에 넘기는 로그인 정보.
 ///
-/// - iPhone: 로그인·세션 복원 시 `applicationContext`, 로그아웃·401 시 `signedOutContext(language:)`를 보낸다.
+/// - iPhone: `/api/auth/watch-token`으로 받은 조회 전용(`scope: read`, 12시간) 토큰을 `applicationContext`로 보내고,
+///   만료 1시간 전이면 다시 발급해 보낸다. 로그아웃·401 시 `signedOutContext(language:)`를 보낸다.
 /// - Watch: `init?(applicationContext:)`로 해석해 Keychain에 저장하고, nil(빈 값)이면 삭제한다.
 /// 딕셔너리에는 property list 호환 타입(String, Double)만 넣는다.
 struct WatchAuthContext: Codable, Equatable, Sendable {
     let accessToken: String
     let userId: String
     let displayName: String?
-    /// 토큰 만료 시각. 서버가 유효 기간을 주지 않았으면 nil.
+    /// 조회 토큰 만료 시각. 서버가 유효 기간을 주지 않았으면 nil.
     let expiresAt: Date?
     /// 서버 `Accept-Language`로 쓸 언어(ko|en).
     let language: String

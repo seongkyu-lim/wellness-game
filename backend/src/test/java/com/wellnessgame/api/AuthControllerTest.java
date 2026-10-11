@@ -20,6 +20,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static com.wellnessgame.support.TestAuth.bearer;
 import static com.wellnessgame.support.TestRequests.fromIp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -74,11 +75,53 @@ class AuthControllerTest {
     @Test
     void rejectsUnsupportedProvider() throws Exception {
         mockMvc.perform(post("/api/auth/apple")
+                        .with(bearer(tokenService, "guest:any"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"code": "auth-code", "redirectUri": "http://localhost:5173"}
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    /** 공개 경로는 지원 공급자 코드 교환만이다. 그 밖의 /api/auth/* 는 토큰이 필요하다(조용히 공개되지 않게). */
+    @Test
+    void unknownAuthPathRequiresBearer() throws Exception {
+        mockMvc.perform(post("/api/auth/apple")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code": "auth-code", "redirectUri": "http://localhost:5173"}
+                                """))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /** Auth v2 하위 호환: 기존 필드는 그대로 두고 refreshToken·refreshExpiresIn 만 더한다. */
+    @Test
+    void loginResponsesKeepExistingFieldsAndAddRefreshFields() throws Exception {
+        JsonNode password = postJson("/api/auth/signup", """
+                {"username": "compat_01", "password": "password1"}
+                """);
+        assertThat(fieldNames(password)).containsExactlyInAnyOrder("userIdentifier", "userId", "displayName",
+                "accessToken", "tokenType", "expiresIn", "refreshToken", "refreshExpiresIn");
+
+        doReturn(new SocialLoginResult("kakao:4242", "카카오친구"))
+                .when(kakaoNativeAuthService).authenticate("kakao-token");
+        JsonNode social = postJson("/api/auth/kakao/native", """
+                {"accessToken": "kakao-token"}
+                """);
+        assertThat(fieldNames(social)).containsExactlyInAnyOrder("userId", "displayName",
+                "accessToken", "tokenType", "expiresIn", "refreshToken", "refreshExpiresIn");
+    }
+
+    @Test
+    void appleNativePassesNonceToVerification() throws Exception {
+        doReturn(new SocialLoginResult("apple:001234.abc", "Apple 사용자"))
+                .when(appleNativeAuthService).authenticate("apple-identity-token", null, "raw-nonce");
+
+        JsonNode body = postJson("/api/auth/apple/native", """
+                {"identityToken": "apple-identity-token", "nonce": "raw-nonce"}
+                """);
+
+        assertTokenFields(body, "apple:001234.abc");
     }
 
     @Test
@@ -270,7 +313,7 @@ class AuthControllerTest {
     @Test
     void appleNativeReturnsAccessTokenForAppleSubject() throws Exception {
         doReturn(new SocialLoginResult("apple:001234.abc", "임성규"))
-                .when(appleNativeAuthService).authenticate("apple-identity-token", "임성규");
+                .when(appleNativeAuthService).authenticate("apple-identity-token", "임성규", null);
 
         JsonNode body = postJson("/api/auth/apple/native", """
                 {"identityToken": "apple-identity-token", "fullName": "임성규"}
@@ -284,7 +327,7 @@ class AuthControllerTest {
     @Test
     void appleNativeAcceptsMissingFullName() throws Exception {
         doReturn(new SocialLoginResult("apple:001234.abc", "Apple 사용자"))
-                .when(appleNativeAuthService).authenticate("apple-identity-token", null);
+                .when(appleNativeAuthService).authenticate("apple-identity-token", null, null);
 
         JsonNode body = postJson("/api/auth/apple/native", """
                 {"identityToken": "apple-identity-token"}
@@ -310,7 +353,7 @@ class AuthControllerTest {
     void nativeEndpointsMapVerificationFailureToUnauthorized() throws Exception {
         doThrow(new UnauthorizedException("x")).when(kakaoNativeAuthService).authenticate("bad");
         doThrow(new UnauthorizedException("x")).when(naverNativeAuthService).authenticate("bad", "bad");
-        doThrow(new UnauthorizedException("x")).when(appleNativeAuthService).authenticate("bad", null);
+        doThrow(new UnauthorizedException("x")).when(appleNativeAuthService).authenticate("bad", null, null);
 
         for (String[] request : new String[][]{
                 {"/api/auth/kakao/native", "{\"accessToken\": \"bad\"}"},
@@ -354,7 +397,7 @@ class AuthControllerTest {
     void appleNativeAcceptsOverlongFullNameForServerSideTruncation() throws Exception {
         String longName = "가".repeat(150);
         doReturn(new SocialLoginResult("apple:001234.abc", "가".repeat(100)))
-                .when(appleNativeAuthService).authenticate("apple-identity-token", longName);
+                .when(appleNativeAuthService).authenticate("apple-identity-token", longName, null);
 
         JsonNode body = postJson("/api/auth/apple/native",
                 "{\"identityToken\": \"apple-identity-token\", \"fullName\": \"" + longName + "\"}");
@@ -405,5 +448,13 @@ class AuthControllerTest {
         String accessToken = body.path("accessToken").asText();
         assertThat(accessToken).isNotBlank();
         assertThat(tokenService.verify(accessToken)).isEqualTo(expectedSubject);
+        assertThat(body.path("refreshToken").asText()).matches("[A-Za-z0-9_-]{43}");
+        assertThat(body.path("refreshExpiresIn").asLong()).isEqualTo(2_592_000L);
+    }
+
+    private static java.util.List<String> fieldNames(JsonNode node) {
+        java.util.List<String> names = new java.util.ArrayList<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
     }
 }

@@ -248,19 +248,14 @@ final class UserSessionWatchSyncTests: XCTestCase {
         userIdentifier: nil
     )
 
-    func test_signIn_publishesTokenUserIdAndExpiry() throws {
+    func test_signIn_doesNotPublishIPhoneAccessToken() throws {
         let spy = SpyWatchPublisher()
-        let issuedAt = Date(timeIntervalSince1970: 1_700_000_000)
-        let session = UserSession(defaults: defaults, tokenStore: InMemoryTokenStore(), watchPublisher: spy, now: { issuedAt })
+        let session = UserSession(defaults: defaults, tokenStore: InMemoryTokenStore(), watchPublisher: spy)
 
         try session.signIn(provider: .google, auth: auth)
 
-        let sent = try XCTUnwrap(spy.published.last ?? nil)
-        XCTAssertEqual(sent.accessToken, "jwt-google")
-        XCTAssertEqual(sent.userId, "google:123")
-        XCTAssertEqual(sent.displayName, "Alice")
-        XCTAssertEqual(sent.expiresAt, issuedAt.addingTimeInterval(3600))
-        XCTAssertTrue(["ko", "en"].contains(sent.language))
+        // Watch에는 전체 권한 토큰 대신 watch-token으로 받은 조회 토큰만 보낸다(AuthSessionTests 참고).
+        XCTAssertFalse(spy.published.contains { $0?.accessToken == "jwt-google" })
     }
 
     func test_signOut_andUnauthorized_publishEmptyContext() throws {
@@ -269,23 +264,24 @@ final class UserSessionWatchSyncTests: XCTestCase {
 
         try session.signIn(provider: .google, auth: auth)
         session.signOut()
-        XCTAssertEqual(spy.published.count, 3, "복원(빈 값) → 로그인 → 로그아웃 순서로 보내야 합니다")
+        XCTAssertEqual(spy.published.count, 2, "복원(빈 값) → 로그아웃(빈 값) 순서로 보내야 합니다")
         XCTAssertNil(spy.published.last ?? nil)
 
         try session.signIn(provider: .google, auth: auth)
         session.handleUnauthorized()
+        XCTAssertEqual(spy.published.count, 3)
         XCTAssertNil(spy.published.last ?? nil)
     }
 
-    func test_restoredSession_isPublishedOnLaunch() throws {
+    func test_restoredSession_doesNotPublishIPhoneTokenOnLaunch() throws {
         let store = InMemoryTokenStore()
         try UserSession(defaults: defaults, tokenStore: store, watchPublisher: SpyWatchPublisher())
             .signIn(provider: .google, auth: auth)
 
         let spy = SpyWatchPublisher()
-        _ = UserSession(defaults: defaults, tokenStore: store, watchPublisher: spy)
+        let restored = UserSession(defaults: defaults, tokenStore: store, watchPublisher: spy)
 
-        XCTAssertEqual(spy.published.count, 1)
-        XCTAssertEqual((spy.published.first ?? nil)?.accessToken, "jwt-google")
+        XCTAssertTrue(restored.isSignedIn)
+        XCTAssertTrue(spy.published.isEmpty, "복원 시에는 보내지 않고 첫 동기화 때 조회 토큰을 발급해 보냅니다")
     }
 }

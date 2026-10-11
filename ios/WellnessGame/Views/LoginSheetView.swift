@@ -237,7 +237,7 @@ struct LoginSheetView: View {
         switch provider {
         case .apple:
             SignInWithAppleButton(.signIn) { request in
-                request.requestedScopes = [.fullName, .email]
+                socialLogin.prepareAppleRequest(request)
             } onCompletion: { result in
                 socialLogin.signInWithApple(result, session: userSession)
             }

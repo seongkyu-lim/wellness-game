@@ -243,11 +243,12 @@ class LocalizedResponseControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", is("Incorrect username or password.")));
 
+        // 지원하지 않는 공급자 경로는 공개 경로가 아니어서(Auth v2) 토큰 없이는 401 이다.
         postJson("en", "/api/auth/unknown", """
                 {"code": "c", "redirectUri": "https://example.com"}
                 """)
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message", is("Unsupported sign-in provider: unknown")));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message", is("Please sign in to continue.")));
     }
 
     // ---- helpers ----
