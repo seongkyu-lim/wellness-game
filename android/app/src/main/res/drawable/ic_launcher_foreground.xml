@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 새싹이(새싹 단계): 120x120 좌표를 108dp 아이콘의 안전 영역(가운데 72dp)에 맞춰 축소 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <group android:scaleX="0.62" android:scaleY="0.62" android:pivotX="60" android:pivotY="60">
+        <path android:fillColor="#5BB04F" android:strokeColor="#1F2340" android:strokeWidth="3"
+            android:pathData="M57 48 H63 V72 H57 Z" />
+        <path android:fillColor="#8ED65A" android:strokeColor="#1F2340" android:strokeWidth="3" android:strokeLineJoin="round"
+            android:pathData="M58 58 Q44 58 40 46 Q54 42 58 58 Z" />
+        <path android:fillColor="#8ED65A" android:strokeColor="#1F2340" android:strokeWidth="3" android:strokeLineJoin="round"
+            android:pathData="M62 54 Q74 52 80 40 Q66 38 62 54 Z" />
+        <path android:fillColor="#F4A06C" android:strokeColor="#1F2340" android:strokeWidth="3" android:strokeLineJoin="round"
+            android:pathData="M38 76 H82 L77 104 Q76 109 71 109 H49 Q44 109 43 104 Z" />
+        <path android:fillColor="#F9BC8A" android:strokeColor="#1F2340" android:strokeWidth="3"
+            android:pathData="M38 68 H82 Q87 68 87 73 V75 Q87 80 82 80 H38 Q33 80 33 75 V73 Q33 68 38 68 Z" />
+        <path android:fillColor="#1F2340" android:pathData="M46.8 90 a4.2 5.6 0 1 0 8.4 0 a4.2 5.6 0 1 0 -8.4 0 Z" />
+        <path android:fillColor="#1F2340" android:pathData="M64.8 90 a4.2 5.6 0 1 0 8.4 0 a4.2 5.6 0 1 0 -8.4 0 Z" />
+        <path android:strokeColor="#1F2340" android:strokeWidth="2.2" android:strokeLineCap="round"
+            android:pathData="M57 97 Q60 100.5 63 97" />
+    </group>
+</vector>

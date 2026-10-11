@@ -365,6 +365,24 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 
 운영 배포에서는 HTTPS만 사용해야 합니다.
 
+## Android 앱 실행
+
+`android/`는 네이티브 Kotlin + Jetpack Compose 앱이다(minSdk 28, target/compileSdk 35, 패키지 `com.example.wellnessgame`). 서버 계약은 iOS와 같다.
+
+```bash
+cd android
+export JAVA_HOME=<JDK 17+>   # JDK 21 확인
+./gradlew testDebugUnitTest assembleDebug lint
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+- **서버 주소:** debug는 `http://10.0.2.2:8080`(에뮬레이터에서 호스트 PC의 localhost). 평문 HTTP는 debug 전용 network security config로만 허용한다. release는 `-PAPI_BASE_URL=https://...`가 필수이며, 값이 없거나 https가 아니면 빌드가 실패한다.
+- **소셜 로그인 키(gradle property, 커밋 금지):** `GOOGLE_SERVER_CLIENT_ID`(서버가 aud로 검증하는 웹 OAuth 클라이언트 ID), `KAKAO_NATIVE_APP_KEY`, `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET`/`NAVER_CLIENT_NAME`. `~/.gradle/gradle.properties`나 `-P`로 넣고, 비어 있으면 해당 버튼이 비활성화된다. 네이버 client secret은 APK에 포함되어 추출될 수 있으므로 비밀로 취급하지 않으며, 서버는 앱이 보낸 refresh token을 서버의 client ID·secret으로 갱신해 성공할 때만 이 앱이 발급받은 토큰으로 인정한다(그래서 Android도 서버와 같은 네이버 애플리케이션을 써야 한다). Google은 Google Cloud에 Android OAuth 클라이언트(패키지명 + 서명 SHA-1)도 등록해야 하고, 카카오·네이버 콘솔에도 패키지명·키 해시를 등록해야 한다.
+- **로그인 노출 순서:** iOS `LoginProviderPolicy`와 같다(기기 지역 KR: 카카오·네이버·구글 / 그 외: 구글, 나머지는 "다른 방법으로 로그인"). Apple 로그인은 Android에서 제공하지 않는다.
+- **건강 데이터:** Health Connect(걸음·운동·수면·활동 칼로리·거리 읽기). Android 13 이하는 Health Connect 앱 설치가 필요하다. 로그인 후 앱 진입·새로고침 때 동기화하고, WorkManager가 1시간마다(네트워크 연결 시) 동기화한다(백그라운드 읽기 권한을 지원하는 기기만).
+- **Mock 데이터:** debug 빌드 홈 하단의 "Use mock data" 토글. 로그인 전에는 기기 안에서 미리보기만 하고 서버로 보내지 않는다.
+- **토큰 저장:** Android Keystore(AES-256-GCM)로 암호화해 DataStore에 저장하며 백업에서 제외한다. 로그아웃·401 때 삭제한다.
+
 ## HealthKit 제한과 개인정보
 
 - HealthKit 데이터는 민감정보입니다. 이 MVP는 XP 계산에 필요한 요약 데이터만 서버에 보냅니다.
