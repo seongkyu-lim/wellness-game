@@ -52,16 +52,19 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 
 요구 사항:
 
-- Java 17 이상
+- 로컬 Gradle 실행 시 Java 21 이상(`JAVA_HOME`을 JDK 21 이상으로 지정)
 - MySQL 8.4 LTS 또는 Docker
 
 > Gradle은 프로젝트에 포함된 Wrapper(`./gradlew`)를 사용하므로 별도 설치가 필요 없습니다.
+> 예: `export JAVA_HOME=$(/usr/libexec/java_home -v 21)` (macOS)
 
-가장 간단한 실행 방법:
+가장 간단한 실행 방법(JWT 서명 키 `AUTH_JWT_SECRET`이 필수입니다):
 
 ```bash
-docker compose up --build
+AUTH_JWT_SECRET=$(openssl rand -base64 48) docker compose up --build
 ```
+
+> 키를 실행마다 새로 만들면 이전에 발급한 토큰이 모두 무효가 됩니다. 계속 쓰려면 같은 값을 `.env`에 저장해 두세요.
 
 - API: `http://localhost:8080`
 - MySQL host port: `13306`
@@ -82,10 +85,37 @@ DATABASE_PASSWORD=wellness \
 
 ```bash
 cd backend
-./gradlew test
+./gradlew test        # 인메모리 H2(MySQL 호환 모드)
+./gradlew mysqlTest   # MySQL 8.4 컨테이너(Testcontainers), Docker 필요
 ```
 
-테스트는 MySQL 호환 모드의 인메모리 H2를 사용합니다.
+- `test`는 MySQL 호환 모드의 인메모리 H2에 운영과 같은 Flyway 마이그레이션을 적용해 돕니다.
+- `mysqlTest`는 `@Tag("mysql")` 테스트만 실행합니다. 실제 MySQL에서만 확인할 수 있는 Flyway 스키마·`ddl-auto=validate`,
+  기존 DB baseline, 동시 동기화(신규 사용자 경합, 일일·운동 XP 상한), 작은 연결 풀에서의 동시 요청을 검증합니다.
+  Docker가 없으면 로컬에서는 건너뛰어지고(skipped), `CI` 환경변수가 설정돼 있으면 조용히 넘어가지 않도록 실패합니다.
+- 테스트(H2)는 Instant를 `preferred_instant_jdbc_type: TIMESTAMP`(JVM 시간대 기준)로 매핑해 운영 기본값(`TIMESTAMP_UTC`)과 다릅니다. 시간대 관련 회귀는 `mysqlTest`로 확인하세요.
+- 후속: 백엔드 CI 워크플로에 `./gradlew test mysqlTest`를 추가해야 합니다(아직 없음).
+
+### DB 스키마 (Flyway)
+
+스키마는 Flyway가 `backend/src/main/resources/db/migration`의 마이그레이션으로 관리하고, Hibernate는 `ddl-auto: validate`로
+엔티티와 스키마가 같은지만 확인합니다(다르면 기동 실패).
+
+| 버전 | 내용 |
+|---|---|
+| `V1__baseline.sql` | 기준 스키마(`user_character`, `health_activity_log`, `user_credential`와 유일 제약·인덱스) |
+| `V2__sleep_key_normalization` (Java) | 구 형식 수면 로그 키 정리와 legacy 수면 XP 합치기(멱등, 행 삭제 없음) |
+
+- **빈 DB:** V1부터 순서대로 실행합니다.
+- **Flyway 도입 전(`ddl-auto: update`)에 만들어진 기존 DB:** 첫 기동 때 `flyway_schema_history`가 없고 테이블이 있으므로
+  `baseline-on-migrate`로 버전 1 기준선을 기록해 V1을 건너뛰고, V2부터 적용합니다. 이후에는 새 버전만 실행됩니다.
+- **Flyway 도입 후 첫 운영 배포 전 확인:** baseline은 기존 테이블이 V1과 같다고 가정하고 V1을 건너뜁니다. 예전
+  `ddl-auto: update`는 컬럼을 추가만 하고 타입은 고치지 않으므로, 운영 DB가 V1과 다를 수 있습니다(예: 오래전에 만들어진
+  `health_activity_log.type`이 `enum(...)`이 아니라 `varchar(255)`). 배포 전에 운영 DB에서
+  `SHOW CREATE TABLE user_character;`, `SHOW CREATE TABLE health_activity_log;`, `SHOW CREATE TABLE user_credential;`을
+  실행해 `V1__baseline.sql`과 컬럼 타입·NULL 허용·유일 제약·인덱스를 비교하세요. 다르면 운영 DB를 V1에 맞추는 정렬 SQL을
+  먼저(백업 후) 적용한 뒤 배포합니다. 그대로 배포하면 `ddl-auto: validate`가 기동을 막거나, 통과하더라도 V1과 다른 상태로 남습니다.
+- 스키마를 바꿀 때는 기존 파일을 고치지 말고 `V3__설명.sql`처럼 새 버전을 추가하세요. 적용된 마이그레이션을 고치면 체크섬 검증에 실패합니다.
 
 ### 소셜 로그인 서버 환경변수
 
@@ -314,7 +344,6 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 
 - Apple·Google·Kakao·Naver 토큰 서버 검증과 자체 세션 발급
 - 게스트 진행 상황을 소셜 계정으로 이전하는 계정 연결 기능
-- 운영 DB migration 도구(Flyway/Liquibase)
 - 서버 HTTPS 배포 및 iOS 환경별 API 설정
 - 백그라운드 동기화와 실패 요청 재시도 저장소
 - HealthKit anchored query 기반 증분 동기화
