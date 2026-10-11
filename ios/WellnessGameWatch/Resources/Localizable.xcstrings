@@ -154,23 +154,6 @@
         }
       }
     },
-    "건강 데이터 권한을 확인해 주세요." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Check Health access for this app."
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "건강 데이터 권한을 확인해 주세요."
-          }
-        }
-      }
-    },
     "걷기" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -592,6 +575,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "운동을 시작하지 못했어요."
+          }
+        }
+      }
+    },
+    "운동을 저장할 권한이 없어요. iPhone의 건강 앱이나 Watch 설정에서 Wellness Game의 건강 데이터 접근을 허용해 주세요." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wellness Game can't save workouts. Allow its Health access in the Health app on your iPhone or in Settings on your Apple Watch."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "운동을 저장할 권한이 없어요. iPhone의 건강 앱이나 Watch 설정에서 Wellness Game의 건강 데이터 접근을 허용해 주세요."
           }
         }
       }

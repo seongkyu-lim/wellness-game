@@ -22,6 +22,9 @@ final class DemoWorkoutController: WorkoutSessionControlling {
 
     func requestAuthorization() async throws {}
 
+    /// 데모 모드는 HealthKit 세션을 만들지 않으므로 이어받을 것도 없다.
+    func recoverActiveSession() async {}
+
     func start(_ kind: WorkoutKind) async throws {
         self.kind = kind
         startDate = Date()

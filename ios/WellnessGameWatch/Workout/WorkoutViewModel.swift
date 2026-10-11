@@ -18,6 +18,8 @@ protocol WorkoutSessionControlling: AnyObject {
     func end()
     /// 일시정지를 뺀 경과 시간.
     func elapsedTime(at date: Date) -> TimeInterval
+    /// 운동 중 앱이 다시 실행됐을 때 진행 중인 세션을 이어받는다. 이어받으면 `.sessionRecovered`를 보낸다.
+    func recoverActiveSession() async
 }
 
 /// Watch 운동 화면의 상태. HealthKit 호출은 `WorkoutSessionControlling`에 맡기고,
@@ -32,7 +34,7 @@ final class WorkoutViewModel: ObservableObject {
 
     init(controller: WorkoutSessionControlling) {
         self.controller = controller
-        controller.onEvent = { [weak self] event in self?.handle(event) }
+        controller.onEvent = { [weak self] event in self?.apply(event) }
         controller.onMetrics = { [weak self] metrics in self?.metrics = metrics }
     }
 
@@ -88,10 +90,6 @@ final class WorkoutViewModel: ObservableObject {
 
     func elapsedTime(at date: Date) -> TimeInterval {
         controller.elapsedTime(at: date)
-    }
-
-    func handle(_ event: WorkoutEvent) {
-        apply(event)
     }
 
     @discardableResult

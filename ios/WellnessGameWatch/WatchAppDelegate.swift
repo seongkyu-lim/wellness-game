@@ -16,15 +16,16 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate {
     )
     private lazy var receiver = WatchAuthReceiver(model: model)
 
-    private lazy var workoutController = HealthKitWorkoutController()
-    lazy var workout: WorkoutViewModel = {
+    /// Debug `-WorkoutDemo`면 가짜 세션, 아니면 HealthKit. 복구도 같은 컨트롤러로 해서 모드가 어긋나지 않게 한다.
+    private lazy var workoutController: WorkoutSessionControlling = {
         #if DEBUG
         if DemoWorkoutController.isEnabled {
-            return WorkoutViewModel(controller: DemoWorkoutController())
+            return DemoWorkoutController()
         }
         #endif
-        return WorkoutViewModel(controller: workoutController)
+        return makeHealthKitWorkoutController()
     }()
+    lazy var workout = WorkoutViewModel(controller: workoutController)
 
     func applicationDidFinishLaunching() {
         ServerEnvironment.validateAtLaunch()
@@ -34,7 +35,7 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate {
 
     /// 운동 중 앱이 종료됐다가 시스템이 다시 실행하면 진행 중인 세션을 이어받는다.
     func handleActiveWorkoutRecovery() {
-        _ = workout
+        _ = workout // 뷰모델이 먼저 컨트롤러 콜백을 연결해야 복구 이벤트를 받는다.
         Task { await workoutController.recoverActiveSession() }
     }
 

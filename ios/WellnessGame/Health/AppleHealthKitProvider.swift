@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import OSLog
 
 final class AppleHealthKitProvider: HealthDataProvider {
     private let manager: HealthKitManager
@@ -88,16 +89,48 @@ final class AppleHealthKitProvider: HealthDataProvider {
             .flatMap { workout.statistics(for: $0)?.sumQuantity() }
             .map { $0.doubleValue(for: .kilocalorie()) }
 
-        return HealthActivityDTO(
-            type: .workout,
+        return Self.workoutActivity(
             workoutType: mapWorkoutType(workout.workoutActivityType),
-            durationMinutes: WorkoutSyncRules.durationMinutes(activeDuration: workout.duration),
-            calories: WorkoutSyncRules.clampedCalories(calories, start: workout.startDate, end: workout.endDate),
+            activeDuration: workout.duration,
+            calories: calories,
             distanceMeters: workout.totalDistance?.doubleValue(for: .meter()),
             startedAt: workout.startDate,
             endedAt: workout.endDate
         )
     }
+
+    /// HealthKit 운동을 서버 동기화 항목으로 만든다(HKWorkout 없이 테스트할 수 있게 값만 받는다).
+    ///
+    /// 칼로리는 서버의 분당 상한(`calories × 60 ≤ 20 × 구간 초`)을 넘으면 잘라서 보낸다.
+    /// 서버는 상한을 넘는 운동을 통째로 건너뛰어(0 XP) 시간·종목까지 잃는다. 센서 이상값이나 다른 앱이 쓴
+    /// 과대 칼로리 때문에 운동 전체를 버리는 것보다 상한까지만 인정하는 편이 낫다고 판단했다.
+    /// 절단은 드문 일이므로 원인을 추적할 수 있게 디버그 로그를 남긴다.
+    static func workoutActivity(
+        workoutType: WorkoutType,
+        activeDuration: TimeInterval,
+        calories: Double?,
+        distanceMeters: Double?,
+        startedAt: Date,
+        endedAt: Date
+    ) -> HealthActivityDTO {
+        let syncedCalories = WorkoutSyncRules.clampedCalories(calories, start: startedAt, end: endedAt)
+        if let calories, let syncedCalories, calories > WorkoutSyncRules.calorieCap(start: startedAt, end: endedAt) {
+            logger.debug(
+                "운동 칼로리를 서버 상한으로 잘랐어요: \(calories, privacy: .public)kcal → \(syncedCalories, privacy: .public)kcal (\(workoutType.rawValue, privacy: .public), \(endedAt.timeIntervalSince(startedAt), privacy: .public)s)"
+            )
+        }
+        return HealthActivityDTO(
+            type: .workout,
+            workoutType: workoutType,
+            durationMinutes: WorkoutSyncRules.durationMinutes(activeDuration: activeDuration),
+            calories: syncedCalories,
+            distanceMeters: distanceMeters,
+            startedAt: startedAt,
+            endedAt: endedAt
+        )
+    }
+
+    private static let logger = Logger(subsystem: "com.example.WellnessGame", category: "HealthSync")
 
     /// 종목 매핑은 Watch 운동 기록과 같은 `WorkoutKind`를 쓴다.
     private func mapWorkoutType(_ type: HKWorkoutActivityType) -> WorkoutType {

@@ -116,12 +116,13 @@ private struct WorkoutLiveView: View {
             VStack(alignment: .leading, spacing: 6) {
                 header
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text(WorkoutFormat.duration(model.elapsedTime(at: context.date)))
+                    let elapsed = WorkoutFormat.duration(model.elapsedTime(at: context.date))
+                    Text(elapsed)
                         .font(.system(.title2, design: .rounded).weight(.black))
                         .foregroundStyle(model.isPaused ? WatchTheme.textSecondary : WatchTheme.yellow)
                         .monospacedDigit()
                         .accessibilityLabel(Text("시간"))
-                        .accessibilityValue(Text(WorkoutFormat.duration(model.elapsedTime(at: context.date))))
+                        .accessibilityValue(Text(elapsed))
                 }
                 MetricRow(icon: "heart.fill", tint: WatchTheme.peach, title: "심박수", value: heartRateText)
                 MetricRow(icon: "flame.fill", tint: WatchTheme.yellow, title: "활동 칼로리", value: caloriesText)
@@ -200,15 +201,15 @@ private struct WorkoutLiveView: View {
     }
 
     private var heartRateText: Text {
-        model.metrics.heartRate.map { Text("\(Int($0.rounded())) bpm") } ?? Text(verbatim: "--")
+        WorkoutFormat.valueText(model.metrics.heartRate) { Text("\(Int($0.rounded())) bpm") }
     }
 
     private var caloriesText: Text {
-        model.metrics.activeCalories.map { Text("\(Int($0.rounded())) kcal") } ?? Text(verbatim: "--")
+        WorkoutFormat.valueText(model.metrics.activeCalories) { Text("\(Int($0.rounded())) kcal") }
     }
 
     private var distanceText: Text {
-        model.metrics.distanceMeters.map { Text(WorkoutFormat.distance($0)) } ?? Text(verbatim: "--")
+        WorkoutFormat.valueText(model.metrics.distanceMeters) { Text(WorkoutFormat.distance($0)) }
     }
 }
 
@@ -259,9 +260,9 @@ private struct WorkoutSummaryView: View {
                 MetricRow(icon: "timer", tint: WatchTheme.yellow, title: "시간",
                           value: Text(WorkoutFormat.duration(summary.activeDuration)))
                 MetricRow(icon: "flame.fill", tint: WatchTheme.yellow, title: "활동 칼로리",
-                          value: summary.roundedCalories.map { Text("\($0) kcal") } ?? Text(verbatim: "--"))
+                          value: WorkoutFormat.valueText(summary.roundedCalories) { Text("\($0) kcal") })
                 MetricRow(icon: "heart.fill", tint: WatchTheme.peach, title: "평균 심박",
-                          value: summary.roundedAverageHeartRate.map { Text("\($0) bpm") } ?? Text(verbatim: "--"))
+                          value: WorkoutFormat.valueText(summary.roundedAverageHeartRate) { Text("\($0) bpm") })
                 if let distance = summary.distanceMeters {
                     MetricRow(icon: "location.fill", tint: WatchTheme.mint, title: "거리",
                               value: Text(WorkoutFormat.distance(distance)))
@@ -303,7 +304,7 @@ private struct WorkoutFailureView: View {
     private var message: LocalizedStringKey {
         switch failure {
         case .healthDataUnavailable: "이 기기에서는 건강 데이터를 쓸 수 없어요."
-        case .authorizationFailed: "건강 데이터 권한을 확인해 주세요."
+        case .authorizationFailed: "운동을 저장할 권한이 없어요. iPhone의 건강 앱이나 Watch 설정에서 Wellness Game의 건강 데이터 접근을 허용해 주세요."
         case .startFailed: "운동을 시작하지 못했어요."
         case .saveFailed: "운동을 건강 앱에 저장하지 못했어요."
         case .interrupted: "운동이 중단됐어요."
@@ -314,6 +315,11 @@ private struct WorkoutFailureView: View {
 // MARK: - 형식
 
 enum WorkoutFormat {
+    /// 값이 있으면 `format`으로, 아직 없으면 "--"로 표시한다.
+    static func valueText<Value>(_ value: Value?, format: (Value) -> Text) -> Text {
+        value.map(format) ?? Text(verbatim: "--")
+    }
+
     /// 0:05:09 → "5:09", 1:02:03 → "1:02:03".
     static func duration(_ seconds: TimeInterval) -> String {
         let total = Int(max(0, seconds))

@@ -293,6 +293,8 @@ final class FakeWorkoutController: WorkoutSessionControlling {
     }
 
     func elapsedTime(at date: Date) -> TimeInterval { 42 }
+
+    func recoverActiveSession() async {}
 }
 
 private struct StubError: Error {}
@@ -386,5 +388,301 @@ final class WorkoutViewModelTests: XCTestCase {
         controller.onEvent?(.sessionFailed(.saveFailed))
         model.dismiss()
         XCTAssertEqual(model.metrics, .empty)
+    }
+}
+
+// MARK: - 세션 컨트롤러(가짜 HealthKit 세션)
+
+final class FakeSessionDriver: WorkoutSessionDriving {
+    let kind: WorkoutKind
+    var state: HKWorkoutSessionState
+    var startDate: Date?
+    let signals: AsyncStream<WorkoutSessionSignal>
+    private let continuation: AsyncStream<WorkoutSessionSignal>.Continuation
+
+    var beginError: Error?
+    var endCollectionError: Error?
+    var finishError: Error?
+    var metrics = WorkoutMetrics.empty
+    var elapsed: TimeInterval = 0
+    private(set) var calls: [String] = []
+
+    init(kind: WorkoutKind, state: HKWorkoutSessionState = .notStarted, startDate: Date? = nil) {
+        self.kind = kind
+        self.state = state
+        self.startDate = startDate
+        (signals, continuation) = AsyncStream.makeStream(of: WorkoutSessionSignal.self)
+    }
+
+    func emit(_ signal: WorkoutSessionSignal) {
+        continuation.yield(signal)
+    }
+
+    private func change(to newState: HKWorkoutSessionState) {
+        let old = state
+        state = newState
+        emit(.stateChanged(to: newState, from: old, date: Date()))
+    }
+
+    func startActivity(at date: Date) {
+        calls.append("startActivity")
+        startDate = date
+        change(to: .running)
+    }
+
+    func pause() { calls.append("pause"); change(to: .paused) }
+    func resume() { calls.append("resume"); change(to: .running) }
+    func end() { calls.append("end"); change(to: .ended) }
+
+    func beginCollection(at date: Date) async throws {
+        calls.append("beginCollection")
+        if let beginError { throw beginError }
+    }
+
+    func endCollection(at date: Date) async throws {
+        calls.append("endCollection")
+        if let endCollectionError { throw endCollectionError }
+    }
+
+    func finishWorkout() async throws -> FinishedWorkout? {
+        calls.append("finishWorkout")
+        if let finishError { throw finishError }
+        let start = startDate ?? Date()
+        return FinishedWorkout(startDate: start, endDate: start.addingTimeInterval(elapsed), duration: elapsed)
+    }
+
+    func discardWorkout() { calls.append("discardWorkout") }
+    func currentMetrics() -> WorkoutMetrics { metrics }
+    func elapsedTime(at date: Date) -> TimeInterval { elapsed }
+}
+
+final class FakeHealthStore: WorkoutHealthStoring {
+    var isHealthDataAvailable = true
+    var isWorkoutSharingDenied = false
+    var pendingSessions: [FakeSessionDriver] = []
+    var recoverable: FakeSessionDriver?
+    private(set) var madeSessions = 0
+    private(set) var authorizationRequests = 0
+
+    func requestAuthorization() async throws {
+        authorizationRequests += 1
+    }
+
+    func makeSession(for kind: WorkoutKind) throws -> WorkoutSessionDriving {
+        madeSessions += 1
+        return pendingSessions.isEmpty ? FakeSessionDriver(kind: kind) : pendingSessions.removeFirst()
+    }
+
+    func recoverActiveSession() async -> WorkoutSessionDriving? {
+        recoverable
+    }
+}
+
+@MainActor
+final class WorkoutSessionControllerTests: XCTestCase {
+    private var store: FakeHealthStore!
+    private var controller: WorkoutSessionController!
+    private var model: WorkoutViewModel!
+    private var waterLocks = 0
+
+    override func setUp() async throws {
+        store = FakeHealthStore()
+        waterLocks = 0
+        controller = WorkoutSessionController(store: store, enableWaterLock: { [unowned self] in self.waterLocks += 1 })
+        model = WorkoutViewModel(controller: controller)
+    }
+
+    /// 신호 소비 루프가 돌 때까지 메인 액터를 양보하며 기다린다.
+    private func waitFor(_ phase: WorkoutPhase, file: StaticString = #filePath, line: UInt = #line) async {
+        for _ in 0..<200 where model.phase != phase {
+            await Task.yield()
+        }
+        XCTAssertEqual(model.phase, phase, file: file, line: line)
+    }
+
+    private func startRunning(_ driver: FakeSessionDriver) async {
+        store.pendingSessions = [driver]
+        await model.start(driver.kind)
+        await waitFor(.running(driver.kind))
+    }
+
+    func test_beginCollectionFailure_endsAndDiscardsSession_thenCanRestart() async {
+        let failing = FakeSessionDriver(kind: .running)
+        failing.beginError = StubError()
+        store.pendingSessions = [failing]
+
+        await model.start(.running)
+        await waitFor(.failed(.startFailed))
+        XCTAssertEqual(failing.calls, ["startActivity", "beginCollection", "end", "discardWorkout"])
+        XCTAssertEqual(controller.elapsedTime(at: Date()), 0, "남은 세션이 없어야 함")
+
+        model.dismiss()
+        let next = FakeSessionDriver(kind: .running)
+        next.elapsed = 5
+        await startRunning(next)
+        XCTAssertEqual(controller.elapsedTime(at: Date()), 5)
+        XCTAssertEqual(store.madeSessions, 2)
+    }
+
+    func test_sharingDenied_blocksStartBeforeCreatingSession() async {
+        store.isWorkoutSharingDenied = true
+        await model.start(.walking)
+        XCTAssertEqual(model.phase, .failed(.authorizationFailed))
+        XCTAssertEqual(store.authorizationRequests, 1)
+        XCTAssertEqual(store.madeSessions, 0)
+    }
+
+    func test_fullSession_pauseResumeEnd_savesAndShowsSummary() async {
+        let driver = FakeSessionDriver(kind: .cycling)
+        driver.metrics = WorkoutMetrics(heartRate: 130, averageHeartRate: 125, activeCalories: 80, distanceMeters: 4_000)
+        driver.elapsed = 600
+        await startRunning(driver)
+
+        driver.emit(.collectedData)
+        for _ in 0..<50 where model.metrics != driver.metrics { await Task.yield() }
+        XCTAssertEqual(model.metrics, driver.metrics)
+
+        model.pause()
+        await waitFor(.paused(.cycling))
+        model.resume()
+        await waitFor(.running(.cycling))
+        model.end()
+        let start = try! XCTUnwrap(driver.startDate)
+        let expected = WorkoutSummary(kind: .cycling, startDate: start, endDate: start.addingTimeInterval(600), activeDuration: 600, metrics: driver.metrics)
+        await waitFor(.ended(expected))
+        XCTAssertEqual(Array(driver.calls.suffix(3)), ["end", "endCollection", "finishWorkout"])
+        XCTAssertFalse(driver.calls.contains("discardWorkout"))
+        XCTAssertEqual(waterLocks, 0)
+    }
+
+    func test_saveFailureAfterEnd_discardsAndReportsSaveFailed() async {
+        let driver = FakeSessionDriver(kind: .walking)
+        driver.finishError = StubError()
+        await startRunning(driver)
+        model.end()
+        await waitFor(.failed(.saveFailed))
+        XCTAssertEqual(driver.calls.last, "discardWorkout")
+    }
+
+    func test_errorDuringWorkout_triesPartialSaveFirst() async {
+        let driver = FakeSessionDriver(kind: .running)
+        driver.elapsed = 120
+        await startRunning(driver)
+        driver.emit(.failed)
+        let start = try! XCTUnwrap(driver.startDate)
+        await waitFor(.ended(WorkoutSummary(kind: .running, startDate: start, endDate: start.addingTimeInterval(120), activeDuration: 120, metrics: .empty)))
+        XCTAssertEqual(Array(driver.calls.suffix(2)), ["endCollection", "finishWorkout"])
+        XCTAssertFalse(driver.calls.contains("discardWorkout"))
+    }
+
+    func test_errorDuringWorkout_partialSaveFails_discardsAndReportsInterrupted() async {
+        let driver = FakeSessionDriver(kind: .running)
+        driver.endCollectionError = StubError()
+        await startRunning(driver)
+        driver.emit(.failed)
+        await waitFor(.failed(.interrupted))
+        XCTAssertEqual(Array(driver.calls.suffix(2)), ["endCollection", "discardWorkout"])
+    }
+
+    func test_errorBeforeStart_discardsAndReportsStartFailed() async {
+        let driver = FakeSessionDriver(kind: .other, state: .running, startDate: nil)
+        store.recoverable = driver
+        await controller.recoverActiveSession()
+        await waitFor(.running(.other))
+        driver.emit(.failed)
+        await waitFor(.failed(.startFailed))
+        XCTAssertEqual(driver.calls, ["discardWorkout"])
+    }
+
+    func test_recovery_running() async {
+        store.recoverable = FakeSessionDriver(kind: .walking, state: .running, startDate: Date())
+        await controller.recoverActiveSession()
+        XCTAssertEqual(model.phase, .running(.walking))
+    }
+
+    func test_recovery_paused_thenResumeAndEnd() async {
+        let driver = FakeSessionDriver(kind: .strengthTraining, state: .paused, startDate: Date())
+        store.recoverable = driver
+        await controller.recoverActiveSession()
+        XCTAssertEqual(model.phase, .paused(.strengthTraining))
+        model.resume()
+        await waitFor(.running(.strengthTraining))
+    }
+
+    func test_recovery_withoutActiveSession_staysIdle() async {
+        await controller.recoverActiveSession()
+        XCTAssertEqual(model.phase, .idle)
+    }
+
+    func test_swimming_enablesWaterLock() async {
+        await startRunning(FakeSessionDriver(kind: .swimming))
+        XCTAssertEqual(waterLocks, 1)
+    }
+}
+
+// MARK: - iPhone 동기화 칼로리 절단 경계
+
+final class AppleHealthKitProviderCalorieTests: XCTestCase {
+    private struct ServerView {
+        let calories: Decimal
+        let spanSeconds: Int
+        /// 서버 `HealthActivitySyncValidator.exceedsCaloriesPerMinute`의 반대: calories × 60 ≤ 20 × span초.
+        var passes: Bool { calories * 60 <= Decimal(20 * spanSeconds) }
+    }
+
+    /// iPhone과 같은 인코딩(JSONEncoder + 초 단위 ISO-8601)으로 보낸 뒤 서버가 보는 값을 재현한다.
+    private func serverView(of dto: HealthActivityDTO) throws -> ServerView {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(dto)) as? [String: Any])
+        let formatter = ISO8601DateFormatter()
+        let start = try XCTUnwrap(formatter.date(from: try XCTUnwrap(json["startedAt"] as? String)))
+        let end = try XCTUnwrap(formatter.date(from: try XCTUnwrap(json["endedAt"] as? String)))
+        let calories = try XCTUnwrap(json["calories"] as? NSNumber)
+        return ServerView(
+            calories: try XCTUnwrap(Decimal(string: calories.stringValue)),
+            spanSeconds: Int(end.timeIntervalSince(start))
+        )
+    }
+
+    private func dto(calories: Double, start: Date, end: Date) -> HealthActivityDTO {
+        AppleHealthKitProvider.workoutActivity(
+            workoutType: .running,
+            activeDuration: end.timeIntervalSince(start),
+            calories: calories,
+            distanceMeters: nil,
+            startedAt: start,
+            endedAt: end
+        )
+    }
+
+    func test_caloriesJustBelowAndAboveCap_passServerRule_withTruncatedTimestamps() throws {
+        // 초 이하 자릿수가 잘리면서 서버 구간이 실제보다 짧아지는 조합을 포함한다.
+        let cases: [(startFraction: Double, length: Double)] = [
+            (0.1, 1799.9), (0.9, 1800.2), (0.0, 1800), (0.5, 60.4), (0.99, 61.0), (0.2, 3599.8),
+        ]
+        for (fraction, length) in cases {
+            let start = Date(timeIntervalSince1970: 1_790_000_000 + fraction)
+            let end = start.addingTimeInterval(length)
+            let cap = WorkoutSyncRules.calorieCap(start: start, end: end)
+            for calories in [cap - 0.05, cap, cap + 0.05, cap + 50] {
+                let view = try serverView(of: dto(calories: calories, start: start, end: end))
+                XCTAssertTrue(view.passes, "start+\(fraction)s, \(length)s, \(calories)kcal → \(view)")
+            }
+        }
+    }
+
+    func test_caloriesWithinCap_areSentUnchangedExceptTenthFloor() throws {
+        let start = Date(timeIntervalSince1970: 1_790_000_000.4)
+        let end = start.addingTimeInterval(1800)
+        XCTAssertEqual(dto(calories: 250.46, start: start, end: end).calories, 250.4)
+    }
+
+    func test_rawCaloriesAboveServerLimit_wouldBeSkippedWithoutClamp() throws {
+        let start = Date(timeIntervalSince1970: 1_790_000_000.1)
+        let end = start.addingTimeInterval(1799.9)
+        let clamped = try serverView(of: dto(calories: 700, start: start, end: end))
+        XCTAssertTrue(clamped.passes)
+        XCTAssertFalse(ServerView(calories: 700, spanSeconds: clamped.spanSeconds).passes)
     }
 }
