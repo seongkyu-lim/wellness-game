@@ -9,10 +9,11 @@ struct ContentView: View {
     @State private var showLoginSheet = false
 
     init() {
-        // 세션과 네트워크가 같은 Keychain 저장소를 공유해야 로그인 직후 토큰이 헤더에 실린다.
-        let tokenStore = KeychainTokenStore()
-        let networkClient = NetworkClient(tokenStore: tokenStore)
-        let userSession = UserSession(tokenStore: tokenStore)
+        // 세션과 네트워크가 같은 자격 증명 저장소를 공유해야 로그인·리프레시 직후 토큰이 헤더에 실리고,
+        // 리프레시가 한 번에 하나만 나간다.
+        let credentials = SessionCredentialStore()
+        let networkClient = NetworkClient(credentials: credentials)
+        let userSession = UserSession(credentials: credentials)
         _userSession = StateObject(wrappedValue: userSession)
         _socialLogin = StateObject(wrappedValue: SocialLoginService(networkClient: networkClient))
         _credentialLogin = StateObject(wrappedValue: CredentialAuthService(networkClient: networkClient))

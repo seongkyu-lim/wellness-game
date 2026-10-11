@@ -80,7 +80,7 @@ final class SocialSignInFlowTests: XCTestCase {
             session: URLSession(configuration: configuration),
             tokenStore: InMemoryTokenStore(token: "stale-token")
         )
-        flow = SocialSignInFlow(networkClient: client)
+        flow = SocialSignInFlow(networkClient: client, pendingAppleNames: PendingAppleNameStore(backing: InMemoryTokenStore()))
     }
 
     override func tearDown() {
@@ -129,6 +129,7 @@ final class SocialSignInFlowTests: XCTestCase {
 
         await flow.signInWithApple(
             credential: AppleCredential(identityToken: "apple-identity-token", fullName: "길동 홍"),
+            nonce: nil,
             session: session
         )
 
@@ -144,7 +145,7 @@ final class SocialSignInFlowTests: XCTestCase {
     func test_apple_omitsFullName_whenAbsentOrBlank() async throws {
         StubURLProtocol.setStub(status: 200, json: response("apple:3", token: "jwt-apple"))
 
-        await flow.signInWithApple(credential: AppleCredential(identityToken: "t", fullName: "  "), session: session)
+        await flow.signInWithApple(credential: AppleCredential(identityToken: "t", fullName: "  "), nonce: nil, session: session)
 
         let (_, json) = try lastRequestJSON()
         XCTAssertEqual(json as? [String: String], ["identityToken": "t"])
@@ -197,7 +198,7 @@ final class SocialSignInFlowTests: XCTestCase {
         StubURLProtocol.setStub(status: 200, json: response("apple:3", token: "jwt-apple"))
         let longName = String(repeating: "가", count: 150)
 
-        await flow.signInWithApple(credential: AppleCredential(identityToken: "t", fullName: longName), session: session)
+        await flow.signInWithApple(credential: AppleCredential(identityToken: "t", fullName: longName), nonce: nil, session: session)
 
         let (_, json) = try lastRequestJSON()
         XCTAssertEqual((json["fullName"] as? String)?.count, 100)
@@ -206,7 +207,7 @@ final class SocialSignInFlowTests: XCTestCase {
     func test_apple_authorizationFailure_makesNoRequest() async {
         StubURLProtocol.setStub(status: 200, json: response("apple:3", token: "x"))
 
-        await flow.signInWithApple(result: .failure(ASAuthorizationError(.canceled)), session: session)
+        await flow.signInWithApple(result: .failure(ASAuthorizationError(.canceled)), nonce: nil, session: session)
 
         XCTAssertTrue(StubURLProtocol.requests.isEmpty)
         XCTAssertEqual(session.statusMessage, UserSession.signInPrompt)
@@ -219,7 +220,7 @@ final class SocialSignInFlowTests: XCTestCase {
         XCTAssertTrue(session.statusMessage.contains("유효하지 않은 토큰"))
         XCTAssertTrue(session.statusMessage.contains("Kakao"))
 
-        await flow.signInWithApple(credential: AppleCredential(identityToken: "t", fullName: nil), session: session)
+        await flow.signInWithApple(credential: AppleCredential(identityToken: "t", fullName: nil), nonce: nil, session: session)
         XCTAssertTrue(session.statusMessage.contains("유효하지 않은 토큰"))
         XCTAssertTrue(session.statusMessage.contains("Apple"))
         XCTAssertFalse(session.isSignedIn)

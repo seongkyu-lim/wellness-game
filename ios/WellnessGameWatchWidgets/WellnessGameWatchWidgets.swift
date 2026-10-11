@@ -25,7 +25,7 @@ struct LevelComplicationView: View {
     let entry: LevelEntry
 
     private let xpColor = Color(hex: ThemePalette.xp)
-    private let signInText = Text("iPhone에서 로그인하세요")
+    private let signInText = Text("iPhone 앱을 열어 주세요")
     private let staleText = Text("업데이트 필요")
 
     var body: some View {

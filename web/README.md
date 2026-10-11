@@ -31,7 +31,8 @@ VITE_API_BASE_URL=http://192.168.0.10:8080 npm run dev
   - 사용자 식별자: `{provider}:{식별자}` (예: `kakao:12345`)
   - 모든 조회 API는 서버가 발급한 토큰을 `Authorization: Bearer <accessToken>` 헤더로 보냅니다.
     서버는 `userId` 쿼리를 토큰 주체와 대조하며, 토큰이 없거나 무효면 401, 다른 사용자 데이터면 403을 반환합니다.
-  - 401을 받으면 웹은 저장된 세션을 지우고 로그인 안내 화면으로 돌아갑니다.
+  - 401을 받으면 웹은 리프레시 토큰으로 한 번 갱신해 원 요청을 1회 재시도하고, 갱신이 거부되면 세션을 지우고
+    "로그인 만료" 안내와 함께 로그인 화면으로 돌아갑니다(아래 [토큰 갱신](#토큰-갱신-auth-v2) 참고).
 - 캐릭터 상태는 서버(DB)에만 존재하므로, **같은 계정으로 로그인하면 앱과 웹이 같은 캐릭터를 공유**합니다.
 - 프로덕션 배포 시 백엔드 `CORS_ALLOWED_ORIGINS` 환경변수에 웹 오리진을 추가해야 합니다.
 
@@ -52,8 +53,34 @@ VITE_API_BASE_URL=http://192.168.0.10:8080 npm run dev
 
 인증 흐름: 웹 → provider 로그인 → code와 함께 리다이렉트 → `POST /api/auth/{provider}` →
 백엔드가 토큰 교환·프로필 조회(client secret은 서버에만 보관) → `userId`, `displayName`,
-`accessToken`(Bearer, `expiresIn` 초 유효) 반환 → localStorage(`wellness.session`)에 세션 저장.
-토큰이 없는 예전 형식의 세션이나 만료된 세션은 로그아웃 상태로 처리됩니다.
+`accessToken`(Bearer, `expiresIn` 초 유효, 기본 1시간), `refreshToken`(`refreshExpiresIn` 초 유효, 기본 30일) 반환 →
+세션 저장. 토큰이 없는 예전 형식의 세션이나 만료된 세션은 로그아웃 상태로 처리됩니다.
+
+### 토큰 갱신 (Auth v2)
+
+서버 계약은 루트 README의 "인증 세션 (Auth v2)" 절을 따릅니다. 구현은 `src/lib/session.ts`(`SessionManager`)와
+`src/api/client.ts`(`authorizedFetch`)에 있습니다.
+
+| 값 | 저장 위치 | 비고 |
+|---|---|---|
+| 프로필(`provider`·`userId`·`displayName`), `refreshToken`, 리프레시 만료 시각 | localStorage `wellness.session` | 탭 간 공유·재방문 유지 |
+| `accessToken`, 액세스 만료 시각 | 메모리(원본) + sessionStorage `wellness.access`(새로고침 대비 사본) | 탭마다 따로. 새 탭은 첫 요청 전에 갱신 |
+
+- **사전 갱신:** 액세스 토큰이 없거나 만료 60초 이내면 요청 전에 `POST /api/auth/refresh`로 회전합니다.
+- **401 처리:** 보호 API가 401이면 refresh 후 새 토큰으로 원 요청을 **1회만** 재시도합니다. refresh가 401·400이면 세션을 지우고
+  "로그인 만료" 배너를 띄웁니다. 네트워크 오류면 세션은 유지하고 일반 오류 배너를 띄웁니다(다음 자동 새로고침에서 다시 시도).
+- **직렬화:** 서버는 이미 회전된 토큰이 다시 오면 family 전체를 폐기하므로 같은 리프레시 토큰을 두 번 보내면 안 됩니다.
+  - 탭 안: 진행 중인 refresh Promise를 공유해 동시 401이 여러 개여도 refresh는 한 번입니다.
+  - 탭 사이: `BroadcastChannel('wellness.auth')`로 `refresh-start`(선점, 50ms 동안 겹치면 tabId가 작은 탭이 이김)·`refreshed`
+    (새 토큰 전달)·`refresh-end`(포기·네트워크 실패)·`signed-out`을 주고받습니다. 다른 탭이 갱신 중이면 최대 10초 기다려 그 결과를
+    반영하고, refresh 직전에는 localStorage의 최신 리프레시 토큰을 다시 읽어 이미 폐기된 토큰을 보내지 않습니다.
+  - 한 탭에서 로그아웃하거나 세션이 만료되면 다른 탭도 로그인 화면으로 돌아갑니다(만료면 배너 표시).
+- **로그아웃:** 로컬 세션을 즉시 지우고 `POST /api/auth/logout`(무인증, body `{refreshToken}`만, Authorization 없음)으로
+  이 기기 family를 폐기합니다. 액세스 토큰이 만료돼도 갱신 없이 바로 보냅니다. 서버 요청이 실패해도 로컬 로그아웃은 유지됩니다.
+- **서버 유예 구간:** 서버는 방금 회전된 리프레시 토큰이 30초 안에 다시 오면 family를 폐기하지 않고 정상 응답합니다.
+  새 탭과 진행 중 갱신의 경합은 이것으로도 완화되지만, 불필요한 회전을 줄이도록 위 탭 간 조율은 유지합니다.
+- **이전 세션:** 리프레시 토큰이 없는 예전 형식 세션(localStorage에 `accessToken`·`expiresAt`)은 액세스 토큰이 유효한 동안
+  그대로 쓰고, 401이나 만료가 되면 갱신 없이 로그아웃합니다. 서버가 리프레시 토큰을 주지 않는 응답도 같은 형식으로 저장합니다.
 
 Apple 로그인은 Apple Developer 유료 계정 + HTTPS 도메인 + Services ID 등록이 선행돼야 해서 웹에서는 아직 지원하지 않습니다.
 
@@ -79,7 +106,8 @@ npm test        # Vitest(jsdom) 단위·렌더링 테스트
 ```
 
 테스트는 `src/**/*.test.ts(x)`, `csp.test.ts`, `build.test.ts`(실제 프로덕션 빌드의 `index.html`에 CSP meta가 폰트·스크립트보다 앞에 오는지)에 있습니다. i18n(언어 감지·번역·`Intl` 포맷·배너 재번역),
-API 클라이언트 헤더·401 처리, 세션 로드·만료(`lib/auth.ts`), 로그인 버튼 배치, CSP 생성을 검사합니다.
+API 클라이언트 헤더·401 처리·토큰 갱신·로그아웃, 세션 로드·만료(`lib/auth.ts`), 탭 간 갱신 조율(`lib/session.test.ts`, 가짜
+BroadcastChannel), 로그인 버튼 배치, CSP 생성을 검사합니다.
 GitHub Pages 워크플로는 빌드 전에 `npm test`를 실행합니다.
 
 ## 보안: CSP와 토큰 저장
@@ -106,13 +134,22 @@ object-src 'none'; base-uri 'self'; form-action 'self'
 
 ### 웹 토큰 저장 위험과 완화
 
-서버 발급 Bearer 토큰을 `localStorage`(`wellness.session`)에 저장하므로, 페이지에서 임의 스크립트가 실행되면(XSS)
-토큰이 탈취될 수 있습니다. 현재 완화책:
+리프레시 토큰은 `localStorage`(`wellness.session`)에, 액세스 토큰은 메모리와 `sessionStorage`(`wellness.access`)에 두므로,
+페이지에서 임의 스크립트가 실행되면(XSS) **여전히 두 토큰 모두 탈취될 수 있습니다.** Web Storage는 스크립트에서 읽을 수 있고,
+메모리에만 두더라도 같은 페이지의 스크립트는 API 호출을 가로챌 수 있습니다. Auth v2로 위험은 다음처럼 줄었습니다.
+
+- 액세스 토큰 유효 기간이 30일에서 **1시간**(`AUTH_JWT_TTL`)으로 짧아져, 액세스 토큰만 유출되면 피해 시간이 그만큼 제한됩니다.
+- 리프레시 토큰은 쓸 때마다 **회전**하고, 서버가 **재사용을 감지**하면 그 family 전체를 폐기합니다. 공격자와 정상 탭이 같은 토큰을
+  쓰게 되면 둘 중 늦게 쓴 쪽에서 재사용이 감지돼 세션이 끊기므로, 탈취가 장기간 조용히 이어지기 어렵습니다(정상 사용자는 다시 로그인).
+  다만 사용자가 웹을 다시 열지 않는 동안 공격자가 먼저 회전하면 리프레시 만료(기본 30일)까지 쓸 수 있습니다.
+- 로그아웃하면 서버에서 이 기기 family를 폐기합니다. 이미 발급된 액세스 토큰은 만료(최대 1시간)까지 유효합니다.
+
+그 밖의 완화책:
 
 - CSP로 인라인·외부 스크립트 실행을 막고(`script-src 'self'`), 데이터 전송 대상을 API 오리진으로 제한합니다(`connect-src`).
 - React 기본 이스케이프만 사용하고 `dangerouslySetInnerHTML`을 쓰지 않습니다. 서버 메시지도 텍스트로만 표시합니다.
-- 웹은 조회 전용이라 토큰이 유출돼도 웹 화면으로 기록을 만들 수 없지만, 토큰 자체는 동기화 API도 호출할 수 있으므로
-  **토큰 유효 기간을 짧게** 유지하세요(백엔드 `AUTH_JWT_TTL`, 기본 30일). 만료된 세션은 로드 시 지워지고, 401을 받으면 즉시 로그아웃합니다.
+- 웹은 조회 전용이라 토큰이 유출돼도 웹 화면으로 기록을 만들 수 없지만, 토큰 자체는 동기화 API도 호출할 수 있습니다.
+  만료된 세션은 로드 시 지워지고, 갱신이 거부되면 즉시 로그아웃합니다.
 - 공용 PC에서는 사용 후 로그아웃하도록 안내합니다(로그아웃 시 저장된 세션 삭제).
 - 장기적으로는 HttpOnly·Secure·SameSite 쿠키 기반 세션(같은 사이트 배포 + CSRF 대책)으로 옮기는 것이 가장 안전합니다.
 

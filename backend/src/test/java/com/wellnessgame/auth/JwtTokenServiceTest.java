@@ -43,10 +43,65 @@ class JwtTokenServiceTest {
     }
 
     @Test
-    void defaultsTtlToThirtyDays() {
+    void defaultsTtlToOneHourAndWatchTtlToSevenDays() {
         JwtTokenService defaults = new JwtTokenService(new JwtProperties(SECRET, null), clock);
 
-        assertThat(defaults.issue("password:abc").expiresIn()).isEqualTo(2_592_000L);
+        assertThat(defaults.issue("password:abc").expiresIn()).isEqualTo(3_600L);
+        assertThat(defaults.issueReadOnly("password:abc").expiresIn()).isEqualTo(604_800L);
+    }
+
+    // ---- 조회 전용 토큰(#76) ----
+
+    @Test
+    void readOnlyTokenCarriesReadScopeAndFullTokenHasNoScopeClaim() {
+        IssuedToken read = service.issueReadOnly("google:123");
+        IssuedToken full = service.issue("google:123");
+
+        assertThat(read.tokenType()).isEqualTo("Bearer");
+        assertThat(service.authenticate(read.accessToken()))
+                .isEqualTo(new AccessTokenPrincipal("google:123", TokenScope.READ, NOW));
+        assertThat(service.authenticate(full.accessToken()))
+                .isEqualTo(new AccessTokenPrincipal("google:123", TokenScope.FULL, NOW));
+        assertThat(payload(read.accessToken())).contains("\"scope\":\"read\"");
+        assertThat(payload(full.accessToken())).doesNotContain("scope");
+    }
+
+    @Test
+    void readOnlyTokenExpiresAfterWatchTtl() {
+        String token = service.issueReadOnly("google:123").accessToken();
+
+        clock.setInstant(NOW.plus(JwtProperties.DEFAULT_WATCH_TTL).minusSeconds(1));
+        assertThat(service.authenticate(token).scope()).isEqualTo(TokenScope.READ);
+        clock.setInstant(NOW.plus(JwtProperties.DEFAULT_WATCH_TTL).plusSeconds(1));
+        assertThatThrownBy(() -> service.authenticate(token))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessageContaining("만료");
+    }
+
+    @Test
+    void rejectsUnknownScope() {
+        String token = Jwts.builder()
+                .subject("google:123").issuer("wellness-game").audience().add("wellness-game-api").and()
+                .issuedAt(Date.from(NOW)).expiration(Date.from(NOW.plusSeconds(60)))
+                .claim("scope", "admin")
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256)
+                .compact();
+
+        assertThatThrownBy(() -> service.authenticate(token)).isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void legacyTokenWithoutScopeIsFullAccess() {
+        String legacy = legacyToken("kakao:1", CUTOFF.minusSeconds(3600));
+        clock.setInstant(CUTOFF);
+
+        assertThat(serviceWithCutoff(CUTOFF).authenticate(legacy).scope()).isEqualTo(TokenScope.FULL);
+    }
+
+    @Test
+    void failsFastWhenWatchTtlNotPositive() {
+        assertThatIllegalStateException().isThrownBy(() -> new JwtTokenService(
+                new JwtProperties(SECRET, Duration.ofHours(1), null, null, null, Duration.ZERO), clock));
     }
 
     @Test
@@ -256,6 +311,10 @@ class JwtTokenServiceTest {
 
     private JwtTokenService serviceWithCutoff(Instant cutoff) {
         return new JwtTokenService(new JwtProperties(SECRET, Duration.ofDays(30), null, null, cutoff), clock);
+    }
+
+    private static String payload(String token) {
+        return new String(Base64.getUrlDecoder().decode(token.split("\\.")[1]), StandardCharsets.UTF_8);
     }
 
     private static String legacyToken(String subject, Instant issuedAt) {

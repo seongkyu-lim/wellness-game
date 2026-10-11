@@ -100,4 +100,51 @@ describe('completeLoginFromRedirect', () => {
     expect(JSON.parse(localStorage.getItem(SESSION_KEY)!)).toEqual(expected)
     expect(fetchMock.mock.calls[0][0]).toMatch(/\/api\/auth\/naver$/)
   })
+
+  it('Auth v2 응답이면 리프레시 토큰과 만료 시각을 저장하고 액세스 토큰은 localStorage에 두지 않는다', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            userId: 'kakao:1',
+            displayName: '홍길동',
+            accessToken: 'acc',
+            tokenType: 'Bearer',
+            expiresIn: 3600,
+            refreshToken: 'ref',
+            refreshExpiresIn: 2_592_000,
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+    sessionStorage.setItem(STATE_KEY, 'kakao:s')
+    window.history.replaceState(null, '', '/?code=c&state=kakao:s')
+
+    const session = await completeLoginFromRedirect()
+
+    expect(session).toEqual({
+      provider: 'kakao',
+      userId: 'kakao:1',
+      displayName: '홍길동',
+      accessToken: 'acc',
+      expiresAt: 1_000_000 + 3_600_000,
+      refreshToken: 'ref',
+      refreshExpiresAt: 1_000_000 + 2_592_000_000,
+    })
+    expect(JSON.parse(localStorage.getItem(SESSION_KEY)!)).toEqual({
+      provider: 'kakao',
+      userId: 'kakao:1',
+      displayName: '홍길동',
+      refreshToken: 'ref',
+      refreshExpiresAt: 1_000_000 + 2_592_000_000,
+    })
+    expect(JSON.parse(sessionStorage.getItem('wellness.access')!)).toEqual({
+      userId: 'kakao:1',
+      accessToken: 'acc',
+      expiresAt: 1_000_000 + 3_600_000,
+    })
+  })
 })

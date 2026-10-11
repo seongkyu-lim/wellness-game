@@ -9,7 +9,14 @@ import { TodayActivities } from './components/TodayActivities'
 import { toMessage, type Message } from './i18n/core'
 import { useI18n } from './i18n/I18nProvider'
 import { LanguageToggle } from './components/LanguageToggle'
-import { clearSession, completeLoginFromRedirect, loadSession, type Session } from './lib/auth'
+import {
+  clearSession,
+  completeLoginFromRedirect,
+  loadSession,
+  logout,
+  onRemoteSignOut,
+  type Session,
+} from './lib/auth'
 
 const REFRESH_INTERVAL_MS = 30_000
 
@@ -26,9 +33,10 @@ export default function App() {
   // 소셜 로그인에서 돌아온 직후(?code=)에는 토큰 교환이 끝날 때까지 랜딩을 그리지 않는다.
   const [completingLogin, setCompletingLogin] = useState(() => new URLSearchParams(window.location.search).has('code'))
 
-  // 로그아웃·세션 교체 후 늦게 도착한 응답이 화면을 덮어쓰지 않도록 현재 토큰을 추적한다.
-  const activeTokenRef = useRef<string | null>(session?.accessToken ?? null)
-  activeTokenRef.current = session?.accessToken ?? null
+  // 로그아웃·세션 교체 후 늦게 도착한 응답이 화면을 덮어쓰지 않도록 현재 세션을 추적한다.
+  // 토큰 회전은 세션 관리자 안에서 일어나므로 이 객체는 로그인·로그아웃 때만 바뀐다.
+  const activeSessionRef = useRef<Session | null>(session)
+  activeSessionRef.current = session
 
   // 소셜 로그인 리다이렉트로 돌아온 경우 code를 서버 발급 토큰으로 교환한다.
   useEffect(() => {
@@ -43,13 +51,29 @@ export default function App() {
       .finally(() => setCompletingLogin(false))
   }, [])
 
-  const signOut = useCallback((message: Message | null) => {
-    clearSession()
+  const resetToSignedOut = useCallback((message: Message | null) => {
     setSession(null)
     setCharacter(null)
     setActivities([])
     setError(message)
   }, [])
+
+  // 다른 탭에서 로그아웃하거나 세션이 만료되면 이 탭도 따라간다.
+  useEffect(
+    () => onRemoteSignOut((reason) => resetToSignedOut(reason === 'expired' ? { key: 'error.sessionExpired' } : null)),
+    [resetToSignedOut],
+  )
+
+  const expireSession = useCallback(() => {
+    clearSession()
+    resetToSignedOut({ key: 'error.sessionExpired' })
+  }, [resetToSignedOut])
+
+  const signOut = useCallback(() => {
+    // 서버 폐기 요청은 기다리지 않는다. 로컬 세션은 logout() 안에서 즉시 지워진다.
+    void logout()
+    resetToSignedOut(null)
+  }, [resetToSignedOut])
 
   // refresh는 언어(t)를 쓰지도, 의존성에 넣지도 않는다. 언어가 바뀌어도 재조회·30초 타이머 재시작을 하지 않기 위해서다.
   // 근거: 조회 응답(캐릭터 수치·활동 기록)에는 서버가 번역한 문구가 없고 화면 문구는 모두 클라이언트 사전으로 그린다.
@@ -59,34 +83,32 @@ export default function App() {
     if (!session) {
       return
     }
-    const { accessToken, userId } = session
+    const { userId } = session
+    const isStale = () => activeSessionRef.current !== session
     setLoading(true)
     setError(null)
     try {
-      const [summary, daily] = await Promise.all([
-        fetchMyCharacter(accessToken),
-        fetchDailyActivities(accessToken, userId, date),
-      ])
-      if (activeTokenRef.current !== accessToken) {
+      const [summary, daily] = await Promise.all([fetchMyCharacter(), fetchDailyActivities(userId, date)])
+      if (isStale()) {
         return
       }
       setCharacter(summary?.character ?? null)
       setActivities(daily.activities)
     } catch (e) {
-      if (activeTokenRef.current !== accessToken) {
+      if (isStale()) {
         return
       }
       if (isUnauthorized(e)) {
-        signOut({ key: 'error.sessionExpired' })
+        expireSession()
         return
       }
       setError(toMessage(e, 'error.network'))
     } finally {
-      if (activeTokenRef.current === accessToken) {
+      if (!isStale()) {
         setLoading(false)
       }
     }
-  }, [session, date, signOut])
+  }, [session, date, expireSession])
 
   // 앱이 동기화하면 자동으로 반영되도록 주기적으로 새로고침한다. 로그인 상태에서만 동작한다.
   useEffect(() => {
@@ -130,10 +152,10 @@ export default function App() {
             onRefresh={() => void refresh()}
             loading={loading}
           />
-          <AccountSection session={session} onLogout={() => signOut(null)} />
+          <AccountSection session={session} onLogout={signOut} />
         </>
       ) : completingLogin ? null : (
-        <Landing account={<AccountSection session={null} onLogout={() => signOut(null)} />} />
+        <Landing account={<AccountSection session={null} onLogout={signOut} />} />
       )}
     </main>
   )

@@ -22,6 +22,9 @@
 		A1000000000000000000000D /* SocialLoginService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* SocialLoginService.swift */; };
 		A100000000000000000CA11 /* LoginProviderPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB11 /* LoginProviderPolicy.swift */; };
 		A100000000000000000CA12 /* SocialSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB12 /* SocialSignIn.swift */; };
+		A100000000000000000CA21 /* SessionCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB21 /* SessionCredentialStore.swift */; };
+		A200000000000000000CA21 /* SessionCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB21 /* SessionCredentialStore.swift */; };
+		A200000000000000000CA22 /* AuthSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000000000000000CB22 /* AuthSessionTests.swift */; };
 		A200000000000000000CA11 /* LoginProviderPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB11 /* LoginProviderPolicy.swift */; };
 		A200000000000000000CA12 /* SocialSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000CB12 /* SocialSignIn.swift */; };
 		A200000000000000000CA13 /* SocialLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000000000000000CB13 /* SocialLoginTests.swift */; };
@@ -198,6 +201,8 @@
 		B10000000000000000000010 /* SocialLoginService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialLoginService.swift; sourceTree = "<group>"; };
 		B100000000000000000CB11 /* LoginProviderPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginProviderPolicy.swift; sourceTree = "<group>"; };
 		B100000000000000000CB12 /* SocialSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialSignIn.swift; sourceTree = "<group>"; };
+		B100000000000000000CB21 /* SessionCredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionCredentialStore.swift; sourceTree = "<group>"; };
+		B200000000000000000CB22 /* AuthSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionTests.swift; sourceTree = "<group>"; };
 		B200000000000000000CB13 /* SocialLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialLoginTests.swift; sourceTree = "<group>"; };
 		B100000000000000000CB01 /* CredentialAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialAuthService.swift; sourceTree = "<group>"; };
 		B10000000000000000000011 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -403,6 +408,7 @@
 				B20000000000000000000006 /* AuthNetworkingTests.swift */,
 				B20000000000000000000007 /* LocalizationTests.swift */,
 				B200000000000000000CB13 /* SocialLoginTests.swift */,
+				B200000000000000000CB22 /* AuthSessionTests.swift */,
 							7F0000000000000000000012 /* WatchConnectivityTests.swift */,
 				7F0000000000000000000013 /* WatchCompanionTests.swift */,
 				6F0000000000000000000506 /* SharedConfigurationTests.swift */,
@@ -432,6 +438,7 @@
 				B100000000000000000CB01 /* CredentialAuthService.swift */,
 				B100000000000000000CB11 /* LoginProviderPolicy.swift */,
 				B100000000000000000CB12 /* SocialSignIn.swift */,
+				B100000000000000000CB21 /* SessionCredentialStore.swift */,
 							7F0000000000000000000009 /* WatchAuthRelay.swift */,
 );
 			path = Authentication;
@@ -743,6 +750,7 @@
 				A100000000000000000CA01 /* CredentialAuthService.swift in Sources */,
 				A100000000000000000CA11 /* LoginProviderPolicy.swift in Sources */,
 				A100000000000000000CA12 /* SocialSignIn.swift in Sources */,
+				A100000000000000000CA21 /* SessionCredentialStore.swift in Sources */,
 				A100000000000000000CA02 /* KeychainTokenStore.swift in Sources */,
 				A10000000000000000000013 /* Theme.swift in Sources */,
 				A10000000000000000000014 /* Components.swift in Sources */,
@@ -789,6 +797,8 @@
 				A200000000000000000CA13 /* SocialLoginTests.swift in Sources */,
 				A200000000000000000CA11 /* LoginProviderPolicy.swift in Sources */,
 				A200000000000000000CA12 /* SocialSignIn.swift in Sources */,
+				A200000000000000000CA21 /* SessionCredentialStore.swift in Sources */,
+				A200000000000000000CA22 /* AuthSessionTests.swift in Sources */,
 							7B0000000000000000000031 /* src */,
 				7B0000000000000000000032 /* src */,
 				7B0000000000000000000033 /* src */,

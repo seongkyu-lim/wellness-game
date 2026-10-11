@@ -60,11 +60,11 @@ private struct SignedOutView: View {
         ScrollView {
             VStack(spacing: 10) {
                 CharacterAvatarView(level: GrowthStage.sprout.minLevel, size: 64, decorative: true)
-                Text("iPhone에서 로그인하세요")
+                Text("iPhone에서 앱을 열어 주세요")
                     .font(.watchDisplay(.headline))
                     .foregroundStyle(WatchTheme.textPrimary)
                     .multilineTextAlignment(.center)
-                Text("iPhone의 Wellness Game 앱에서 로그인하면 여기서 새싹이를 볼 수 있어요.")
+                Text("iPhone의 Wellness Game 앱에서 로그인하거나, 이미 로그인했다면 앱을 한 번 열어 주세요. 그러면 여기서 새싹이를 볼 수 있어요.")
                     .font(.watchRounded(.footnote, weight: .regular))
                     .foregroundStyle(WatchTheme.textSecondary)
                     .multilineTextAlignment(.center)

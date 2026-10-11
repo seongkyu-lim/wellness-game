@@ -29,6 +29,12 @@ services:
       OAUTH_GOOGLE_IOS_CLIENT_ID: ${OAUTH_GOOGLE_IOS_CLIENT_ID:-}
       OAUTH_KAKAO_NATIVE_APP_ID: ${OAUTH_KAKAO_NATIVE_APP_ID:-}
       OAUTH_APPLE_BUNDLE_ID: ${OAUTH_APPLE_BUNDLE_ID:-}
+      OAUTH_APPLE_REQUIRE_NONCE: ${OAUTH_APPLE_REQUIRE_NONCE:-false}
+      # Auth v2: 액세스 1시간, 리프레시 30일, Watch 조회 토큰 12시간(기본값과 같음)
+      # 배포 1단계: 구버전 앱 호환을 위해 30d로 시작, 새 클라이언트 보급 후 1h로 낮춤(README 인증 세션 절)
+      AUTH_JWT_TTL: ${AUTH_JWT_TTL:-30d}
+      AUTH_REFRESH_TTL: ${AUTH_REFRESH_TTL:-30d}
+      AUTH_WATCH_TOKEN_TTL: ${AUTH_WATCH_TOKEN_TTL:-7d}
     ports:
       - "8080:8080"
     depends_on:

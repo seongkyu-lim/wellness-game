@@ -124,10 +124,23 @@ final class SocialLoginService: ObservableObject {
         }
     }
 
+    /// 이번 Apple 요청에 넣은 nonce 원문. 완료 결과와 함께 서버에 보낸다.
+    private var pendingAppleNonce: String?
+
+    /// `SignInWithAppleButton` 요청을 준비한다. nonce 원문을 만들어 보관하고 SHA-256 hex를 요청에 넣는다.
+    func prepareAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        request.requestedScopes = [.fullName, .email]
+        let nonce = AppleNonce.make()
+        pendingAppleNonce = nonce
+        request.nonce = AppleNonce.sha256Hex(nonce)
+    }
+
     /// `SignInWithAppleButton` 완료 결과를 서버(`/api/auth/apple/native`)로 교환한다. 사용자가 취소하면 조용히 돌아간다.
     func signInWithApple(_ result: Result<ASAuthorization, Error>, session: UserSession) {
+        let nonce = pendingAppleNonce
+        pendingAppleNonce = nil
         perform { flow in
-            await flow.signInWithApple(result: result, session: session)
+            await flow.signInWithApple(result: result, nonce: nonce, session: session)
         }
     }
 
@@ -141,19 +154,22 @@ final class SocialLoginService: ObservableObject {
         }
     }
 
-    /// 로그아웃: SDK 세션을 정리하고 Keychain 토큰을 포함한 앱 세션을 지운다.
+    /// 로그아웃: 서버에 이 기기 세션 폐기를 요청하고(실패해도 진행), SDK 세션과 Keychain 토큰을 포함한 앱 세션을 지운다.
     func signOut(_ session: UserSession) {
-        switch session.provider {
-        case .google:
-            GIDSignIn.sharedInstance.signOut()
-        case .kakao:
-            UserApi.shared.logout { _ in }
-        case .naver:
-            NidOAuth.shared.logout()
-        case .apple, .password, nil:
-            break
+        perform { flow in
+            await flow.signOut(session: session) { provider in
+                switch provider {
+                case .google:
+                    GIDSignIn.sharedInstance.signOut()
+                case .kakao:
+                    UserApi.shared.logout { _ in }
+                case .naver:
+                    NidOAuth.shared.logout()
+                case .apple, .password, nil:
+                    break
+                }
+            }
         }
-        session.signOut()
     }
 
     private static var isNaverConfigured: Bool {

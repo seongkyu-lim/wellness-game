@@ -103,36 +103,36 @@
         }
       }
     },
-    "iPhone에서 로그인하세요" : {
+    "iPhone에서 앱을 열어 주세요" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sign in on your iPhone"
+            "value" : "Open the app on your iPhone"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iPhone에서 로그인하세요"
+            "value" : "iPhone에서 앱을 열어 주세요"
           }
         }
       }
     },
-    "iPhone의 Wellness Game 앱에서 로그인하면 여기서 새싹이를 볼 수 있어요." : {
+    "iPhone의 Wellness Game 앱에서 로그인하거나, 이미 로그인했다면 앱을 한 번 열어 주세요. 그러면 여기서 새싹이를 볼 수 있어요." : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sign in to Wellness Game on your iPhone to see Sprouty here."
+            "value" : "Sign in to Wellness Game on your iPhone, or just open the app if you're already signed in, to see Sprouty here."
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iPhone의 Wellness Game 앱에서 로그인하면 여기서 새싹이를 볼 수 있어요."
+            "value" : "iPhone의 Wellness Game 앱에서 로그인하거나, 이미 로그인했다면 앱을 한 번 열어 주세요. 그러면 여기서 새싹이를 볼 수 있어요."
           }
         }
       }
