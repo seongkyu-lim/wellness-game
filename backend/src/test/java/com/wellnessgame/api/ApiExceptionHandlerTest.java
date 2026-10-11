@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -82,11 +83,28 @@ class ApiExceptionHandlerTest {
     }
 
     @Test
-    void frameworkHandledExceptionsKeepTheirStatus() throws Exception {
+    void springBadRequestsUseErrorBodyWithGenericLocalizedMessage() throws Exception {
         mockMvc.perform(post("/throw/body").contentType(MediaType.APPLICATION_JSON).content("{not json"))
-                .andExpect(status().isBadRequest());
-        mockMvc.perform(get("/throw/number/abc"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("요청 본문을 읽을 수 없습니다. 형식을 확인해 주세요."));
+        mockMvc.perform(post("/throw/body").contentType(MediaType.APPLICATION_JSON).content("{not json")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "en"))
+                .andExpect(jsonPath("$.message").value("The request body couldn’t be read. Please check the format."));
+        mockMvc.perform(get("/throw/number/abc").header(HttpHeaders.ACCEPT_LANGUAGE, "en"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("A request parameter has an invalid value."))
+                .andExpect(content().string(not(containsString("NumberFormatException"))));
+        mockMvc.perform(get("/throw/query").header(HttpHeaders.ACCEPT_LANGUAGE, "en"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("A required request parameter is missing."));
+        mockMvc.perform(get("/throw/query"))
+                .andExpect(jsonPath("$.message").value("필수 요청 값이 빠졌습니다."));
+    }
+
+    @Test
+    void frameworkHandledExceptionsKeepTheirStatus() throws Exception {
         mockMvc.perform(get("/throw/response-status"))
                 .andExpect(status().isNotFound());
         mockMvc.perform(get("/throw/annotated"))
@@ -126,6 +144,10 @@ class ApiExceptionHandlerTest {
 
         @GetMapping("/throw/number/{value}")
         void number(@PathVariable("value") int value) {
+        }
+
+        @GetMapping("/throw/query")
+        void query(@RequestParam("date") String date) {
         }
 
         @GetMapping("/throw/response-status")

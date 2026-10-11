@@ -97,10 +97,10 @@ class LocalizedResponseControllerTest {
                 .andExpect(jsonPath("$.activityResults[0].message", is("Step reward +70 XP")))
                 .andExpect(jsonPath("$.activityResults[1].message", is("Running complete +105 XP")))
                 .andExpect(jsonPath("$.activityResults[2].message",
-                        is("CYCLING overlaps a workout that’s already counted")))
+                        is("Cycling overlaps a workout that’s already counted")))
                 .andExpect(jsonPath("$.activityResults[3].message", is("Sleep recovery bonus +80 XP")))
                 .andExpect(jsonPath("$.activityResults[4].message",
-                        is("STEPS wasn’t counted: Steps must be between 0 and 100,000.")))
+                        is("Steps wasn’t counted: Steps must be between 0 and 100,000.")))
                 .andExpect(jsonPath("$.activityResults[4].source", is("STEPS")))
                 .andExpect(jsonPath("$.goals[0].unit", is("steps")));
     }
@@ -111,8 +111,21 @@ class LocalizedResponseControllerTest {
 
         postSync("en", syncBody(SLEEP))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.activityResults[0].message", is("SLEEP already counted")))
+                .andExpect(jsonPath("$.activityResults[0].message", is("Sleep already counted")))
                 .andExpect(jsonPath("$.activityResults[0].duplicate", is(true)));
+    }
+
+    @Test
+    void duplicateWorkoutUsesTranslatedWorkoutName() throws Exception {
+        postSync("en", syncBody(RUNNING)).andExpect(status().isOk());
+
+        postSync("en", syncBody(RUNNING))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activityResults[0].message", is("Running already counted")))
+                .andExpect(jsonPath("$.activityResults[0].source", is("RUNNING")));
+
+        postSync(null, syncBody(RUNNING))
+                .andExpect(jsonPath("$.activityResults[0].message", is("달리기 이미 반영됨")));
     }
 
     @Test
@@ -125,7 +138,7 @@ class LocalizedResponseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.activityResults[0].message", is("달리기 완료 +105 XP")))
                 .andExpect(jsonPath("$.activityResults[1].message",
-                        is("STEPS 기록을 반영하지 않았어요: 걸음 수는 0 이상 100000 이하여야 합니다.")));
+                        is("걸음 수 기록을 반영하지 않았어요: 걸음 수는 0 이상 100000 이하여야 합니다.")));
     }
 
     @Test
@@ -168,6 +181,19 @@ class LocalizedResponseControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message",
                         is("username: Username must be 4–32 characters using letters, numbers, or underscores.")));
+    }
+
+    @Test
+    void unreadableJsonBodyIsGenericAndLocalized() throws Exception {
+        postSync("en", "{not json")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status", is(400)))
+                .andExpect(jsonPath("$.error", is("Bad Request")))
+                .andExpect(jsonPath("$.message", is("The request body couldn’t be read. Please check the format.")));
+
+        postSync(null, "{\"date\": \"not-a-date\", \"activities\": []}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("요청 본문을 읽을 수 없습니다. 형식을 확인해 주세요.")));
     }
 
     @Test
