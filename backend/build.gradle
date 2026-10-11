@@ -23,12 +23,17 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.security:spring-security-crypto'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-mysql'
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
     runtimeOnly 'com.mysql:mysql-connector-j'
     testRuntimeOnly 'com.h2database:h2'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:mysql'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 // 로컬 실행(./gradlew bootRun)은 개발용 JWT 키가 든 local 프로필로 띄운다.
@@ -37,6 +42,21 @@ tasks.named('bootRun') {
     systemProperty 'spring.profiles.active', System.getenv('SPRING_PROFILES_ACTIVE') ?: 'local'
 }
 
+// 기본 테스트는 인메모리 H2 로 돈다. MySQL 컨테이너가 필요한 테스트(@Tag("mysql"))는 mysqlTest 로 따로 실행한다.
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'mysql'
+    }
+}
+
+// Docker 가 필요하다(Testcontainers, MySQL 8.4). Docker 가 없으면 테스트가 건너뛰어진다.
+tasks.register('mysqlTest', Test) {
+    description = 'Runs MySQL Testcontainers integration tests (@Tag("mysql")).'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'mysql'
+    }
+    shouldRunAfter tasks.named('test')
 }
