@@ -20,27 +20,23 @@ import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
 import org.flywaydb.core.api.MigrationState;
 import org.hibernate.type.SqlTypes;
+import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.context.annotation.Import;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.DockerClientFactory;
-import org.testcontainers.containers.MySQLContainer;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -59,104 +55,78 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
 import static org.assertj.core.api.Assertions.tuple;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * #66 실제 MySQL 8.4 에서만 확인할 수 있는 동작: Flyway 스키마와 ddl-auto=validate, 기존 DB baseline,
  * 행 잠금·갭 잠금·REQUIRES_NEW 를 쓰는 동시 동기화, 작은 연결 풀에서의 동시 요청.
  *
- * <p>{@code ./gradlew mysqlTest} 로 실행한다(기본 {@code test} 에서는 제외). Docker 가 없으면 로컬에서는 건너뛰고,
- * {@code CI} 환경변수가 있으면 조용히 건너뛰지 않도록 실패한다. 컨테이너는 그 확인 뒤 {@link #startMySql()} 에서 직접 띄운다.
+ * <p>{@code ./gradlew mysqlTest} 로 실행한다(기본 {@code test} 에서는 제외). 서버 준비·건너뛰기 규칙은 {@link MySqlTestServer} 참고.
+ * 테스트마다 새 데이터베이스를 만들고 그 DB 에 붙은 앱 컨텍스트를 직접 띄우므로(공유 컨텍스트 없음),
+ * 스키마를 만들거나 이력을 고치는 테스트가 있어도 실행 순서와 무관하다. 순서 의존을 드러내도록 무작위 순서로 돈다.
  */
 @Tag("mysql")
-@SpringBootTest(classes = WellnessGameApplication.class, properties = {
-        // 운영 설정과 같게: Flyway 가 스키마를 만들고 Hibernate 는 검증만 한다.
-        "spring.flyway.baseline-on-migrate=true",
-        "spring.flyway.baseline-version=1",
-        "spring.jpa.hibernate.ddl-auto=validate",
-        // 테스트 공통 설정의 H2 용 타입 지정을 운영 기본값(MySQL)으로 되돌린다.
-        "spring.jpa.properties.hibernate.type.preferred_uuid_jdbc_type=" + SqlTypes.UUID,
-        "spring.jpa.properties.hibernate.type.preferred_instant_jdbc_type=" + SqlTypes.TIMESTAMP_UTC,
-        // 연결 풀을 작게 두어 요청 하나가 연결을 두 개 잡으면 동시 요청에서 바로 고갈되게 한다.
-        "spring.datasource.hikari.maximum-pool-size=" + MySqlIntegrationTest.POOL_SIZE,
-        "spring.datasource.hikari.connection-timeout=3000"
-})
-@Import(TestClockConfig.class)
+@TestMethodOrder(MethodOrderer.Random.class)
 class MySqlIntegrationTest {
     static final int POOL_SIZE = 3;
     private static final String USER = "mysql-user";
     private static final LocalDate DAY = LocalDate.of(2026, 6, 17);
+    /** Flyway 이전(ddl-auto 시절)에는 없던, V1 이후 마이그레이션이 만드는 테이블. */
+    private static final List<String> TABLES_ADDED_AFTER_V1 = List.of("refresh_token", "user_auth_state");
 
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4.10")
-            .withDatabaseName("wellness_game")
-            .withUsername("wellness")
-            .withPassword("wellness")
-            // docker-compose 의 운영 연결 URL 과 같은 옵션
-            .withUrlParam("useSSL", "false")
-            .withUrlParam("allowPublicKeyRetrieval", "true")
-            .withUrlParam("serverTimezone", "UTC");
+    private final List<String> databases = new ArrayList<>();
+    private final List<ConfigurableApplicationContext> contexts = new ArrayList<>();
+
+    private String database;
+    private HealthActivitySyncService syncService;
+    private HealthActivityRepository activityRepository;
+    private UserCharacterRepository characterRepository;
+    private Flyway flyway;
+    private DataSource dataSource;
 
     @BeforeAll
     static void startMySql() {
-        if (!DockerClientFactory.instance().isDockerAvailable()) {
-            String ci = System.getenv("CI");
-            if (ci != null && !ci.isBlank()) {
-                fail("CI 환경에서는 mysqlTest 를 건너뛰지 않는다: Docker 를 사용할 수 없음");
-            }
-            assumeTrue(false, "Docker 를 사용할 수 없어 MySQL 통합 테스트를 건너뜀");
-        }
-        MYSQL.start();
+        MySqlTestServer.start();
     }
 
     @AfterAll
     static void stopMySql() {
-        MYSQL.stop();
+        MySqlTestServer.stop();
     }
-
-    @DynamicPropertySource
-    static void datasource(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
-        registry.add("spring.datasource.username", MYSQL::getUsername);
-        registry.add("spring.datasource.password", MYSQL::getPassword);
-        registry.add("spring.datasource.driver-class-name", MYSQL::getDriverClassName);
-    }
-
-    @Autowired
-    private HealthActivitySyncService syncService;
-
-    @Autowired
-    private HealthActivityRepository activityRepository;
-
-    @Autowired
-    private UserCharacterRepository characterRepository;
-
-    @Autowired
-    private MutableClock clock;
-
-    @Autowired
-    private Flyway flyway;
-
-    @Autowired
-    private DataSource dataSource;
 
     @BeforeEach
     void setUp() {
-        activityRepository.deleteAll();
-        characterRepository.deleteAll();
-        clock.setInstant(Instant.parse("2026-06-17T23:00:00Z"));
+        // 운영 설정과 같게: 빈 DB 에 Flyway 가 스키마를 만들고 Hibernate 는 검증만 한다.
+        database = newDatabase();
+        ConfigurableApplicationContext app = startApplication(database,
+                "spring.flyway.baseline-on-migrate=true",
+                "spring.flyway.baseline-version=1",
+                "spring.jpa.hibernate.ddl-auto=validate",
+                // 연결 풀을 작게 두어 요청 하나가 연결을 두 개 잡으면 동시 요청에서 바로 고갈되게 한다.
+                "spring.datasource.hikari.maximum-pool-size=" + POOL_SIZE,
+                "spring.datasource.hikari.connection-timeout=3000");
+        syncService = app.getBean(HealthActivitySyncService.class);
+        activityRepository = app.getBean(HealthActivityRepository.class);
+        characterRepository = app.getBean(UserCharacterRepository.class);
+        flyway = app.getBean(Flyway.class);
+        dataSource = app.getBean(DataSource.class);
+        app.getBean(MutableClock.class).setInstant(Instant.parse("2026-06-17T23:00:00Z"));
+    }
+
+    @AfterEach
+    void tearDown() {
+        contexts.forEach(ConfigurableApplicationContext::close);
+        databases.forEach(MySqlTestServer::dropDatabase);
     }
 
     // ---- 스키마 ----
 
     @Test
     void flywayCreatesSchemaThatHibernateValidates() throws SQLException {
-        // 컨텍스트가 떴다는 것 자체가 ddl-auto=validate 통과다.
+        // 컨텍스트가 떴다는 것 자체가 ddl-auto=validate 통과다. db/migration 의 모든 마이그레이션이 적용돼 있어야 한다.
         assertThat(flyway.info().applied()).extracting(info -> info.getVersion().getVersion(), MigrationInfo::getState)
-                .containsExactly(
-                        tuple("1", MigrationState.SUCCESS),
-                        tuple("2", MigrationState.SUCCESS));
+                .containsExactlyElementsOf(resolvedVersions().stream()
+                        .map(version -> tuple(version, MigrationState.SUCCESS)).toList());
         assertThat(indexNames("health_activity_log")).contains(
                 "uk_health_activity_external_key", "idx_health_activity_user_type_time", "idx_health_activity_user_date");
         assertThat(indexNames("user_character")).contains("uk_character_user");
@@ -167,37 +137,46 @@ class MySqlIntegrationTest {
     @Test
     void existingDdlAutoDatabaseIsBaselinedAndPassesValidateWithV1EquivalentSchema() throws Exception {
         // Flyway 이전 방식 그대로 Hibernate ddl-auto=create 로 스키마를 만든다(V1 SQL 을 쓰지 않아 V1 을 독립적으로 검증).
-        String url = MYSQL.getJdbcUrl().replace("/wellness_game", "/legacy_db");
-        try (Connection root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
-             Statement statement = root.createStatement()) {
-            statement.execute("create database legacy_db");
+        String legacyDb = newDatabase();
+        startApplication(legacyDb, "spring.flyway.enabled=false", "spring.jpa.hibernate.ddl-auto=create").close();
+        // 지금 엔티티로 만들면 V1 이후 마이그레이션(V3 Auth v2)의 테이블까지 생긴다. 운영의 기존 DB 는 V1 시절 엔티티만
+        // 있던 상태라 이 테이블이 없으므로 지운다(남겨 두면 V3 의 create table 이 이미 있는 테이블과 충돌한다).
+        try (Connection legacy = MySqlTestServer.connect(legacyDb); Statement statement = legacy.createStatement()) {
+            for (String table : TABLES_ADDED_AFTER_V1) {
+                statement.execute("drop table " + table);
+            }
         }
-        startApplication(url, "spring.flyway.enabled=false", "spring.jpa.hibernate.ddl-auto=create").close();
 
         // 이력 테이블 없음 + 구 형식 수면 로그
         UUID nap = UUID.randomUUID();
         UUID night = UUID.randomUUID();
-        try (Connection legacy = DriverManager.getConnection(url, "root", MYSQL.getPassword())) {
+        try (Connection legacy = MySqlTestServer.connect(legacyDb)) {
             insertSleep(legacy, nap, USER + "|2026-06-17T01:00:00Z|2026-06-17T06:00:00Z|SLEEP", 300, 25);
             insertSleep(legacy, night, USER + "|2026-06-16T22:00:00Z|2026-06-17T05:30:00Z|SLEEP", 450, 80);
         }
 
-        // 운영 설정 그대로 기동: baseline(1) → V2 → ddl-auto=validate. 기동에 실패하면 여기서 예외가 난다.
-        startApplication(url, "spring.flyway.baseline-on-migrate=true", "spring.flyway.baseline-version=1",
+        // 운영 설정 그대로 기동: baseline(1) → V2 이후 전부 → ddl-auto=validate. 기동에 실패하면 여기서 예외가 난다.
+        startApplication(legacyDb, "spring.flyway.baseline-on-migrate=true", "spring.flyway.baseline-version=1",
                 "spring.jpa.hibernate.ddl-auto=validate").close();
 
-        Flyway legacyFlyway = Flyway.configure().dataSource(url, "root", MYSQL.getPassword()).load();
-        assertThat(legacyFlyway.info().applied()).extracting(MigrationInfo::getState)
-                .containsExactly(MigrationState.BASELINE, MigrationState.SUCCESS);
-        try (Connection legacy = DriverManager.getConnection(url, "root", MYSQL.getPassword());
+        Flyway legacyFlyway = Flyway.configure()
+                .dataSource(MySqlTestServer.jdbcUrl(legacyDb), MySqlTestServer.username(), MySqlTestServer.password())
+                .load();
+        List<String> afterBaseline = resolvedVersions().stream().filter(version -> !version.equals("1")).toList();
+        List<Tuple> expected = new ArrayList<>();
+        expected.add(tuple("1", MigrationState.BASELINE));
+        afterBaseline.forEach(version -> expected.add(tuple(version, MigrationState.SUCCESS)));
+        assertThat(legacyFlyway.info().applied()).extracting(info -> info.getVersion().getVersion(), MigrationInfo::getState)
+                .containsExactlyElementsOf(expected);
+        try (Connection legacy = MySqlTestServer.connect(legacyDb);
              PreparedStatement query = legacy.prepareStatement(
                      "select external_key, gained_xp from health_activity_log where id = ?")) {
             assertThat(keyAndXp(query, night)).isEqualTo(USER + "|2026-06-17|SLEEP:105");
             assertThat(keyAndXp(query, nap)).isEqualTo(USER + "|2026-06-17T01:00:00Z|2026-06-17T06:00:00Z|SLEEP|legacy|" + nap + ":0");
         }
 
-        // V1(빈 DB 에서 Flyway 로 만든 wellness_game)과 Hibernate 가 만든 legacy_db 의 컬럼·인덱스가 같아야 한다.
-        assertThat(schemaShape("legacy_db")).isEqualTo(schemaShape("wellness_game"));
+        // 빈 DB 에서 Flyway 로 만든 스키마(V1 이후 전부)와 Hibernate 스키마에 baseline 후 마이그레이션을 얹은 스키마가 같아야 한다.
+        assertThat(schemaShape(legacyDb)).isEqualTo(schemaShape(database));
     }
 
     @Test
@@ -210,13 +189,14 @@ class MySqlIntegrationTest {
                 null, BigDecimal.ZERO, BigDecimal.ZERO, null, 450, 90, 80, HealthActivity.sleepKey(USER, DAY),
                 Instant.parse("2026-06-16T22:00:00Z"), Instant.parse("2026-06-17T05:30:00Z")));
 
-        // V2 를 다시 적용하도록 이력에서 지우고 재실행(마이그레이션은 멱등)
+        // V2 를 다시 적용하도록 이력에서 지우고 재실행(마이그레이션은 멱등). V2 뒤 버전이 이미 적용돼 있으므로
+        // 이 테스트 DB 에서만 outOfOrder 로 V2 를 다시 돌린다.
         try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
             statement.execute("delete from flyway_schema_history where version = '2'");
         } catch (SQLException e) {
             throw new IllegalStateException(e);
         }
-        flyway.migrate();
+        Flyway.configure().configuration(flyway.getConfiguration()).outOfOrder(true).load().migrate();
 
         HealthActivity archived = activityRepository.findById(legacy.getId()).orElseThrow();
         assertThat(archived.getExternalKey()).endsWith("|legacy|" + legacy.getId());
@@ -355,27 +335,48 @@ class MySqlIntegrationTest {
         return names;
     }
 
-    /** 테스트 컨텍스트와 별개로 legacy_db 에 연결한 앱을 웹 서버 없이 띄운다. */
-    private static ConfigurableApplicationContext startApplication(String url, String... properties) {
+    private String newDatabase() {
+        String name = MySqlTestServer.createDatabase();
+        databases.add(name);
+        return name;
+    }
+
+    /**
+     * classpath:db/migration 에서 해석된 모든 마이그레이션 버전(오름차순, 적용 안 된 것 포함). 새 마이그레이션이 추가돼도
+     * 그대로 맞는다. Flyway 정보 조회에는 DB 연결이 필요해 테스트 DB 에 붙은 Flyway 로 읽는다.
+     */
+    private List<String> resolvedVersions() {
+        assertThat(flyway.getConfiguration().getLocations()).extracting(Object::toString)
+                .containsExactly("classpath:db/migration");
+        return Arrays.stream(flyway.info().all())
+                .map(info -> info.getVersion().getVersion())
+                .toList();
+    }
+
+    /** 주어진 테스트 DB 에 붙은 앱을 웹 서버 없이 띄운다. 테스트가 끝나면 {@link #tearDown()} 이 닫는다. */
+    private ConfigurableApplicationContext startApplication(String db, String... properties) {
         List<String> all = new ArrayList<>(List.of(
-                "spring.datasource.url=" + url,
-                "spring.datasource.username=root",
-                "spring.datasource.password=" + MYSQL.getPassword(),
-                "spring.datasource.driver-class-name=" + MYSQL.getDriverClassName(),
+                "spring.datasource.url=" + MySqlTestServer.jdbcUrl(db),
+                "spring.datasource.username=" + MySqlTestServer.username(),
+                "spring.datasource.password=" + MySqlTestServer.password(),
+                "spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver",
+                // 테스트 공통 설정의 H2 용 타입 지정을 운영 기본값(MySQL)으로 되돌린다.
                 "spring.jpa.properties.hibernate.type.preferred_uuid_jdbc_type=" + SqlTypes.UUID,
                 "spring.jpa.properties.hibernate.type.preferred_instant_jdbc_type=" + SqlTypes.TIMESTAMP_UTC));
         all.addAll(List.of(properties));
-        return new SpringApplicationBuilder(WellnessGameApplication.class)
+        ConfigurableApplicationContext context = new SpringApplicationBuilder(WellnessGameApplication.class, TestClockConfig.class)
                 .web(WebApplicationType.NONE)
-                .properties(all.toArray(String[]::new))
-                .run();
+                // properties() 는 기본값(가장 낮은 우선순위)이라 테스트 application.yml 의 H2 설정에 가려진다.
+                // 명령행 인자로 넘겨 반드시 이 DB 에 붙게 한다.
+                .run(all.stream().map(property -> "--" + property).toArray(String[]::new));
+        contexts.add(context);
+        return context;
     }
 
     /** 스키마의 컬럼(이름·타입·NULL 허용)과 인덱스(이름·유일 여부·컬럼 순서). Flyway 이력 테이블은 뺀다. */
     private static List<String> schemaShape(String schema) throws SQLException {
         List<String> shape = new ArrayList<>();
-        // 앱 계정은 legacy_db 를 볼 권한이 없으므로 root 로 information_schema 를 읽는다.
-        try (Connection connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword())) {
+        try (Connection connection = MySqlTestServer.connect(schema)) {
             for (String sql : List.of("""
                     select concat_ws(' ', table_name, column_name, column_type, is_nullable)
                     from information_schema.columns

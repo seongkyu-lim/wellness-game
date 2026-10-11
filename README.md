@@ -397,6 +397,39 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 화면의 `Mock 데이터 사용`을 켜면 HealthKit 대신 테스트용 걸음·수영·수면 데이터가 로드됩니다. 실제 HealthKit 연동이 기본이며 Mock은 개발 fallback입니다.
 
+## CI (GitHub Actions)
+
+`.github/workflows/`의 워크플로는 해당 디렉터리(또는 워크플로 파일 자체)가 바뀐 `dev`·`main` 대상 PR과 `dev`·`main` push에서만 돈다. 모두 `contents: read` 최소 권한이며, 같은 PR/브랜치에서 새 실행이 시작되면 이전 실행은 취소된다(Pages 배포 제외). `workflow_dispatch`로 수동 실행도 가능하다.
+
+| 워크플로 | 트리거 경로 | 하는 일 |
+|---|---|---|
+| `backend-ci.yml` | `backend/**` | JDK 21(Temurin). `test` 잡: 단위 테스트(H2) + 빌드. `mysql-test` 잡: Testcontainers MySQL 8.4 통합 테스트(`CI=true`라 Docker가 없으면 건너뛰지 않고 실패). 실패 시 테스트 리포트 artifact 업로드 |
+| `android-ci.yml` | `android/**` | JDK 21 + Android SDK. 단위 테스트·debug 빌드·lint, 자리표시 HTTPS 주소로 release 빌드. lint·테스트 리포트 artifact 업로드 |
+| `ios-ci.yml` | `ios/**` | macOS 러너, 최신 안정 Xcode. 사용 가능한 iPhone 시뮬레이터를 `simctl`로 골라 `WellnessGameTests` 스킴 테스트, Watch 앱(`-sdk watchsimulator`) 빌드, Watch를 임베드한 iOS 앱을 generic 시뮬레이터 목적지로 빌드(서명 없음, watchOS 런타임 불필요) |
+| `web-pages.yml` | `web/**` (`dev` push) | 웹 테스트·빌드 후 GitHub Pages 배포 |
+
+로컬에서 같은 검사를 돌리는 명령:
+
+```bash
+# 백엔드 (mysqlTest는 Docker 필요. 로컬에서 Docker가 없으면 건너뛴다)
+cd backend && ./gradlew test build -x test && ./gradlew mysqlTest
+
+# Android (Android SDK 필요)
+cd android && ./gradlew testDebugUnitTest assembleDebug lint \
+  && ./gradlew -PAPI_BASE_URL=https://api.wellnessgame.example assembleRelease
+
+# iOS (시뮬레이터 이름은 `xcrun simctl list devices available`로 확인)
+cd ios
+xcodebuild test -project WellnessGame.xcodeproj -scheme WellnessGameTests \
+  -destination 'platform=iOS Simulator,name=<iPhone 이름>' CODE_SIGNING_ALLOWED=NO
+xcodebuild build -project WellnessGame.xcodeproj -scheme WellnessGameWatch -sdk watchsimulator CODE_SIGNING_ALLOWED=NO
+xcodebuild build -project WellnessGame.xcodeproj -scheme WellnessGame \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+
+# 웹
+cd web && npm ci && npm test && npm run build
+```
+
 ## MVP 이후 TODO
 
 - 게스트 진행 상황을 소셜 계정으로 이전하는 계정 연결 기능
