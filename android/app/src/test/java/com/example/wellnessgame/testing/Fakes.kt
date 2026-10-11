@@ -6,6 +6,7 @@ import com.example.wellnessgame.auth.social.SignInHost
 import com.example.wellnessgame.auth.social.SocialCredential
 import com.example.wellnessgame.auth.social.SocialSignInClient
 import com.example.wellnessgame.data.network.AccessTokenSource
+import com.example.wellnessgame.data.network.TokenRefresh
 import com.example.wellnessgame.data.settings.AppSettings
 import com.example.wellnessgame.domain.LoginProvider
 import com.example.wellnessgame.data.health.DailyHealthSnapshot
@@ -33,10 +34,14 @@ class FakeTokenStore(var stored: StoredSession? = null) : TokenStore {
 
     /** 값이 있으면 save가 이 게이트가 열릴 때까지 멈춘다(동시성 테스트용). */
     var saveGate: CompletableDeferred<Unit>? = null
+
+    /** 값이 있으면 save가 이 예외로 실패한다(저장값은 그대로). */
+    var saveFailure: Exception? = null
     override suspend fun load() = stored
     override suspend fun save(session: StoredSession) {
         saveCount++
         saveGate?.await()
+        saveFailure?.let { throw it }
         stored = session
     }
     override suspend fun clear() {
@@ -45,9 +50,14 @@ class FakeTokenStore(var stored: StoredSession? = null) : TokenStore {
     }
 }
 
+/** 리프레시를 모르는 단순 토큰 출처. 401이면 갱신 없이 세션을 끝낸다. */
 class FakeTokenSource(var token: String? = "token-1") : AccessTokenSource {
     val rejected = mutableListOf<String>()
-    override fun currentToken() = token
+    override suspend fun tokenForRequest(refresh: TokenRefresh) = token
+    override suspend fun renewAfterUnauthorized(rejectedToken: String, refresh: TokenRefresh): String? {
+        onUnauthorized(rejectedToken)
+        return null
+    }
     override suspend fun onUnauthorized(rejectedToken: String) {
         rejected += rejectedToken
         if (token == rejectedToken) token = null

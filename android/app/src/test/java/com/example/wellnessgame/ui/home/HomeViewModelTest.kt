@@ -64,7 +64,7 @@ class HomeViewModelTest {
 
     private suspend fun TestScope.session(signedIn: Boolean, store: FakeTokenStore = FakeTokenStore()): SessionManager {
         if (signedIn) store.stored = StoredSession("u-1", null, "google", "jwt")
-        return SessionManager(store, backgroundScope, clock).also { it.restore() }
+        return SessionManager(store, clock).also { it.restore() }
     }
 
     @Test

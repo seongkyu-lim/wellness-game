@@ -13,7 +13,19 @@ import com.example.wellnessgame.data.network.CharacterState
 import com.example.wellnessgame.data.network.CharacterStats
 import com.example.wellnessgame.data.network.HealthActivitySyncResponse
 import com.example.wellnessgame.testing.FakeDashboardRepository
+import com.example.wellnessgame.auth.SessionManager
+import com.example.wellnessgame.auth.StoredSession
+import com.example.wellnessgame.testing.CHARACTER_JSON
+import com.example.wellnessgame.testing.FakeHealthProvider
+import com.example.wellnessgame.testing.FakeSettings
+import com.example.wellnessgame.testing.FakeTokenStore
+import com.example.wellnessgame.testing.apiClient
+import com.example.wellnessgame.testing.jsonResponse
 import kotlinx.coroutines.runBlocking
+import okhttp3.mockwebserver.MockWebServer
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -26,7 +38,10 @@ import java.time.LocalDate
 class TestSyncApp : Application(), BackgroundSyncProvider {
     var signedIn = true
     lateinit var repository: FakeDashboardRepository
-    override fun backgroundSync() = BackgroundSync({}, { signedIn }, repository)
+
+    /** 값이 있으면 가짜 대신 이 동기화(실제 ApiClient·SessionManager 배선)를 쓴다. */
+    var realSync: BackgroundSync? = null
+    override fun backgroundSync() = realSync ?: BackgroundSync({}, { signedIn }, repository)
 }
 
 @RunWith(AndroidJUnit4::class)
@@ -43,6 +58,7 @@ class SyncWorkerTest {
     fun setUp() {
         app = ApplicationProvider.getApplicationContext<Context>() as TestSyncApp
         app.signedIn = true
+        app.realSync = null
         app.repository = FakeDashboardRepository(snapshot = snapshot, syncResult = { ok })
     }
 
@@ -87,6 +103,51 @@ class SyncWorkerTest {
         cases.forEach { (error, expected) ->
             app.repository.syncResult = { throw error }
             assertEquals(error.toString(), expected, runWorker())
+        }
+    }
+
+    @Test
+    fun backgroundSync_refreshesExpiredAccessToken_throughTheSameSessionPath() {
+        val server = MockWebServer().apply { start() }
+        try {
+            val now = Instant.parse("2026-10-11T03:00:00Z")
+            val clock = Clock.fixed(now, ZoneOffset.UTC)
+            val store = FakeTokenStore(
+                StoredSession("u-1", null, "google", "old", now.epochSecond + 3600, "r-1", now.epochSecond + 86_400),
+            )
+            val session = SessionManager(store, clock)
+            runBlocking { session.restore() }
+            val repository = DefaultDashboardRepository(
+                api = server.apiClient(session),
+                session = session,
+                healthConnect = FakeHealthProvider(snapshot),
+                mock = FakeHealthProvider(snapshot),
+                settings = FakeSettings(),
+                clock = clock,
+            )
+            app.realSync = BackgroundSync({}, { session.state.value.isSignedIn }, repository)
+            server.enqueue(jsonResponse("""{"message":"expired"}""", 401))
+            server.enqueue(
+                jsonResponse(
+                    """{"userId":"u-1","accessToken":"new","expiresIn":3600,"refreshToken":"r-2","refreshExpiresIn":86400}""",
+                ),
+            )
+            server.enqueue(
+                jsonResponse(
+                    """{"userId":"u-1","date":"2026-10-11","gainedXp":0,"levelUp":false,"character":$CHARACTER_JSON}""",
+                ),
+            )
+
+            assertEquals(Result.success(), runWorker())
+
+            assertEquals("Bearer old", server.takeRequest(5, java.util.concurrent.TimeUnit.SECONDS)!!.getHeader("Authorization"))
+            assertEquals("/api/auth/refresh", server.takeRequest(5, java.util.concurrent.TimeUnit.SECONDS)!!.path)
+            val retry = server.takeRequest(5, java.util.concurrent.TimeUnit.SECONDS)!!
+            assertEquals("/api/health-activities/sync", retry.path)
+            assertEquals("Bearer new", retry.getHeader("Authorization"))
+            assertEquals("r-2", store.stored?.refreshToken)
+        } finally {
+            server.shutdown()
         }
     }
 }

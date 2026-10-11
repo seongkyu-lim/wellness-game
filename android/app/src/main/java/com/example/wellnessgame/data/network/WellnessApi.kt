@@ -27,6 +27,13 @@ interface WellnessApi {
     @POST("api/auth/naver/native")
     suspend fun naver(@Body body: NaverNativeLoginRequest): Response<AuthTokenResponse>
 
+    @POST("api/auth/refresh")
+    suspend fun refresh(@Body body: RefreshTokenRequest): Response<RefreshResponse>
+
+    /** 무인증. Authorization을 싣지 않고 리프레시 토큰만 보낸다. 항상 204. */
+    @POST("api/auth/logout")
+    suspend fun logout(@Body body: RefreshTokenRequest): Response<Unit>
+
     @POST("api/health-activities/sync")
     suspend fun sync(
         @Header("Authorization") authorization: String,

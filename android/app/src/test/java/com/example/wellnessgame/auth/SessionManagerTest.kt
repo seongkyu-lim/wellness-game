@@ -5,7 +5,6 @@ import com.example.wellnessgame.domain.LoginProvider
 import com.example.wellnessgame.testing.FakeTokenStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -22,7 +21,10 @@ class SessionManagerTest {
     private val now = Instant.parse("2026-10-11T03:00:00Z")
     private val clock = Clock.fixed(now, ZoneOffset.UTC)
 
-    private fun TestScope.manager(store: FakeTokenStore) = SessionManager(store, this, clock)
+    private fun manager(store: FakeTokenStore) = SessionManager(store, clock)
+
+    /** 리프레시 토큰이 없는 세션의 요청 토큰. 갱신을 시도하면 실패한다. */
+    private suspend fun SessionManager.token() = tokenForRequest { error("legacy sessions never refresh") }
 
     private fun stored(token: String = "jwt", expiresAt: Long? = now.epochSecond + 60) =
         StoredSession("u-1", "새싹", "kakao", token, expiresAt)
@@ -35,7 +37,7 @@ class SessionManagerTest {
         assertTrue(state.restored)
         assertEquals("u-1", state.userId)
         assertEquals(LoginProvider.KAKAO, state.provider)
-        assertEquals("jwt", session.currentToken())
+        assertEquals("jwt", session.token())
     }
 
     @Test
@@ -46,7 +48,7 @@ class SessionManagerTest {
         assertFalse(session.state.value.isSignedIn)
         assertTrue(session.state.value.reloginRequired)
         assertNull(store.stored)
-        assertNull(session.currentToken())
+        assertNull(session.token())
     }
 
     @Test
@@ -58,7 +60,7 @@ class SessionManagerTest {
 
         assertEquals(StoredSession("u-9", "Leaf", "password", "new-jwt", now.epochSecond + 3600), store.stored)
         assertEquals("u-9", session.state.value.userId)
-        assertEquals("new-jwt", session.currentToken())
+        assertEquals("new-jwt", session.token())
     }
 
     @Test
@@ -93,7 +95,7 @@ class SessionManagerTest {
         session.restore()
         session.signOut()
         assertNull(store.stored)
-        assertNull(session.currentToken())
+        assertNull(session.token())
         assertFalse(session.state.value.reloginRequired)
     }
 
@@ -121,7 +123,7 @@ class SessionManagerTest {
         assertFalse(session.state.value.reloginRequired)
         assertEquals("new", store.stored?.accessToken)
         assertEquals(0, store.clearCount)
-        assertEquals("new", session.currentToken())
+        assertEquals("new", session.token())
     }
 
     @Test
@@ -149,12 +151,12 @@ class SessionManagerTest {
             override fun withZone(zone: java.time.ZoneId?) = this
         }
         val store = FakeTokenStore(stored(expiresAt = now.epochSecond + 60))
-        val session = SessionManager(store, this, clock)
+        val session = SessionManager(store, clock)
         session.restore()
-        assertEquals("jwt", session.currentToken())
+        assertEquals("jwt", session.token())
 
         current = now.plusSeconds(61)
-        assertNull(session.currentToken())
+        assertNull(session.token())
         advanceUntilIdle()
         assertTrue(session.state.value.reloginRequired)
         assertNull(store.stored)

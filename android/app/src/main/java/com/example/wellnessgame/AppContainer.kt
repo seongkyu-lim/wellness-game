@@ -33,7 +33,7 @@ class AppContainer(context: Context) {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val settings = SettingsStore(appContext)
-    val session = SessionManager(KeystoreTokenStore(appContext), appScope)
+    val session = SessionManager(KeystoreTokenStore(appContext), refreshScope = appScope)
     private val restoreJob = appScope.launch { session.restore() }
 
     suspend fun awaitSessionRestored() = restoreJob.join()
@@ -69,6 +69,7 @@ class AppContainer(context: Context) {
                 BuildConfig.NAVER_CLIENT_NAME,
             ),
         ),
+        scope = appScope,
     )
 
     /** 기기 지역(시스템 설정 기준, 앱 언어와 무관). 로그인 수단 노출 순서에 쓴다. */

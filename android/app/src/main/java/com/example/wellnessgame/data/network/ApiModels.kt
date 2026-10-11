@@ -21,7 +21,10 @@ data class SocialAccessTokenRequest(val accessToken: String)
 @Serializable
 data class NaverNativeLoginRequest(val accessToken: String, val refreshToken: String)
 
-/** 로그인·회원가입·소셜 토큰 교환의 공통 응답. */
+/**
+ * 로그인·회원가입·소셜 토큰 교환의 공통 응답.
+ * Auth v2부터 [refreshToken]·[refreshExpiresIn](초)이 함께 온다. 이전 서버 응답에는 없을 수 있다.
+ */
 @Serializable
 data class AuthTokenResponse(
     val userId: String,
@@ -29,6 +32,23 @@ data class AuthTokenResponse(
     val accessToken: String,
     val tokenType: String? = null,
     val expiresIn: Long? = null,
+    val refreshToken: String? = null,
+    val refreshExpiresIn: Long? = null,
+)
+
+/** `POST /api/auth/refresh`·`POST /api/auth/logout` 요청. 무인증 경로라 리프레시 토큰 소유가 권한이다. */
+@Serializable
+data class RefreshTokenRequest(val refreshToken: String)
+
+/** `POST /api/auth/refresh` 응답. 리프레시 토큰은 매번 회전되므로 반드시 온다. */
+@Serializable
+data class RefreshResponse(
+    val userId: String,
+    val accessToken: String,
+    val tokenType: String? = null,
+    val expiresIn: Long? = null,
+    val refreshToken: String,
+    val refreshExpiresIn: Long? = null,
 )
 
 /**
