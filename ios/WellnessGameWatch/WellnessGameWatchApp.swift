@@ -6,7 +6,7 @@ struct WellnessGameWatchApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WatchContentView(model: delegate.model)
+            WatchContentView(model: delegate.model, workout: delegate.workout)
         }
     }
 }

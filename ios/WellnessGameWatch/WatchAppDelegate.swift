@@ -16,10 +16,26 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate {
     )
     private lazy var receiver = WatchAuthReceiver(model: model)
 
+    private lazy var workoutController = HealthKitWorkoutController()
+    lazy var workout: WorkoutViewModel = {
+        #if DEBUG
+        if DemoWorkoutController.isEnabled {
+            return WorkoutViewModel(controller: DemoWorkoutController())
+        }
+        #endif
+        return WorkoutViewModel(controller: workoutController)
+    }()
+
     func applicationDidFinishLaunching() {
         ServerEnvironment.validateAtLaunch()
         receiver.start()
         scheduleBackgroundRefresh()
+    }
+
+    /// 운동 중 앱이 종료됐다가 시스템이 다시 실행하면 진행 중인 세션을 이어받는다.
+    func handleActiveWorkoutRecovery() {
+        _ = workout
+        Task { await workoutController.recoverActiveSession() }
     }
 
     func handle(_ backgroundTasks: Set<WKRefreshBackgroundTask>) {

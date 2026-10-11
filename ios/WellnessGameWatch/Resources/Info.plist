@@ -10,6 +10,14 @@
     <string>com.example.WellnessGame</string>
     <key>WKRunsIndependentlyOfCompanionApp</key>
     <false/>
+    <key>NSHealthShareUsageDescription</key>
+    <string>Watch에서 기록한 운동의 심박수, 활동 에너지, 거리를 운동 중에 보여 주기 위해 건강 데이터를 읽습니다.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>Watch에서 기록한 운동과 심박수, 활동 에너지, 거리를 건강 앱에 저장합니다. iPhone 앱이 이 운동을 XP로 반영합니다.</string>
+    <key>WKBackgroundModes</key>
+    <array>
+        <string>workout-processing</string>
+    </array>
     <key>API_BASE_URL</key>
     <string>$(API_BASE_URL)</string>
 </dict>

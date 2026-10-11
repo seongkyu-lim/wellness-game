@@ -91,29 +91,17 @@ final class AppleHealthKitProvider: HealthDataProvider {
         return HealthActivityDTO(
             type: .workout,
             workoutType: mapWorkoutType(workout.workoutActivityType),
-            durationMinutes: max(1, Int((workout.duration / 60).rounded())),
-            calories: calories,
+            durationMinutes: WorkoutSyncRules.durationMinutes(activeDuration: workout.duration),
+            calories: WorkoutSyncRules.clampedCalories(calories, start: workout.startDate, end: workout.endDate),
             distanceMeters: workout.totalDistance?.doubleValue(for: .meter()),
             startedAt: workout.startDate,
             endedAt: workout.endDate
         )
     }
 
+    /// 종목 매핑은 Watch 운동 기록과 같은 `WorkoutKind`를 쓴다.
     private func mapWorkoutType(_ type: HKWorkoutActivityType) -> WorkoutType {
-        switch type {
-        case .swimming:
-            return .swimming
-        case .running:
-            return .running
-        case .walking:
-            return .walking
-        case .cycling:
-            return .cycling
-        case .traditionalStrengthTraining, .functionalStrengthTraining:
-            return .strengthTraining
-        default:
-            return .other
-        }
+        WorkoutType(rawValue: WorkoutKind(activityType: type).serverType) ?? .other
     }
 
     private func fetchLastNightSleep() async throws -> HealthActivityDTO? {
