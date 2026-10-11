@@ -36,11 +36,11 @@ jobs:
           java-version: '21'
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
-      - name: Unit tests, debug build, lint
-        run: ./gradlew testDebugUnitTest assembleDebug lint
-      - name: Release build
-        # 실제 서버가 아닌 자리표시 주소. release는 https 주소가 없으면 빌드가 실패한다.
-        run: ./gradlew -PAPI_BASE_URL=https://api.wellnessgame.example assembleRelease
+        with:
+          cache-read-only: ${{ !contains(fromJSON('["refs/heads/dev","refs/heads/main"]'), github.ref) }}
+      - name: Unit tests, debug·release build, lint
+        # 자리표시 https 주소. release는 https 주소가 없으면 빌드가 실패하고, debug는 이 값을 쓰지 않는다.
+        run: ./gradlew -PAPI_BASE_URL=https://api.wellnessgame.example testDebugUnitTest assembleDebug lint assembleRelease
       - name: Upload lint and test reports
         if: always()
         uses: actions/upload-artifact@v4

@@ -7,7 +7,8 @@ on:
       - 'ios/**'
       - '.github/workflows/ios-ci.yml'
   push:
-    branches: [dev, main]
+    # macOS 러너 비용 절감: PR에서 검증하므로 push 는 main 만
+    branches: [main]
     paths:
       - 'ios/**'
       - '.github/workflows/ios-ci.yml'
@@ -66,15 +67,6 @@ jobs:
             -scheme WellnessGameTests \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -resultBundlePath "$RUNNER_TEMP/WellnessGameTests.xcresult" \
-            CODE_SIGNING_ALLOWED=NO
-
-      - name: Build watch app
-        run: |
-          xcodebuild build \
-            -project "$PROJECT" \
-            -scheme WellnessGameWatch \
-            -sdk watchsimulator \
-            -configuration Debug \
             CODE_SIGNING_ALLOWED=NO
 
       # 앱은 Watch 앱을 임베드한다. -target + -sdk iphonesimulator는 Watch 타깃까지 iOS SDK로 빌드해 실패하므로

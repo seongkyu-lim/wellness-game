@@ -35,10 +35,14 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '21'
+          # build.gradle toolchain(17)에 맞춘다.
+          java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # 기본은 main 에서만 캐시를 쓰므로 dev 도 쓰기 허용
+          cache-read-only: ${{ !contains(fromJSON('["refs/heads/dev","refs/heads/main"]'), github.ref) }}
       - name: Test and build
-        run: ./gradlew test build -x test
+        run: ./gradlew build
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
@@ -53,16 +57,18 @@ jobs:
     name: MySQL integration tests (Testcontainers)
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    env:
-      # CI=true 이면 Docker가 없을 때 건너뛰지 않고 실패한다(MySqlIntegrationTest).
-      CI: 'true'
+    # Actions 는 CI=true 를 기본 설정하므로 Docker가 없으면 건너뛰지 않고 실패한다(MySqlIntegrationTest).
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '21'
+          # build.gradle toolchain(17)에 맞춘다.
+          java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # 기본은 main 에서만 캐시를 쓰므로 dev 도 쓰기 허용
+          cache-read-only: ${{ !contains(fromJSON('["refs/heads/dev","refs/heads/main"]'), github.ref) }}
       - name: Docker info
         run: docker version
       - name: MySQL tests
