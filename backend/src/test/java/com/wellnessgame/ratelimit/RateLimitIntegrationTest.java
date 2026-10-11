@@ -118,6 +118,23 @@ class RateLimitIntegrationTest {
         socialCodeExchange("198.51.100.31").andExpect(status().isServiceUnavailable());
     }
 
+    /** Auth v2: 공개 경로인 /api/auth/refresh 도 /api/auth/** IP 한도에 포함된다. */
+    @Test
+    void refreshCountsTowardWholeAuthLimitPerIp() throws Exception {
+        for (int i = 0; i < 4; i++) {
+            refresh("198.51.100.60").andExpect(status().isUnauthorized());
+        }
+
+        refresh("198.51.100.60").andExpect(status().isTooManyRequests());
+        refresh("198.51.100.61").andExpect(status().isUnauthorized());
+    }
+
+    private ResultActions refresh(String ip) throws Exception {
+        return mockMvc.perform(fromIp(post("/api/auth/refresh"), ip)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"refreshToken\": \"unknown-refresh-token\"}"));
+    }
+
     @Test
     void ipv6ClientsInSameSlash64ShareLimit() throws Exception {
         login("2001:db8:77:1::1").andExpect(status().isBadRequest());

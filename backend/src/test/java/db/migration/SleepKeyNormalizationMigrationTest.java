@@ -23,6 +23,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -71,7 +72,8 @@ class SleepKeyNormalizationMigrationTest {
 
     @Test
     void flywayAppliedBaselineAndSleepKeyMigrationAtStartup() {
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("2");
+        assertThat(Arrays.stream(flyway.info().applied()).map(info -> info.getVersion().getVersion()))
+                .contains("1", "2");
         assertThat(flyway.info().pending()).isEmpty();
     }
 
