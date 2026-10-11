@@ -10,9 +10,18 @@ import com.example.wellnessgame.testing.FakeSocialClient
 import com.example.wellnessgame.testing.FakeTokenStore
 import com.example.wellnessgame.testing.apiClient
 import com.example.wellnessgame.testing.jsonResponse
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -216,23 +225,132 @@ class TokenRefreshTest {
     }
 
     @Test
-    fun saveFailure_keepsPreviousRefreshTokenOnDisk_butUsesNewTokenInMemory() = runTest {
+    fun saveFailure_retriesThenFails_leavingSessionUnchanged_andNextRequestRefreshesAgain() = runTest {
         val store = FakeTokenStore(session())
         val (manager, api) = signedIn(store)
         store.saveFailure = IOException("keystore unavailable")
         server.enqueue(unauthorized())
-        server.enqueue(jsonResponse(refreshBody()))
-        server.enqueue(jsonResponse(characterBody))
-        server.enqueue(jsonResponse(characterBody))
+        server.enqueue(jsonResponse(refreshBody(access = "lost", refresh = "r-lost")))
 
-        api.myCharacter()
-        api.myCharacter()
+        val error = runCatching { api.myCharacter() }.exceptionOrNull()
 
+        assertTrue("save failure is a transient error", error is ApiException.Network)
+        assertEquals("saved up to 3 times", 3, store.saveCount)
         assertEquals("previous refresh token stays for the server grace window", session(), store.stored)
         assertEquals(0, store.clearCount)
         assertTrue(manager.state.value.isSignedIn)
-        repeat(3) { server.takeRequest(5, TimeUnit.SECONDS)!! }
+
+        // 다음 요청은 이전 토큰(r-1)으로 다시 401 → 갱신해 복구한다(서버 유예 구간).
+        store.saveFailure = null
+        server.enqueue(unauthorized())
+        server.enqueue(jsonResponse(refreshBody()))
+        server.enqueue(jsonResponse(characterBody))
+        assertNotNull(api.myCharacter())
+        repeat(2) { server.takeRequest(5, TimeUnit.SECONDS)!! }
+        assertEquals("Bearer old", server.takeRequest(5, TimeUnit.SECONDS)!!.getHeader("Authorization"))
+        assertEquals("""{"refreshToken":"r-1"}""", server.takeRequest(5, TimeUnit.SECONDS)!!.bodyText())
         assertEquals("Bearer new", server.takeRequest(5, TimeUnit.SECONDS)!!.getHeader("Authorization"))
+        assertEquals("r-2", store.stored?.refreshToken)
+    }
+
+    @Test
+    fun refreshFailureClassification_onlyRejectionEndsTheSession() = runTest {
+        val transient = listOf(
+            jsonResponse("""{"message":"slow"}""", 429).setHeader("Retry-After", "5") to ApiException.RateLimited::class,
+            MockResponse().setResponseCode(500) to ApiException.Server::class,
+            jsonResponse("""{"unexpected":true}""") to ApiException.InvalidResponse::class,
+        )
+        transient.forEach { (refreshResponse, expected) ->
+            val store = FakeTokenStore(session())
+            val (manager, api) = signedIn(store)
+            server.enqueue(unauthorized())
+            server.enqueue(refreshResponse)
+            val error = runCatching { api.myCharacter() }.exceptionOrNull()
+            assertTrue("$expected expected, got $error", expected.isInstance(error))
+            assertTrue(manager.state.value.isSignedIn)
+            assertEquals(session(), store.stored)
+        }
+
+        val store = FakeTokenStore(session())
+        val (manager, api) = signedIn(store)
+        server.enqueue(unauthorized())
+        server.enqueue(jsonResponse("""{"message":"blank"}""", 400))
+        runCatching { api.myCharacter() }.exceptionOrNull() as ApiException.Unauthorized
+        assertTrue(manager.state.value.reloginRequired)
+        assertNull(store.stored)
+    }
+
+    /** 실제 스레드에서 도는 앱 수명 스코프와 세션을 만들고, 갱신 응답이 늦게 오게 한다. */
+    private fun slowRefreshFixture(store: FakeTokenStore): Triple<SessionManager, ApiClient, CoroutineScope> {
+        val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val manager = SessionManager(store, clock, appScope)
+        runBlocking { manager.restore() }
+        server.enqueue(unauthorized())
+        server.enqueue(jsonResponse(refreshBody()).setBodyDelay(300, TimeUnit.MILLISECONDS))
+        return Triple(manager, server.apiClient(manager), appScope)
+    }
+
+    private fun awaitRefreshRequestSent() {
+        assertEquals("Bearer old", server.takeRequest(5, TimeUnit.SECONDS)!!.getHeader("Authorization"))
+        assertEquals("/api/auth/refresh", server.takeRequest(5, TimeUnit.SECONDS)!!.path)
+    }
+
+    @Test
+    fun callerCancelledDuringRefresh_rotationIsStillSaved_andNextRequestUsesNewToken() = runBlocking {
+        val store = FakeTokenStore(session())
+        val (_, api, appScope) = slowRefreshFixture(store)
+        try {
+            val caller = launch(Dispatchers.Default) { api.myCharacter() }
+            awaitRefreshRequestSent()
+            caller.cancelAndJoin() // 예: 화면을 벗어나 viewModelScope가 취소됨
+
+            withTimeout(5_000) { while (store.stored?.refreshToken != "r-2") delay(20) }
+            assertEquals("new", store.stored?.accessToken)
+
+            server.enqueue(jsonResponse(characterBody))
+            assertNotNull(api.myCharacter())
+            assertEquals("Bearer new", server.takeRequest(5, TimeUnit.SECONDS)!!.getHeader("Authorization"))
+        } finally {
+            appScope.cancel()
+        }
+    }
+
+    @Test
+    fun signOutDuringRefresh_isNotUndoneByTheRotation() = runBlocking {
+        val store = FakeTokenStore(session())
+        val (manager, api, appScope) = slowRefreshFixture(store)
+        try {
+            val caller = async(Dispatchers.Default) { runCatching { api.myCharacter() }.exceptionOrNull() }
+            awaitRefreshRequestSent()
+            manager.signOut()
+
+            assertTrue(caller.await() is ApiException.Unauthorized)
+            assertNull(store.stored)
+            assertFalse(manager.state.value.isSignedIn)
+            assertFalse("user logged out, not expired", manager.state.value.reloginRequired)
+            assertEquals("no retry after sign-out", 2, server.requestCount)
+        } finally {
+            appScope.cancel()
+        }
+    }
+
+    @Test
+    fun signInDuringRefresh_keepsNewAccount_andNeverRetriesWithItsToken() = runBlocking {
+        val store = FakeTokenStore(session())
+        val (manager, api, appScope) = slowRefreshFixture(store)
+        try {
+            val caller = async(Dispatchers.Default) { runCatching { api.myCharacter() }.exceptionOrNull() }
+            awaitRefreshRequestSent()
+            manager.signIn(AuthTokenResponse("u-2", null, "other", null, 3600, "r-other", 86_400), LoginProvider.GOOGLE)
+
+            assertTrue(caller.await() is ApiException.Unauthorized)
+            assertEquals("u-2", manager.state.value.userId)
+            assertEquals("other", store.stored?.accessToken)
+            assertEquals("r-other", store.stored?.refreshToken)
+            assertEquals("no retry with the other account's token", 2, server.requestCount)
+        } finally {
+            appScope.cancel()
+        }
     }
 
     @Test
@@ -277,6 +395,9 @@ class TokenRefreshTest {
     }
 
     // 로그아웃은 실제 시간 제한(withTimeoutOrNull)을 쓰므로 가상 시간(runTest) 대신 runBlocking으로 돌린다.
+    private fun authRepository(manager: SessionManager, api: ApiClient, clients: Map<LoginProvider, FakeSocialClient>) =
+        AuthRepository(api, manager, clients, CoroutineScope(SupervisorJob() + Dispatchers.Default))
+
     @Test
     fun logout_sendsOnlyRefreshToken_withoutAuthorization_andSignsOutOfSdk() = runBlocking {
         val store = FakeTokenStore(session())
@@ -284,7 +405,7 @@ class TokenRefreshTest {
         val kakao = FakeSocialClient(LoginProvider.KAKAO)
         server.enqueue(MockResponse().setResponseCode(204))
 
-        AuthRepository(api, manager, mapOf(LoginProvider.KAKAO to kakao)).signOut()
+        authRepository(manager, api, mapOf(LoginProvider.KAKAO to kakao)).signOut().join()
 
         val request = server.takeRequest(5, TimeUnit.SECONDS)!!
         assertEquals("/api/auth/logout", request.path)
@@ -298,13 +419,32 @@ class TokenRefreshTest {
     }
 
     @Test
+    fun logout_isSentEvenWhenTheCallingScreenIsClosed() = runBlocking {
+        val store = FakeTokenStore(session())
+        val (manager, api) = signedIn(store)
+        val kakao = FakeSocialClient(LoginProvider.KAKAO)
+        server.enqueue(MockResponse().setResponseCode(204).setBodyDelay(200, TimeUnit.MILLISECONDS))
+        val auth = authRepository(manager, api, mapOf(LoginProvider.KAKAO to kakao))
+
+        val screen = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        lateinit var logout: Job
+        screen.launch { logout = auth.signOut() }.join()
+        screen.cancel() // Activity 종료
+
+        logout.join()
+        assertEquals("/api/auth/logout", server.takeRequest(5, TimeUnit.SECONDS)!!.path)
+        assertNull(store.stored)
+        assertEquals(1, kakao.signOutCount)
+    }
+
+    @Test
     fun logout_serverFailure_stillLogsOutLocally() = runBlocking {
         val store = FakeTokenStore(session())
         val (manager, api) = signedIn(store)
         val kakao = FakeSocialClient(LoginProvider.KAKAO)
         server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
 
-        AuthRepository(api, manager, mapOf(LoginProvider.KAKAO to kakao)).signOut()
+        authRepository(manager, api, mapOf(LoginProvider.KAKAO to kakao)).signOut().join()
 
         assertNull(store.stored)
         assertFalse(manager.state.value.isSignedIn)
@@ -315,7 +455,7 @@ class TokenRefreshTest {
     fun logout_legacySession_sendsNothing() = runBlocking {
         val store = FakeTokenStore(session(refresh = null, refreshExpiresAt = null))
         val (manager, api) = signedIn(store)
-        AuthRepository(api, manager, emptyMap()).signOut()
+        authRepository(manager, api, emptyMap()).signOut().join()
         assertEquals(0, server.requestCount)
         assertFalse(manager.state.value.isSignedIn)
     }

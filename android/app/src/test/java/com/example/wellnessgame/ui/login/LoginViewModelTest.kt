@@ -61,6 +61,7 @@ class LoginViewModelTest {
             api,
             session,
             mapOf(LoginProvider.GOOGLE to google, LoginProvider.KAKAO to kakao, LoginProvider.NAVER to naver),
+            backgroundScope,
         )
         return LoginViewModel(auth, region) to session
     }

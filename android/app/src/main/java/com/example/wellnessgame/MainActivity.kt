@@ -151,10 +151,9 @@ private fun WellnessApp(container: AppContainer, signInHost: SignInHost, onOpenI
         Route.ACCOUNT -> AccountScreen(
             session = session,
             onLogOut = {
-                scope.launch {
-                    container.auth.signOut()
-                    container.settings.setLastSyncedAt(null)
-                }
+                // 화면이 닫혀도 서버 폐기 요청이 취소되지 않도록 앱 수명 스코프에서 돈다.
+                container.auth.signOut()
+                container.appScope.launch { container.settings.setLastSyncedAt(null) }
                 route = Route.HOME
             },
             onOpenHealthSettings = { onOpenIntent(Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS)) },
