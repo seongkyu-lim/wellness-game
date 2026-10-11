@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 영어(기본·대체 언어). 용어는 ios/GLOSSARY.md를 따른다. -->
+<resources>
+    <string name="app_name" translatable="false">Wellness Game</string>
+    <string name="mascot_name">Sprouty</string>
+
+    <!-- Growth stages -->
+    <string name="stage_seed">Seed</string>
+    <string name="stage_sprout">Sprout</string>
+    <string name="stage_sapling">Stem</string>
+    <string name="stage_young">Sapling</string>
+    <string name="stage_tree">Tree</string>
+    <string name="stage_blossom">Blossom</string>
+    <string name="avatar_description">%1$s stage character</string>
+
+    <!-- Common actions -->
+    <string name="action_log_in">Log In</string>
+    <string name="action_sign_up">Sign Up</string>
+    <string name="action_log_out">Log Out</string>
+    <string name="action_close">Close</string>
+    <string name="action_ok">OK</string>
+    <string name="account_title">Account</string>
+    <string name="account_user">%1$s user</string>
+    <string name="error_unknown">Unknown error</string>
+
+    <!-- Hero -->
+    <string name="bubble_sign_in">Log in and I\'ll wake up!</string>
+    <string name="bubble_sync">Sync and I\'ll wake up!</string>
+    <string name="bubble_next">At Lv.%1$d I\'ll grow into a %2$s!</string>
+    <string name="bubble_max">I\'m in full bloom! Thanks for growing with me!</string>
+    <string name="level_chip">Lv.%1$d · %2$s</string>
+    <string name="level_short">Lv.%1$d</string>
+    <string name="not_synced_yet">Not synced yet</string>
+    <string name="gained_xp">+%1$d XP</string>
+    <string name="level_up">Level up</string>
+
+    <!-- Character -->
+    <string name="signin_prompt_title">Log in to grow Sprouty</string>
+    <string name="signin_prompt_body">Once you log in, your steps, workouts, and sleep turn into XP and your character grows.</string>
+    <string name="signin_prompt_button">Log In</string>
+    <string name="waiting_title">Sprouty is waiting for you</string>
+    <string name="waiting_body">Your steps, workouts, and sleep turn into XP automatically and your character grows.</string>
+    <string name="next_stage_chip">Next · %1$s Lv.%2$d</string>
+    <string name="xp_value">%1$d / %2$d XP</string>
+    <string name="xp_total">Total %1$d XP</string>
+    <string name="stat_strength">Strength</string>
+    <string name="stat_vitality">Vitality</string>
+    <string name="stat_discipline">Discipline</string>
+    <string name="stat_recovery">Recovery</string>
+
+    <!-- Health Connect -->
+    <string name="health_permission_title">Connect Health Connect</string>
+    <string name="health_permission_body">Allow Wellness Game to read your steps, workouts, sleep, active calories, and distance so Sprouty can grow.</string>
+    <string name="health_permission_button">Allow access</string>
+    <string name="health_update_title">Health Connect is required</string>
+    <string name="health_update_body">Install or update Health Connect from Google Play, then come back.</string>
+    <string name="health_update_button">Open Google Play</string>
+    <string name="health_unsupported_title">Health Connect isn\'t available on this device.</string>
+    <string name="health_unsupported_body">Health data can\'t be read on this device, so your character only grows from data synced elsewhere.</string>
+    <string name="health_settings">Health Connect settings</string>
+    <string name="rationale_title">How Wellness Game uses health data</string>
+    <string name="rationale_body">Wellness Game reads today\'s steps, workouts (with active calories and distance), and last night\'s sleep only to calculate your character\'s XP. The data is sent to the Wellness Game server only while you\'re logged in. You can change access anytime in Health Connect settings.</string>
+
+    <!-- Quests -->
+    <string name="quests_title">Today\'s Quests</string>
+    <string name="quest_steps">Steps</string>
+    <string name="quest_steps_value">%1$s / %2$s steps</string>
+    <string name="quest_workout">Workout</string>
+    <string name="quest_workout_value">%1$d / %2$d min</string>
+    <string name="quest_sleep">Sleep</string>
+    <string name="quest_sleep_value">%1$s / %2$s</string>
+    <string name="duration_minutes">%1$dm</string>
+    <string name="duration_hours">%1$dh</string>
+    <string name="duration_hours_minutes">%1$dh %2$dm</string>
+    <string name="workout_running">Running</string>
+    <string name="workout_walking">Walking</string>
+    <string name="workout_cycling">Cycling</string>
+    <string name="workout_swimming">Swimming</string>
+    <string name="workout_strength">Strength training</string>
+    <string name="workout_other">Other</string>
+    <string name="rewards_title">Rewards</string>
+    <string name="already_counted">Already counted</string>
+
+    <!-- Status -->
+    <string name="status_idle">Health data syncs automatically.</string>
+    <string name="status_sign_in">Log in to sync your health data and grow your character.</string>
+    <string name="status_mock_preview">Showing mock data. Log in to sync it.</string>
+    <string name="status_synced">Synced automatically</string>
+    <string name="status_level_up">Level up! Check how your character has grown.</string>
+    <string name="status_permission">Allow Health Connect access to sync.</string>
+    <string name="status_health_error">Couldn\'t read health data.</string>
+    <string name="status_session_expired">Your session has expired. Please log in again.</string>
+    <plurals name="status_rate_limited">
+        <item quantity="one">Too many requests. Please try again in %1$d second.</item>
+        <item quantity="other">Too many requests. Please try again in %1$d seconds.</item>
+    </plurals>
+    <string name="status_rate_limited_unknown">Too many requests. Please try again later.</string>
+    <string name="status_network">Couldn\'t reach the server. Pull down to try again.</string>
+    <string name="status_server_error">Couldn\'t sync. Pull down to try again. (%1$s)</string>
+    <string name="last_synced">Last synced %1$s</string>
+    <string name="never_synced">Not synced yet</string>
+    <string name="mock_toggle">Use mock data</string>
+
+    <!-- Login -->
+    <string name="login_title">Log In</string>
+    <string name="login_subtitle">Log in to sync your health data and grow the same character on all your devices.</string>
+    <string name="username">Username</string>
+    <string name="username_hint">4–32 letters or numbers</string>
+    <string name="password">Password</string>
+    <string name="password_hint">At least 8 characters</string>
+    <string name="or_social">or with a social account</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="sign_in_with_kakao">Sign in with Kakao</string>
+    <string name="sign_in_with_naver">Sign in with Naver</string>
+    <string name="other_sign_in">Other sign-in options</string>
+    <string name="provider_not_configured">%1$s sign-in isn\'t set up in this build.</string>
+    <string name="login_error_generic">Couldn\'t log in. Please try again.</string>
+    <string name="login_error_social">Couldn\'t sign in with %1$s.</string>
+</resources>
