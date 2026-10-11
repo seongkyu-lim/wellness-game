@@ -47,3 +47,24 @@ Source language is ko; English is the fallback for unsupported device languages.
 | 아이디 / 비밀번호 | Username / Password |
 | Google·Kakao·Naver·Apple로 로그인 | Sign in with Google / Kakao / Naver / Apple |
 | 다른 방법으로 로그인 | Other sign-in options |
+
+## Watch workout recording
+
+Workout types map 1:1 to the server `WorkoutType` (`Shared/Workout/WorkoutKind.swift`).
+
+| Server type | ko | en |
+|---|---|---|
+| RUNNING | 달리기 | Running |
+| WALKING | 걷기 | Walking |
+| CYCLING | 자전거 | Cycling |
+| SWIMMING | 수영 (수영장 25m) | Swimming (Pool 25 m) |
+| STRENGTH_TRAINING | 근력 운동 | Strength training |
+| OTHER | 기타 | Other |
+
+| ko | en |
+|---|---|
+| 운동 시작 / 운동 종류 / 운동 완료 | Start Workout / Workout Type / Workout complete |
+| 일시정지 / 일시정지됨 / 재개 / 종료 | Pause / Paused / Resume / End |
+| 시간 / 심박수 / 평균 심박 / 활동 칼로리 / 거리 | Time / Heart rate / Avg. heart rate / Active calories / Distance |
+| 건강 앱 / 건강 데이터 | Health app / Health data |
+| iPhone 앱이 다음 동기화 때 반영해요 | Your iPhone app will add this at the next sync |

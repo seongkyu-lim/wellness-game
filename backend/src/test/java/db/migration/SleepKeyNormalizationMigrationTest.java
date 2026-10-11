@@ -1,44 +1,48 @@
-package com.wellnessgame.activity;
+package db.migration;
 
+import com.wellnessgame.WellnessGameApplication;
+import com.wellnessgame.activity.ActivityType;
+import com.wellnessgame.activity.HealthActivity;
+import com.wellnessgame.activity.HealthActivityRepository;
+import com.wellnessgame.activity.HealthActivitySyncService;
 import com.wellnessgame.api.HealthActivitySyncRequest;
 import com.wellnessgame.api.HealthActivitySyncResponse;
 import com.wellnessgame.character.UserCharacterRepository;
 import com.wellnessgame.support.MutableClock;
 import com.wellnessgame.support.TestClockConfig;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.transaction.PlatformTransactionManager;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Proxy;
-
+import javax.sql.DataSource;
 import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.wellnessgame.support.ActivityPayloads.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * #50 구 형식 수면 로그 키(userId|start|end|SLEEP) 정리 마이그레이션.
+ * #50 구 형식 수면 로그 키(userId|start|end|SLEEP) 정리와 #66 legacy XP 합치기(Flyway V2).
+ * 앱 기동 때 Flyway 가 이미 V2 를 빈 DB 에 적용했으므로, 여기서는 데이터를 넣은 뒤 같은 마이그레이션을 직접 다시 실행한다.
  */
-@SpringBootTest
+@SpringBootTest(classes = WellnessGameApplication.class)
 @Import(TestClockConfig.class)
-class SleepKeyMigrationTest {
+class SleepKeyNormalizationMigrationTest {
     private static final String USER = "sleep-migration-user";
     private static final LocalDate DAY = LocalDate.of(2026, 6, 17);
     private static final String NEW_KEY = USER + "|" + DAY + "|SLEEP";
-
-    @Autowired
-    private SleepKeyMigration migration;
 
     @Autowired
     private HealthActivitySyncService syncService;
@@ -53,7 +57,10 @@ class SleepKeyMigrationTest {
     private MutableClock clock;
 
     @Autowired
-    private PlatformTransactionManager transactionManager;
+    private DataSource dataSource;
+
+    @Autowired
+    private Flyway flyway;
 
     @BeforeEach
     void setUp() {
@@ -63,17 +70,24 @@ class SleepKeyMigrationTest {
     }
 
     @Test
-    void promotesLongestLegacySleepAndArchivesTheRestSoResyncGrantsNothing() {
+    void flywayAppliedBaselineAndSleepKeyMigrationAtStartup() {
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("2");
+        assertThat(flyway.info().pending()).isEmpty();
+    }
+
+    @Test
+    void promotesLongestLegacySleepAndArchivesTheRestSoResyncGrantsNothing() throws SQLException {
         HealthActivity shortNap = saveSleep(oldKey("2026-06-17T01:00:00Z", "2026-06-17T06:00:00Z"), 300, 25);
         HealthActivity night = saveSleep(oldKey("2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z"), 450, 80);
 
-        migration.run(null);
+        migrate();
 
         Map<UUID, String> keys = keysById();
         assertThat(keys.get(night.getId())).isEqualTo(NEW_KEY);
         assertThat(keys.get(shortNap.getId()))
                 .isEqualTo(oldKey("2026-06-17T01:00:00Z", "2026-06-17T06:00:00Z") + "|legacy|" + shortNap.getId());
         assertThat(activityRepository.count()).isEqualTo(2); // 삭제 없음
+        assertThat(xpById()).containsEntry(night.getId(), 105).containsEntry(shortNap.getId(), 0);
         assertThat(activityRepository.sumGainedXpByUserIdAndActivityDate(USER, DAY)).isEqualTo(105);
 
         HealthActivitySyncResponse resync = syncService.sync(new HealthActivitySyncRequest(USER, DAY,
@@ -86,12 +100,32 @@ class SleepKeyMigrationTest {
     }
 
     @Test
-    void tieOnSleepMinutesPromotesEarliestCreated() throws InterruptedException {
+    void longerSleepAfterMigrationPaysOnlyBeyondWhatLegacyRowsAlreadyPaid() throws SQLException {
+        // 승자 40 + legacy 25 = 65 를 이미 지급했다. 이후 80 XP 짜리 수면이 오면 차액 15 만 지급해야 한다
+        // (승자 행 40 만 기준으로 삼으면 40 을 더 줘 그날 수면 XP 가 105 가 된다).
+        saveSleep(oldKey("2026-06-17T01:00:00Z", "2026-06-17T06:00:00Z"), 300, 25);
+        saveSleep(oldKey("2026-06-16T22:00:00Z", "2026-06-17T04:40:00Z"), 400, 40);
+
+        migrate();
+        HealthActivitySyncResponse longer = syncService.sync(new HealthActivitySyncRequest(USER, DAY,
+                List.of(sleep(480, 90, "2026-06-16T22:00:00Z", "2026-06-17T06:00:00Z"))));
+        HealthActivitySyncResponse again = syncService.sync(new HealthActivitySyncRequest(USER, DAY,
+                List.of(sleep(480, 90, "2026-06-16T22:00:00Z", "2026-06-17T06:00:00Z"))));
+
+        assertThat(longer.gainedXp()).isEqualTo(15);
+        assertThat(again.gainedXp()).isZero();
+        assertThat(activityRepository.sumGainedXpByUserIdAndActivityDate(USER, DAY)).isEqualTo(80);
+        assertThat(activityRepository.findByExternalKey(NEW_KEY)).get()
+                .satisfies(log -> assertThat(log.getGainedXp()).isEqualTo(80));
+    }
+
+    @Test
+    void tieOnSleepMinutesPromotesEarliestCreated() throws Exception {
         HealthActivity earlier = saveSleep(oldKey("2026-06-16T22:00:00Z", "2026-06-17T05:00:00Z"), 420, 60);
         Thread.sleep(5);
         HealthActivity later = saveSleep(oldKey("2026-06-16T23:00:00Z", "2026-06-17T06:00:00Z"), 420, 60);
 
-        migration.run(null);
+        migrate();
 
         Map<UUID, String> keys = keysById();
         assertThat(keys.get(earlier.getId())).isEqualTo(NEW_KEY);
@@ -99,46 +133,62 @@ class SleepKeyMigrationTest {
     }
 
     @Test
-    void isIdempotent() {
+    void isIdempotent() throws SQLException {
         saveSleep(oldKey("2026-06-17T01:00:00Z", "2026-06-17T06:00:00Z"), 300, 25);
         saveSleep(oldKey("2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z"), 450, 80);
 
-        migration.run(null);
-        Map<UUID, String> afterFirst = keysById();
-        migration.run(null);
+        migrate();
+        Map<UUID, String> keysAfterFirst = keysById();
+        Map<UUID, Integer> xpAfterFirst = xpById();
+        migrate();
 
-        assertThat(keysById()).isEqualTo(afterFirst);
+        assertThat(keysById()).isEqualTo(keysAfterFirst);
+        assertThat(xpById()).isEqualTo(xpAfterFirst);
     }
 
     @Test
-    void leavesNewFormatOnlyDayUntouched() {
+    void leavesNewFormatOnlyDayUntouched() throws SQLException {
         HealthActivity current = saveSleep(NEW_KEY, 450, 80);
 
-        migration.run(null);
+        migrate();
 
         assertThat(keysById()).containsExactly(Map.entry(current.getId(), NEW_KEY));
+        assertThat(xpById()).containsExactly(Map.entry(current.getId(), 80));
     }
 
     @Test
-    void archivesAllLegacyRowsWhenNewFormatKeyAlreadyExists() {
+    void archivesAllLegacyRowsWhenNewFormatKeyAlreadyExistsAndMovesTheirXp() throws SQLException {
         HealthActivity current = saveSleep(NEW_KEY, 400, 70);
         HealthActivity legacy = saveSleep(oldKey("2026-06-16T22:00:00Z", "2026-06-17T06:00:00Z"), 480, 80);
 
-        migration.run(null);
+        migrate();
 
         Map<UUID, String> keys = keysById();
         assertThat(keys.get(current.getId())).isEqualTo(NEW_KEY);
         assertThat(keys.get(legacy.getId()))
                 .isEqualTo(oldKey("2026-06-16T22:00:00Z", "2026-06-17T06:00:00Z") + "|legacy|" + legacy.getId());
+        assertThat(xpById()).containsEntry(current.getId(), 150).containsEntry(legacy.getId(), 0);
     }
 
     @Test
-    void migratesEveryUserAndDateGroupIndependently() {
+    void movesXpOfRowsArchivedByThePreviousStartupMigration() throws SQLException {
+        // Flyway 이전의 기동 시 마이그레이션이 키만 정리해 둔 DB(baseline 후 V2 실행)
+        HealthActivity current = saveSleep(NEW_KEY, 450, 80);
+        HealthActivity archived = saveSleep(oldKey("2026-06-17T01:00:00Z", "2026-06-17T06:00:00Z") + "|legacy|x", 300, 25);
+
+        migrate();
+
+        assertThat(xpById()).containsEntry(current.getId(), 105).containsEntry(archived.getId(), 0);
+        assertThat(keysById().get(archived.getId())).endsWith("|legacy|x");
+    }
+
+    @Test
+    void migratesEveryUserAndDateGroupIndependently() throws SQLException {
         HealthActivity aDay1 = saveSleep("user-a", DAY, oldKeyOf("user-a", "2026-06-16T22:00:00Z", "2026-06-17T06:00:00Z"), 480, 80);
         HealthActivity aDay2 = saveSleep("user-a", DAY.plusDays(1), oldKeyOf("user-a", "2026-06-17T22:00:00Z", "2026-06-18T05:00:00Z"), 420, 60);
         HealthActivity bDay1 = saveSleep("user-b", DAY, oldKeyOf("user-b", "2026-06-16T23:00:00Z", "2026-06-17T06:00:00Z"), 420, 60);
 
-        migration.run(null);
+        migrate();
 
         Map<UUID, String> keys = keysById();
         assertThat(keys.get(aDay1.getId())).isEqualTo(HealthActivity.sleepKey("user-a", DAY));
@@ -147,47 +197,59 @@ class SleepKeyMigrationTest {
     }
 
     @Test
-    void uniqueConflictInOneGroupArchivesItAndOtherGroupsStillMigrate() {
+    void uniqueConflictInOneGroupArchivesItAndOtherGroupsStillMigrate() throws SQLException {
         // user-a: 확인 시점엔 새 키가 없다고 보였지만 실제로는 있다(그사이 생긴 경우) → 유일 제약 충돌
         HealthActivity aCurrent = saveSleep("user-a", DAY, HealthActivity.sleepKey("user-a", DAY), 400, 70);
         HealthActivity aLegacy = saveSleep("user-a", DAY, oldKeyOf("user-a", "2026-06-16T22:00:00Z", "2026-06-17T06:00:00Z"), 480, 80);
         HealthActivity bLegacy = saveSleep("user-b", DAY, oldKeyOf("user-b", "2026-06-16T23:00:00Z", "2026-06-17T06:00:00Z"), 420, 60);
-        HealthActivityRepository racing = existsAlwaysFalse(activityRepository);
 
-        assertThatCode(() -> new SleepKeyMigration(racing, transactionManager).run(null)).doesNotThrowAnyException();
+        migrate(new V2__sleep_key_normalization((connection, sleepKey) -> false));
 
         Map<UUID, String> keys = keysById();
         assertThat(keys.get(aCurrent.getId())).isEqualTo(HealthActivity.sleepKey("user-a", DAY));
         assertThat(keys.get(aLegacy.getId())).endsWith("|legacy|" + aLegacy.getId());
         assertThat(keys.get(bLegacy.getId())).isEqualTo(HealthActivity.sleepKey("user-b", DAY));
+        assertThat(xpById()).containsEntry(aCurrent.getId(), 150).containsEntry(aLegacy.getId(), 0);
         assertThat(activityRepository.count()).isEqualTo(3);
     }
 
     @Test
-    void failureToLoadCandidatesDoesNotBreakStartup() {
-        HealthActivityRepository broken = (HealthActivityRepository) Proxy.newProxyInstance(
-                HealthActivityRepository.class.getClassLoader(), new Class<?>[]{HealthActivityRepository.class},
-                (proxy, method, args) -> {
-                    throw new IllegalStateException("db down");
-                });
+    void otherFailuresAbortAndRollBackTheWholeMigration() {
+        saveSleep("user-a", DAY, oldKeyOf("user-a", "2026-06-16T22:00:00Z", "2026-06-17T06:00:00Z"), 480, 80);
+        saveSleep("user-b", DAY, oldKeyOf("user-b", "2026-06-16T23:00:00Z", "2026-06-17T06:00:00Z"), 420, 60);
+        Map<UUID, String> before = keysById();
 
-        assertThatCode(() -> new SleepKeyMigration(broken, transactionManager).run(null)).doesNotThrowAnyException();
+        AtomicInteger calls = new AtomicInteger();
+        V2__sleep_key_normalization failingOnSecondGroup = new V2__sleep_key_normalization((connection, sleepKey) -> {
+            if (calls.incrementAndGet() == 2) {
+                throw new SQLException("connection lost", "08S01");
+            }
+            return V2__sleep_key_normalization.sleepKeyExists(connection, sleepKey);
+        });
+
+        assertThatThrownBy(() -> migrate(failingOnSecondGroup)).isInstanceOf(SQLException.class);
+
+        assertThat(keysById()).isEqualTo(before);
     }
 
-    /** existsByExternalKey 만 항상 false 로 답하고 나머지는 실제 저장소에 위임한다(확인 후 새 키가 생긴 경합 재현). */
-    private static HealthActivityRepository existsAlwaysFalse(HealthActivityRepository delegate) {
-        return (HealthActivityRepository) Proxy.newProxyInstance(
-                HealthActivityRepository.class.getClassLoader(), new Class<?>[]{HealthActivityRepository.class},
-                (proxy, method, args) -> {
-                    if (method.getName().equals("existsByExternalKey")) {
-                        return false;
-                    }
-                    try {
-                        return method.invoke(delegate, args);
-                    } catch (InvocationTargetException e) {
-                        throw e.getCause();
-                    }
-                });
+    /** Flyway 처럼 한 트랜잭션 안에서 실행하고, 실패하면 되돌린다. */
+    private void migrate() throws SQLException {
+        migrate(new V2__sleep_key_normalization());
+    }
+
+    private void migrate(V2__sleep_key_normalization migration) throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                migration.migrate(connection);
+                connection.commit();
+            } catch (SQLException | RuntimeException e) {
+                connection.rollback();
+                throw e;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        }
     }
 
     private HealthActivity saveSleep(String externalKey, int minutes, int gainedXp) {
@@ -211,5 +273,10 @@ class SleepKeyMigrationTest {
     private Map<UUID, String> keysById() {
         return activityRepository.findAll().stream()
                 .collect(Collectors.toMap(HealthActivity::getId, HealthActivity::getExternalKey));
+    }
+
+    private Map<UUID, Integer> xpById() {
+        return activityRepository.findAll().stream()
+                .collect(Collectors.toMap(HealthActivity::getId, HealthActivity::getGainedXp));
     }
 }

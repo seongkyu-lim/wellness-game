@@ -8,9 +8,15 @@ spring:
       # 외부 인증 서버(구글 tokeninfo 등) 지연으로 요청 스레드가 고갈되지 않도록 제한
       connect-timeout: 3s
       read-timeout: 5s
+  flyway:
+    # 스키마는 Flyway(db/migration)가 관리한다(#66). Flyway 이전에 ddl-auto 로 만들어진 DB 는 첫 기동 때
+    # 버전 1(V1__baseline)로 기준선을 잡아 V1 을 건너뛰고 V2 부터 적용한다. 빈 DB 는 V1 부터 실행한다.
+    baseline-on-migrate: true
+    baseline-version: 1
   jpa:
     hibernate:
-      ddl-auto: update
+      # 엔티티와 스키마가 다르면 기동에 실패한다. 스키마 변경은 새 마이그레이션 파일로만 한다.
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
@@ -21,10 +27,6 @@ server:
 
 app:
   timezone: ${APP_TIMEZONE:Asia/Seoul}
-  migrations:
-    sleep-keys:
-      # 기동 시 구 형식 수면 로그 키(userId|start|end|SLEEP)를 새 형식으로 정리한다(#50, 멱등).
-      enabled: ${APP_MIGRATIONS_SLEEP_KEYS_ENABLED:true}
   # 요청 빈도 제한(#48). 1분 고정 윈도우, 단일 인스턴스 인메모리. 0 이하면 해당 제한을 끈다.
   rate-limit:
     sync-per-minute: ${APP_RATE_LIMIT_SYNC_PER_MINUTE:30}     # POST /api/health-activities/sync, userId별
