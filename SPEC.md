@@ -227,6 +227,20 @@ if sleepScore >= 80: xp += 20   # 수면 품질 보너스
   한 아이디에 50회 실패가 쌓이면 아이디 전체가 15분 잠긴다(`app.auth.max-failed-logins-per-username`, `app.auth.lockout-minutes`).
   시도는 비밀번호 비교 전에 먼저 세고, 성공하면 그 (아이디, IP) 기록을 지운다. 잠금 중 응답은 일반 로그인 실패(400)와 같다.
 
+### 인증 세션 (Auth v2, #55·#64·#76)
+
+- 액세스 토큰(JWT, HS256) 기본 1시간(`auth.jwt.ttl`), 리프레시 토큰 기본 30일(`auth.refresh.ttl`, 불투명 43자, DB에는 SHA-256 hex만).
+- 로그인·가입·소셜 교환 응답: 기존 필드(`userId`, `displayName`, `accessToken`, `tokenType`, `expiresIn`, 아이디 로그인은 `userIdentifier`)
+  + `refreshToken`, `refreshExpiresIn`(초).
+- `POST /api/auth/refresh {refreshToken}`: 유효하면 기존 토큰 폐기·`replaced_by` 기록 후 같은 family로 새 리프레시(새 30일)와 새 액세스 토큰.
+  이미 폐기된 토큰이면 family 전체 폐기 후 401, 없음·만료도 401. 공개 경로이며 `/api/auth/**` IP 한도를 받는다.
+- `POST /api/auth/logout {refreshToken?}`: 그 토큰이 요청자 것이면 family 폐기. `POST /api/auth/logout-all`: 요청자의 모든 리프레시 폐기. 둘 다 204.
+- `POST /api/auth/watch-token`: `{accessToken, tokenType, expiresIn}`, `scope: "read"`, 12시간(`auth.jwt.watch-ttl`).
+  read 토큰은 `GET /api/characters/{userId|me}`, `GET /api/health-activities`만 허용, 나머지는 403(`auth.read-only-token`).
+  scope 클레임이 없는 토큰은 전체 권한, 모르는 scope 값은 401.
+- 정리 작업: 하루 1회 만료 행과 폐기 후 7일 지난 행 삭제.
+- 공개 경로: `signup`, `login`, `{google|kakao|naver|apple}/native`, `refresh`, `{kakao|naver|google}`(웹 코드 교환). 그 밖의 `/api/**`는 Bearer 필요.
+
 ### 오류 응답 문구
 
 - 사용자에게 보여 주려고 던진 오류(400 검증, 401, 403, 429 레이트 리밋, 503 설정·외부 인증 장애)만 번역된 메시지를 그대로 응답한다.

@@ -115,26 +115,48 @@ cd backend
   `SHOW CREATE TABLE user_character;`, `SHOW CREATE TABLE health_activity_log;`, `SHOW CREATE TABLE user_credential;`을
   실행해 `V1__baseline.sql`과 컬럼 타입·NULL 허용·유일 제약·인덱스를 비교하세요. 다르면 운영 DB를 V1에 맞추는 정렬 SQL을
   먼저(백업 후) 적용한 뒤 배포합니다. 그대로 배포하면 `ddl-auto: validate`가 기동을 막거나, 통과하더라도 V1과 다른 상태로 남습니다.
-- 스키마를 바꿀 때는 기존 파일을 고치지 말고 `V3__설명.sql`처럼 새 버전을 추가하세요. 적용된 마이그레이션을 고치면 체크섬 검증에 실패합니다.
+- 스키마를 바꿀 때는 기존 파일을 고치지 말고 `V4__설명.sql`처럼 새 버전을 추가하세요. 적용된 마이그레이션을 고치면 체크섬 검증에 실패합니다.
 
 ### 소셜 로그인 서버 환경변수
 
-iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서버 토큰(`{userId, displayName, accessToken, tokenType, expiresIn}`)으로 교환합니다. 값이 비어 있는 공급자의 엔드포인트는 `503`을 반환하고, 어떤 설정이 빠졌는지는 서버 로그에만 남습니다.
+iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서버 토큰(`{userId, displayName, accessToken, tokenType, expiresIn, refreshToken, refreshExpiresIn}`, [인증 세션](#인증-세션-auth-v2-55-64-76) 참고)으로 교환합니다. 값이 비어 있는 공급자의 엔드포인트는 `503`을 반환하고, 어떤 설정이 빠졌는지는 서버 로그에만 남습니다.
 
 | 환경변수 | 쓰는 엔드포인트 | 값 |
 |---|---|---|
-| `OAUTH_GOOGLE_IOS_CLIENT_ID` | `POST /api/auth/google/native` | iOS OAuth 클라이언트 ID(ID 토큰의 `aud`) |
-| `OAUTH_GOOGLE_CLIENT_ID`, `OAUTH_GOOGLE_CLIENT_SECRET` | `POST /api/auth/google`(웹), google/native 허용 `aud` | 웹 OAuth 클라이언트 |
+| `OAUTH_GOOGLE_IOS_CLIENT_ID` | `POST /api/auth/google/native` | iOS OAuth 클라이언트 ID(ID 토큰의 `aud`·`azp`) |
+| `OAUTH_GOOGLE_CLIENT_ID`, `OAUTH_GOOGLE_CLIENT_SECRET` | `POST /api/auth/google`(웹), google/native 허용 `aud`·`azp` | 웹 OAuth 클라이언트 |
 | `OAUTH_KAKAO_NATIVE_APP_ID` | `POST /api/auth/kakao/native` | Kakao Developers의 **숫자 앱 ID**(`access_token_info`의 `app_id`) |
 | `OAUTH_KAKAO_CLIENT_ID`, `OAUTH_KAKAO_CLIENT_SECRET` | `POST /api/auth/kakao`(웹) | REST API 키와 client secret |
 | `OAUTH_NAVER_CLIENT_ID`, `OAUTH_NAVER_CLIENT_SECRET` | `POST /api/auth/naver`(웹), `POST /api/auth/naver/native` | 네이버 애플리케이션의 클라이언트 아이디·시크릿(iOS 앱과 같은 애플리케이션) |
 | `OAUTH_APPLE_BUNDLE_ID` | `POST /api/auth/apple/native` | 앱 Bundle Identifier(identity token의 `aud`) |
+| `OAUTH_APPLE_REQUIRE_NONCE` | `POST /api/auth/apple/native` | 기본 `false`. `true`면 `nonce` 없는 요청을 401로 거부(nonce를 보내는 앱 배포 후 켬) |
 
 > **카카오 키 주의:** iOS Build Settings의 `KAKAO_NATIVE_APP_KEY`(네이티브 앱 **키**, 문자열)와 서버의 `OAUTH_KAKAO_NATIVE_APP_ID`(앱 **ID**, 숫자)는 서로 다른 값입니다. 앱 ID는 Kakao Developers → 내 애플리케이션 → 앱 설정 → 요약 정보의 "앱 ID"입니다. 서버는 iOS가 보낸 액세스 토큰의 `app_id`가 이 값과 같은지 확인해 다른 앱에서 발급된 토큰을 거부합니다.
 
 - 네이버 네이티브 교환은 `{"accessToken", "refreshToken"}`을 받습니다. 네이버에는 토큰의 발급 앱을 확인하는 API가 없어서, 서버가 `refreshToken`을 자기 client ID·secret으로 갱신해 이 앱에 발급된 토큰인지 확인하고, 새로 받은 access token으로만 프로필을 조회합니다.
-- Apple 교환은 `{"identityToken", "fullName"(선택)}`을 받고 Apple JWKS로 서명·`iss`·`aud`·`exp`를 검증합니다. `fullName`은 100자를 넘으면 잘라서 씁니다.
+- Apple 교환은 `{"identityToken", "fullName"(선택), "nonce"(선택)}`을 받고 Apple JWKS로 서명·`iss`·`aud`·`exp`를 검증합니다. `fullName`은 100자를 넘으면 잘라서 씁니다. `nonce`는 앱이 Apple 요청(`ASAuthorizationAppleIDRequest.nonce`)에 **SHA-256 hex**로 넣은 값의 **원문**이며, 서버는 identity token의 `nonce` 클레임이 SHA-256(원문)의 소문자 hex와 같은지 확인합니다(다르면 401, 재전송 방어 #64).
+- Google 네이티브 교환은 tokeninfo 호출 없이 Google JWKS(`https://www.googleapis.com/oauth2/v3/certs`)로 서버에서 직접 검증합니다(#55). RS256만, `kid`로 키 선택, `iss`(`accounts.google.com`/`https://accounts.google.com`)·`aud`(허용 클라이언트 ID)·`exp`·`azp`(있으면 허용 목록)를 봅니다. Apple과 같은 JWKS 캐시(1시간, 모르는 `kid`는 1분 간격으로만 재조회, 조회 실패 시 30초 재시도 억제·기존 키 계속 사용)를 씁니다.
 - 로그인 방식별로 별도 계정입니다(`kakao:`, `naver:`, `google:`, `apple:`, `password:` 접두사). 같은 사람이 여러 방식으로 가입해도 계정을 합치지 않습니다.
+
+### 인증 세션 (Auth v2, #55, #64, #76)
+
+액세스 토큰은 짧게(기본 1시간), 리프레시 토큰은 길게(기본 30일) 발급하고, 리프레시 토큰은 쓸 때마다 회전합니다.
+
+| 엔드포인트 | 인증 | 요청 | 응답 |
+|---|---|---|---|
+| `POST /api/auth/signup`·`login`·`{provider}`·`{provider}/native` | 없음 | (기존과 같음) | `200` 기존 필드 + `refreshToken`, `refreshExpiresIn`(초) |
+| `POST /api/auth/refresh` | 없음 | `{"refreshToken"}` | `200 {userId, accessToken, tokenType, expiresIn, refreshToken, refreshExpiresIn}` / 없음·만료·재사용 `401` / 빈 값 `400` |
+| `POST /api/auth/logout` | Bearer(전체 권한) | `{"refreshToken"}`(선택) | `204`. 그 토큰의 family(이 기기 세션)를 폐기 |
+| `POST /api/auth/logout-all` | Bearer(전체 권한) | 없음 | `204`. 사용자의 모든 리프레시 토큰 폐기 |
+| `POST /api/auth/watch-token` | Bearer(전체 권한) | 없음 | `200 {accessToken, tokenType, expiresIn}`(`scope: "read"`, 12시간) |
+
+- **리프레시 토큰:** 32바이트 무작위 값의 base64url(43자)입니다. 서버 DB(`refresh_token`, Flyway V3)에는 SHA-256 hex만 저장합니다. 로그인마다 새 *family*가 생기고, `/refresh`가 성공하면 기존 토큰을 폐기(`revoked_at`, `replaced_by`)하고 같은 family로 새 토큰(새 30일)과 새 액세스 토큰을 줍니다.
+- **재사용 감지:** 이미 회전된 토큰이 다시 오면 탈취로 보고 그 family 전체를 폐기한 뒤 `401`입니다. 같은 토큰으로 동시에 `/refresh`를 두 번 부르면 하나만 성공하고 나머지는 재사용으로 처리돼 그 기기가 로그아웃되므로, **클라이언트는 refresh를 한 번에 하나만(직렬화)** 보내야 합니다.
+- `/refresh`는 공개 경로라 `/api/auth/**` IP 레이트 리밋이 적용됩니다. `logout`·`logout-all`·`watch-token`은 Bearer가 필요합니다. 로그아웃해도 이미 발급된 액세스 토큰은 만료(최대 1시간)까지 유효합니다.
+- **Watch 조회 토큰(#76):** JWT에 `scope: "read"`가 실린 토큰은 `GET /api/characters/me`, `GET /api/characters/{userId}`, `GET /api/health-activities`만 쓸 수 있고, 그 밖의 요청(동기화, `watch-token` 재발급, 로그아웃 등)은 `403`입니다. `scope`가 없는 기존 토큰은 전체 권한입니다. 리프레시 토큰은 주지 않으므로 iPhone이 만료 전에 다시 받아 Watch에 전달합니다.
+- 만료 행과 폐기된 지 7일(`auth.refresh.revoked-retention`)이 지난 행은 매일 04:00(`app.timezone`) 정리 작업이 지웁니다.
+- **소셜 공급자 토큰 폐기(#64):** 서버는 카카오·네이버·구글·애플 공급자 토큰을 저장하지 않고 검증에만 쓰고 버립니다(네이버 검증용으로 갱신해 받은 access token도 저장하지 않음). 그래서 로그아웃 때 서버가 폐기할 공급자 토큰이 없고, 공급자 세션 정리는 클라이언트 SDK 로그아웃(`UserApi.logout`, `NidOAuth.logout` 등)으로 충분합니다. 앱 연결 끊기(탈퇴)까지 하려면 SDK의 unlink/연결 해제를 클라이언트에서 호출합니다.
+- **네이버 client secret 노출 위험(#64):** 네이버 iOS SDK는 앱 바이너리에 client secret을 넣는 구조라 secret은 사실상 공개 값입니다. 서버의 "refresh token 갱신으로 앱 소유 확인"은 secret을 아는 다른 앱이 같은 방식으로 토큰을 만들어 오면 무력해집니다(토큰 대체 공격 방어가 약해짐). 대안은 **서버측 코드 교환 전환**입니다. 앱은 SDK 대신(또는 SDK의 인가 코드 흐름으로) 네이버 인가 코드만 받아 `POST /api/auth/naver`(웹과 같은 코드 교환)로 보내고, client secret은 서버에만 둡니다. 이 경우 앱에서 secret을 제거하고 네이버 개발자 센터에서 secret을 재발급해야 합니다. 현재는 문서화만 하고 구조는 유지합니다.
 
 ### 레이트 리밋·로그인 잠금·JWT 설정 (#48, #55)
 
@@ -148,6 +170,11 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 | `app.auth.max-failed-logins` (`APP_AUTH_MAX_FAILED_LOGINS`) | `5` | 같은 (아이디, IP) 연속 로그인 실패 허용 횟수 |
 | `app.auth.max-failed-logins-per-username` (`APP_AUTH_MAX_FAILED_LOGINS_PER_USERNAME`) | `50` | IP와 무관한 아이디 전체 실패 허용 횟수(분산 공격 방어) |
 | `app.auth.lockout-minutes` (`APP_AUTH_LOCKOUT_MINUTES`) | `15` | 잠금 시간이자 실패 기록 유지 시간(마지막 실패 기준, 분) |
+| `auth.jwt.ttl` (`AUTH_JWT_TTL`) | `1h` | 액세스 토큰 유효 기간(응답 `expiresIn`) |
+| `auth.jwt.watch-ttl` (`AUTH_WATCH_TOKEN_TTL`) | `12h` | Watch 조회 토큰 유효 기간 |
+| `auth.refresh.ttl` (`AUTH_REFRESH_TTL`) | `30d` | 리프레시 토큰 유효 기간(응답 `refreshExpiresIn`), 회전마다 새로 시작 |
+| `auth.refresh.revoked-retention` (`AUTH_REFRESH_REVOKED_RETENTION`) | `7d` | 폐기된 리프레시 행을 재사용 감지용으로 남겨 두는 기간 |
+| `auth.refresh.cleanup-cron` (`AUTH_REFRESH_CLEANUP_CRON`) | `0 0 4 * * *` | 만료·폐기 행 정리 작업 시각(`app.timezone` 기준) |
 | `auth.jwt.issuer` (`AUTH_JWT_ISSUER`) | `wellness-game` | 발급 토큰 `iss`, 검증 시 일치 필요 |
 | `auth.jwt.audience` (`AUTH_JWT_AUDIENCE`) | `wellness-game-api` | 발급 토큰 `aud`, 검증 시 포함 필요 |
 | `auth.jwt.legacy-cutoff` (`AUTH_JWT_LEGACY_CUTOFF`) | `2026-10-06T00:00:00Z` | `iss`·`aud`가 둘 다 없는 이전 형식 토큰은 `iat`이 이 시각 **이전**일 때만 허용. 비우면 이전 형식 토큰을 받지 않음 |
@@ -159,7 +186,7 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 - 로그인 잠금은 (아이디, IP) 단위라서 다른 사람이 자기 IP에서 틀려도 피해자의 다른 IP 로그인은 막히지 않습니다. 대신 여러 IP로 나눠 시도하면 아이디 전체 한도(50회)에 걸려 그 아이디가 15분 잠깁니다. 시도는 비밀번호 비교 **전에** 먼저 세므로 동시 요청이 몰려도 한도보다 많이 비교하지 않습니다. 성공하면 그 (아이디, IP)의 실패 횟수를 지우고, 아이디 전체 기록에서는 이번 시도만 되돌립니다.
 - 잠긴 동안에는 올바른 비밀번호도 기존 실패와 같은 `400 "아이디 또는 비밀번호가 올바르지 않습니다."`로 거부합니다. 없는 아이디도 같은 횟수 뒤 같은 방식으로 반응하고 bcrypt 비교를 한 번 거쳐 응답 시간으로 아이디 존재가 드러나지 않습니다. 가입의 "이미 사용 중인 아이디" 응답은 클라이언트 UX를 위해 유지하되 IP 레이트 리밋으로 열거 속도를 제한합니다.
 - `AUTH_JWT_SECRET`은 32바이트 이상이어야 하고, 서로 다른 문자가 8종류 미만인 단순한 값(같은 문자 반복 등)이면 기동에 실패합니다. `openssl rand -base64 48` 같은 무작위 값을 쓰세요.
-- **이전 형식 토큰 제거 계획:** #55 이전 서버가 발급한 토큰에는 `iss`·`aud`가 없습니다. 이 변경을 `legacy-cutoff`(기본 `2026-10-06T00:00:00Z`) 전에 배포하면 그 전에 발급된 토큰은 TTL(`AUTH_JWT_TTL`, 기본 30일)이 끝날 때까지 계속 쓰이고, cutoff 이후 시각이 찍힌 이전 형식 토큰은 위조로 보고 거부합니다. 배포가 cutoff보다 늦어지면 실제 배포 시각으로 `AUTH_JWT_LEGACY_CUTOFF`를 맞추세요. 마지막 이전 토큰은 cutoff + TTL(기본 2026-11-05) 이후 자연 소멸하므로, 그 뒤 릴리스에서 이 설정과 이전 형식 처리 코드를 제거합니다. `iss`나 `aud` 중 하나만 있는 토큰은 항상 거부합니다.
+- **이전 형식 토큰 제거 계획:** #55 이전 서버가 발급한 토큰에는 `iss`·`aud`가 없습니다. 이 변경을 `legacy-cutoff`(기본 `2026-10-06T00:00:00Z`) 전에 배포하면 그 전에 발급된 토큰은 자기 `exp`(당시 기본 TTL 30일)가 끝날 때까지 계속 쓰이고, cutoff 이후 시각이 찍힌 이전 형식 토큰은 위조로 보고 거부합니다. 배포가 cutoff보다 늦어지면 실제 배포 시각으로 `AUTH_JWT_LEGACY_CUTOFF`를 맞추세요. 마지막 이전 토큰은 cutoff + TTL(기본 2026-11-05) 이후 자연 소멸하므로, 그 뒤 릴리스에서 이 설정과 이전 형식 처리 코드를 제거합니다. `iss`나 `aud` 중 하나만 있는 토큰은 항상 거부합니다.
 
 > **단일 인스턴스 한계:** 레이트 리밋 카운터와 로그인 실패·잠금 상태는 서버 메모리에만 있습니다. 재시작하면 초기화되고, 인스턴스를 여러 대 띄우면 인스턴스마다 따로 세므로 실제 한도가 대수만큼 늘어납니다. 수평 확장 시에는 Redis 등 공용 저장소 기반으로 바꿔야 합니다. 만료된 키는 주기적으로 정리하고 키 수 상한(`max-keys`)으로 메모리를 제한합니다.
 
@@ -171,6 +198,8 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 - [ ] 모바일 통신사 CGNAT·회사·학교 NAT에서는 많은 사용자가 같은 공인 IP를 쓸 수 있습니다. 같은 IP에서 정상 로그인이 몰려 `429`가 보이면 `APP_RATE_LIMIT_AUTH_PER_MINUTE`·`APP_RATE_LIMIT_LOGIN_PER_MINUTE`를 올립니다.
 - [ ] 인스턴스를 2대 이상 띄우면 한도가 대수만큼 느슨해지므로 Redis 기반 구현을 먼저 검토합니다.
 - [ ] `AUTH_JWT_LEGACY_CUTOFF`가 실제 배포 시각 이후인지 확인합니다(그래야 기존 사용자가 로그아웃되지 않습니다).
+- [ ] Auth v2 배포 후에도 이전에 발급된 30일 액세스 토큰은 만료까지 유효합니다. 리프레시 토큰이 없는 구버전 앱은 그 토큰이 만료되면(또는 새로 받은 1시간 토큰이 만료되면) 다시 로그인해야 하므로, iOS·웹 클라이언트의 리프레시 지원을 먼저 배포하는 것이 좋습니다.
+- [ ] nonce를 보내는 iOS 앱이 충분히 퍼진 뒤 `OAUTH_APPLE_REQUIRE_NONCE=true`로 바꿉니다.
 
 ## API
 
@@ -261,7 +290,7 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 - Apple은 이름과 이메일을 최초 승인 시에만 제공할 수 있으므로 앱은 처음 받은 표시 이름을 기기에 저장합니다.
 - Google 로그인은 GoogleSignIn iOS SDK 9.2 이상, Kakao 로그인은 Kakao iOS SDK 2.28 이상을 Swift Package Manager로 사용합니다.
 - Naver 로그인은 네이버 아이디로 로그인 iOS SDK 5.1 이상을 Swift Package Manager로 사용합니다.
-- 현재 MVP 서버는 앱이 보낸 사용자 식별자를 신뢰합니다. 운영 서비스에서는 각 공급자의 ID 토큰을 서버에서 검증하고 자체 세션을 발급해야 합니다.
+- 서버는 각 공급자의 토큰을 직접 검증하고 자체 세션(1시간 액세스 토큰 + 30일 회전 리프레시 토큰)을 발급합니다([인증 세션](#인증-세션-auth-v2-55-64-76)).
 
 ### Google 로그인 설정
 
@@ -342,7 +371,6 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 
 ## MVP 이후 TODO
 
-- Apple·Google·Kakao·Naver 토큰 서버 검증과 자체 세션 발급
 - 게스트 진행 상황을 소셜 계정으로 이전하는 계정 연결 기능
 - 서버 HTTPS 배포 및 iOS 환경별 API 설정
 - 백그라운드 동기화와 실패 요청 재시도 저장소
