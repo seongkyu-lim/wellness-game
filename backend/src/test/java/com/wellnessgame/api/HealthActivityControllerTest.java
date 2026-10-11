@@ -159,7 +159,7 @@ class HealthActivityControllerTest {
                 .andExpect(jsonPath("$.gainedXp", is(70)))
                 .andExpect(jsonPath("$.activityResults[1].duplicate", is(true)))
                 .andExpect(jsonPath("$.activityResults[1].message",
-                        is("STEPS 기록을 반영하지 않았어요: 걸음 수는 0 이상 100000 이하여야 합니다.")));
+                        is("걸음 수 기록을 반영하지 않았어요: 걸음 수는 0 이상 100000 이하여야 합니다.")));
     }
 
     /**

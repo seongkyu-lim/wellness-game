@@ -2,6 +2,7 @@ package com.wellnessgame.activity;
 
 import com.wellnessgame.api.HealthActivitySyncRequest;
 import com.wellnessgame.api.HealthActivitySyncRequest.ActivityPayload;
+import com.wellnessgame.i18n.LocalizedMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -105,10 +106,10 @@ class HealthActivitySyncValidatorTest {
         Instant windowEnd = Instant.parse("2026-06-18T00:00:00Z");
         HealthActivitySyncValidator later = new HealthActivitySyncValidator(
                 Clock.fixed(Instant.parse("2026-06-18T00:30:00Z"), ZoneOffset.UTC));
-        assertThat(later.rejectionReason(yesterday,
+        assertThat(later.rejection(yesterday,
                 workout(WorkoutType.RUNNING, 30, windowEnd.minus(Duration.ofMinutes(30)), windowEnd))).isEmpty();
-        assertThat(later.rejectionReason(yesterday,
-                workout(WorkoutType.RUNNING, 30, windowEnd.minus(Duration.ofMinutes(29)), windowEnd.plusSeconds(60))))
+        assertThat(later.rejection(yesterday,
+                workout(WorkoutType.RUNNING, 30, windowEnd.minus(Duration.ofMinutes(29)), windowEnd.plusSeconds(60))).map(LocalizedMessage::resolve))
                 .contains("활동 시간이 동기화 날짜 범위를 벗어났습니다.");
     }
 
@@ -214,12 +215,12 @@ class HealthActivitySyncValidatorTest {
 
     private void assertAccepted(ActivityPayload activity) {
         assertStructureValid(request(TODAY, activity));
-        assertThat(validator.rejectionReason(TODAY, activity)).isEmpty();
+        assertThat(validator.rejection(TODAY, activity)).isEmpty();
     }
 
     private void assertReason(ActivityPayload activity, String reason) {
         assertStructureValid(request(TODAY, activity)); // 구조 오류가 아니므로 요청 전체는 거부되지 않는다.
-        assertThat(validator.rejectionReason(TODAY, activity)).contains(reason);
+        assertThat(validator.rejection(TODAY, activity).map(LocalizedMessage::resolve)).contains(reason);
     }
 
     private static ActivityPayload workoutWithCalories(int minutes, String calories) {
