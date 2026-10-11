@@ -64,14 +64,54 @@ Apple 로그인은 Apple Developer 유료 계정 + HTTPS 도메인 + Services ID
 - 언어 결정 순서: localStorage(`wellness.lang`) 저장값 → `navigator.language`(ko로 시작하면 ko, 아니면 en).
   헤더 우측의 한/EN 토글로 수동 전환하며, 선택은 저장되고 `<html lang>`에 반영됩니다.
 - 모든 API 요청에 `Accept-Language: ko|en`을 보내며, 서버 오류 메시지는 서버가 해당 언어로 번역합니다.
+- 에러·안내 배너는 번역된 문자열이 아니라 `{ key, params } | { raw }`(`Message`)로 보관하고 렌더링할 때 번역하므로,
+  배너가 떠 있는 동안 언어를 바꿔도 새 언어로 다시 그려집니다. 서버 원문(`raw`)은 다음 자동 새로고침 때 새 언어로 갱신됩니다.
+- 언어 전환은 데이터를 다시 조회하지 않습니다(조회 응답에 서버 번역 문구가 없음, `App.tsx` 주석 참고).
 - 문구를 추가할 때는 ko·en 사전에 같은 키를 함께 추가하세요(누락하면 타입 체크가 실패합니다).
   영어 용어(캐릭터·단계·스탯)는 [GLOSSARY.md](GLOSSARY.md)를 따릅니다.
 
-## 빌드
+## 빌드·테스트
 
 ```bash
-npm run build   # 타입 체크 + dist/ 생성
+npm run build   # 타입 체크 + dist/ 생성 (CSP meta 주입)
+npm test        # Vitest(jsdom) 단위·렌더링 테스트
 ```
+
+테스트는 `src/**/*.test.ts(x)`와 `csp.test.ts`에 있습니다. i18n(언어 감지·번역·`Intl` 포맷·배너 재번역),
+API 클라이언트 헤더·401 처리, 세션 로드·만료(`lib/auth.ts`), 로그인 버튼 배치, CSP 생성을 검사합니다.
+
+## 보안: CSP와 토큰 저장
+
+### Content-Security-Policy
+
+`npm run build` 시 `csp.ts`의 Vite 플러그인(`transformIndexHtml`, `apply: 'build'`)이 `dist/index.html` 맨 앞에
+CSP meta를 주입합니다. 개발 서버는 HMR·React Refresh가 인라인 스크립트와 웹소켓을 쓰므로 적용하지 않습니다.
+
+```
+default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com;
+font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' <VITE_API_BASE_URL의 오리진>;
+object-src 'none'; base-uri 'self'; form-action 'self'
+```
+
+- `connect-src`는 빌드 시점의 `VITE_API_BASE_URL` 오리진(없으면 `http://localhost:8080`)으로 정해집니다.
+  API 주소를 바꾸면 다시 빌드해야 합니다.
+- 소셜 로그인은 provider 페이지로의 최상위 이동이고 토큰 교환은 백엔드가 하므로 `connect-src`에 provider 도메인이 없습니다.
+- 외부 리소스(스크립트·이미지·폰트 CDN 등)를 추가하면 `csp.ts`의 지시문도 함께 고치세요.
+- **`frame-ancestors`(클릭재킹 방지)는 meta로 지정할 수 없습니다.** 웹을 직접 서빙하는 서버·CDN에서
+  `Content-Security-Policy: frame-ancestors 'none'` 응답 헤더(구형 브라우저용 `X-Frame-Options: DENY` 병행)를 설정하세요.
+  GitHub Pages는 응답 헤더를 바꿀 수 없으므로, 필요하면 Cloudflare 등 헤더를 설정할 수 있는 프록시·호스팅을 앞에 둡니다.
+
+### 웹 토큰 저장 위험과 완화
+
+서버 발급 Bearer 토큰을 `localStorage`(`wellness.session`)에 저장하므로, 페이지에서 임의 스크립트가 실행되면(XSS)
+토큰이 탈취될 수 있습니다. 현재 완화책:
+
+- CSP로 인라인·외부 스크립트 실행을 막고(`script-src 'self'`), 데이터 전송 대상을 API 오리진으로 제한합니다(`connect-src`).
+- React 기본 이스케이프만 사용하고 `dangerouslySetInnerHTML`을 쓰지 않습니다. 서버 메시지도 텍스트로만 표시합니다.
+- 웹은 조회 전용이라 토큰이 유출돼도 웹 화면으로 기록을 만들 수 없지만, 토큰 자체는 동기화 API도 호출할 수 있으므로
+  **토큰 유효 기간을 짧게** 유지하세요(백엔드 `AUTH_JWT_TTL`, 기본 30일). 만료된 세션은 로드 시 지워지고, 401을 받으면 즉시 로그아웃합니다.
+- 공용 PC에서는 사용 후 로그아웃하도록 안내합니다(로그아웃 시 저장된 세션 삭제).
+- 장기적으로는 HttpOnly·Secure·SameSite 쿠키 기반 세션(같은 사이트 배포 + CSRF 대책)으로 옮기는 것이 가장 안전합니다.
 
 ## GitHub Pages 배포
 
