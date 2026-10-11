@@ -20,7 +20,7 @@ import java.util.Optional;
  * <ul>
  *   <li>{@link #validate}: 구조 오류(필수 필드 누락, 종료 < 시작, 활동 개수 초과, 동기화 날짜가 오늘 ±1일 밖).
  *       BadRequestException 을 던지며 요청 전체가 400 으로 거부된다.</li>
- *   <li>{@link #rejectionReason}: 값 범위 위반(상한 초과, 분 값이 구간보다 김, 미래 시각, 날짜 창 이탈 등).
+ *   <li>{@link #rejection}: 값 범위 위반(상한 초과, 분 값이 구간보다 김, 미래 시각, 날짜 창 이탈 등).
  *       사유(메시지 키 + 인자)를 반환하며 서비스는 해당 항목만 건너뛴다.</li>
  * </ul>
  * 날짜 계산은 주입된 Clock 의 시간대(app.timezone)를 따른다. 문구는 messages*.properties 의 sync.* 키를 쓴다.
@@ -99,17 +99,10 @@ public class HealthActivitySyncValidator {
         return Optional.ofNullable(switch (activity.type()) {
             case STEPS -> withinRange(activity.steps(), 0, MAX_STEPS)
                     ? null
-                    : LocalizedMessage.of("sync.reason.steps-range", MAX_STEPS);
+                    : new LocalizedMessage("sync.reason.steps-range", MAX_STEPS);
             case WORKOUT -> workoutReason(activity);
             case SLEEP -> sleepReason(activity);
         });
-    }
-
-    /**
-     * {@link #rejection} 을 현재 로케일 문구로 만든 값.
-     */
-    public Optional<String> rejectionReason(LocalDate date, ActivityPayload activity) {
-        return rejection(date, activity).map(Messages::get);
     }
 
     /**
@@ -118,26 +111,26 @@ public class HealthActivitySyncValidator {
     private LocalizedMessage timeReason(LocalDate date, ActivityPayload activity) {
         Instant latestAllowed = clock.instant().plus(FUTURE_TOLERANCE);
         if (isAfter(activity.startedAt(), latestAllowed) || isAfter(activity.endedAt(), latestAllowed)) {
-            return LocalizedMessage.of("sync.reason.future-time");
+            return new LocalizedMessage("sync.reason.future-time");
         }
         ZoneId zone = clock.getZone();
         Instant windowStart = date.minusDays(1).atStartOfDay(zone).toInstant();
         Instant windowEnd = date.plusDays(2).atStartOfDay(zone).toInstant();
         if ((activity.startedAt() != null && activity.startedAt().isBefore(windowStart))
                 || isAfter(activity.endedAt(), windowEnd)) {
-            return LocalizedMessage.of("sync.reason.outside-date-window");
+            return new LocalizedMessage("sync.reason.outside-date-window");
         }
         return null;
     }
 
     private LocalizedMessage workoutReason(ActivityPayload activity) {
         if (!activity.startedAt().isBefore(activity.endedAt())) {
-            return LocalizedMessage.of("sync.reason.workout-end-not-after-start");
+            return new LocalizedMessage("sync.reason.workout-end-not-after-start");
         }
         Duration span = Duration.between(activity.startedAt(), activity.endedAt());
         long spanMinutes = span.toMinutes();
         if (spanMinutes > MAX_WORKOUT_MINUTES) {
-            return LocalizedMessage.of("sync.reason.workout-too-long", MAX_WORKOUT_MINUTES / 60);
+            return new LocalizedMessage("sync.reason.workout-too-long", MAX_WORKOUT_MINUTES / 60);
         }
         int durationMinutes = activity.durationMinutes() == null
                 ? (int) spanMinutes
@@ -148,13 +141,13 @@ public class HealthActivitySyncValidator {
             return minutesReason;
         }
         if (!withinDecimal(activity.calories(), MAX_CALORIES)) {
-            return LocalizedMessage.of("sync.reason.calories-range", MAX_CALORIES);
+            return new LocalizedMessage("sync.reason.calories-range", MAX_CALORIES);
         }
         if (activity.calories() != null && exceedsCaloriesPerMinute(activity.calories(), span)) {
-            return LocalizedMessage.of("sync.reason.calories-per-minute", MAX_CALORIES_PER_MINUTE);
+            return new LocalizedMessage("sync.reason.calories-per-minute", MAX_CALORIES_PER_MINUTE);
         }
         if (!withinDecimal(activity.distanceMeters(), MAX_DISTANCE_METERS)) {
-            return LocalizedMessage.of("sync.reason.distance-range", MAX_DISTANCE_METERS);
+            return new LocalizedMessage("sync.reason.distance-range", MAX_DISTANCE_METERS);
         }
         return null;
     }
@@ -167,7 +160,7 @@ public class HealthActivitySyncValidator {
             return minutesReason;
         }
         if (activity.sleepScore() != null && !withinRange(activity.sleepScore(), MIN_SLEEP_SCORE, MAX_SLEEP_SCORE)) {
-            return LocalizedMessage.of("sync.reason.sleep-score-range", MIN_SLEEP_SCORE, MAX_SLEEP_SCORE);
+            return new LocalizedMessage("sync.reason.sleep-score-range", MIN_SLEEP_SCORE, MAX_SLEEP_SCORE);
         }
         return null;
     }
@@ -177,10 +170,10 @@ public class HealthActivitySyncValidator {
      */
     private LocalizedMessage minutesReason(int minutes, int max, long spanMinutes, String rangeKey, String spanKey) {
         if (!withinRange(minutes, 0, max)) {
-            return LocalizedMessage.of(rangeKey, max);
+            return new LocalizedMessage(rangeKey, max);
         }
         if (minutes > spanMinutes + MINUTE_ROUNDING_TOLERANCE) {
-            return LocalizedMessage.of(spanKey);
+            return new LocalizedMessage(spanKey);
         }
         return null;
     }

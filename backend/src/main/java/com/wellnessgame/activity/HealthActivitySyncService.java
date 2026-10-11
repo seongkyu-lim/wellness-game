@@ -100,7 +100,7 @@ public class HealthActivitySyncService {
 
             Decision decision = decide(state, activity, rejections.get(i), externalKey, source);
             if (decision.outcome() != Decision.Outcome.APPLIED) {
-                results.add(new ActivityResultResponse(activity.type(), source, 0, skipMessage(source, decision), true));
+                results.add(new ActivityResultResponse(activity.type(), source, 0, skipMessage(activity, decision), true));
                 continue;
             }
 
@@ -122,7 +122,7 @@ public class HealthActivitySyncService {
                     activity.type(),
                     source,
                     awardedXp,
-                    rewardMessage(activity, source, awardedXp, awardedXp < decision.earnedXp()),
+                    rewardMessage(activity, awardedXp, awardedXp < decision.earnedXp()),
                     false
             ));
         }
@@ -211,11 +211,12 @@ public class HealthActivitySyncService {
         return Decision.applied(xpCalculator.calculate(activity));
     }
 
-    private String skipMessage(String source, Decision decision) {
+    private String skipMessage(ActivityPayload activity, Decision decision) {
+        String name = displayName(activity);
         return switch (decision.outcome()) {
-            case OVERLAP -> Messages.get("activity.result.overlap", source);
-            case REJECTED -> Messages.get("activity.result.rejected", source, Messages.get(decision.reason()));
-            default -> Messages.get("activity.result.duplicate", source);
+            case OVERLAP -> Messages.get("activity.result.overlap", name);
+            case REJECTED -> Messages.get("activity.result.rejected", name, decision.reason().resolve());
+            default -> Messages.get("activity.result.duplicate", name);
         };
     }
 
@@ -407,6 +408,15 @@ public class HealthActivitySyncService {
                 : activity.type().name();
     }
 
+    /**
+     * 사용자 문구에 넣을 활동 이름(현재 로케일). 응답 source 필드는 코드 값 그대로 둔다.
+     * WORKOUT 은 {@code workout.name.*}, STEPS/SLEEP 은 {@code activity.name.*}.
+     */
+    private String displayName(ActivityPayload activity) {
+        String prefix = activity.type() == ActivityType.WORKOUT ? "workout.name." : "activity.name.";
+        return Messages.get(prefix + source(activity));
+    }
+
     private void applyWorkoutStats(CharacterStats stats, WorkoutType workoutType) {
         WorkoutType type = workoutType == null ? WorkoutType.OTHER : workoutType;
         switch (type) {
@@ -467,11 +477,10 @@ public class HealthActivitySyncService {
         return value == null ? BigDecimal.ZERO : value;
     }
 
-    private String rewardMessage(ActivityPayload activity, String source, int xp, boolean capped) {
+    private String rewardMessage(ActivityPayload activity, int xp, boolean capped) {
         String message = switch (activity.type()) {
             case STEPS -> Messages.get("activity.reward.steps", xp);
-            // WORKOUT 의 source 는 WorkoutType 이름이다(source() 참고).
-            case WORKOUT -> Messages.get("activity.reward.workout", Messages.get("workout.name." + source), xp);
+            case WORKOUT -> Messages.get("activity.reward.workout", displayName(activity), xp);
             case SLEEP -> Messages.get("activity.reward.sleep", xp);
         };
         return capped ? Messages.get("activity.reward.capped", message) : message;
