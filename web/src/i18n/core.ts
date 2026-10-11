@@ -62,3 +62,33 @@ export function t(key: MessageKey, params?: Params): string {
 export function intlLocale(lang: Language): string {
   return lang === 'ko' ? 'ko-KR' : 'en-US'
 }
+
+/**
+ * 화면에 띄울 메시지를 번역된 문자열 대신 보관하는 형태.
+ * - `{ key, params }`: 클라이언트 사전 키. 렌더링할 때마다 현재 언어로 번역되므로 언어를 바꾸면 이미 떠 있는 배너도 바뀐다.
+ * - `{ raw }`: 서버가 Accept-Language 기준으로 이미 번역해 보낸 문구. 클라이언트가 다시 번역할 수 없다.
+ */
+export type Message = { key: MessageKey; params?: Params } | { raw: string }
+
+export function translateMessage(lang: Language, message: Message): string {
+  return 'raw' in message ? message.raw : translate(lang, message.key, message.params)
+}
+
+/**
+ * 사용자에게 보여줄 메시지를 함께 실어 나르는 에러.
+ * `message`(Error 기본 필드)는 로그용으로 생성 시점 언어로 채우고, 화면에는 `userMessage`를 번역해 쓴다.
+ */
+export class LocalizedError extends Error {
+  constructor(readonly userMessage: Message) {
+    super(translateMessage(currentLanguage, userMessage))
+    this.name = 'LocalizedError'
+  }
+}
+
+/**
+ * 잡은 에러를 화면용 메시지로 바꾼다. LocalizedError가 아니면(예: fetch의 TypeError "Failed to fetch")
+ * 브라우저·런타임 언어의 원문 대신 사전의 대체 문구를 쓴다.
+ */
+export function toMessage(error: unknown, fallback: MessageKey): Message {
+  return error instanceof LocalizedError ? error.userMessage : { key: fallback }
+}

@@ -6,8 +6,10 @@ enum AppLanguage {
     /// 지원 언어가 하나도 없을 때 쓰는 개발 언어.
     static let fallback = "en"
 
-    /// `Accept-Language` 값. 기기 선호 언어 순서대로 처음 만나는 ko/en을 쓰고, 둘 다 없으면 en으로 대체한다.
-    static func acceptLanguage(preferredLanguages: [String] = Locale.preferredLanguages) -> String {
+    /// `Accept-Language` 값. 앱이 실제로 화면에 쓰는 현지화(`Bundle.main.preferredLocalizations`, 첫 항목이 표시 언어)
+    /// 순서대로 처음 만나는 ko/en을 쓰고, 둘 다 없으면 en으로 대체한다. 기기 선호 언어(`Locale.preferredLanguages`)를
+    /// 쓰면 앱별 언어 설정이나 미지원 언어 사용자에서 화면 언어와 서버 메시지 언어가 어긋난다.
+    static func acceptLanguage(preferredLanguages: [String] = Bundle.main.preferredLocalizations) -> String {
         preferredLanguages.lazy.compactMap(normalized).first ?? fallback
     }
 
