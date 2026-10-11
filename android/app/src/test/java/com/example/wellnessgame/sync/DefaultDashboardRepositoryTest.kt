@@ -49,7 +49,7 @@ class DefaultDashboardRepositoryTest {
 
     private suspend fun TestScope.repository(signedIn: Boolean = true): DefaultDashboardRepository {
         val store = FakeTokenStore(if (signedIn) StoredSession("u-1", null, "google", "jwt") else null)
-        val session = SessionManager(store, backgroundScope, clock).also { it.restore() }
+        val session = SessionManager(store, clock).also { it.restore() }
         return DefaultDashboardRepository(server.apiClient(session), session, healthConnect, mock, settings, clock)
     }
 

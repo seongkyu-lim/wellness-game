@@ -4,8 +4,10 @@ import com.example.wellnessgame.auth.social.SignInHost
 import com.example.wellnessgame.auth.social.SocialCredential
 import com.example.wellnessgame.auth.social.SocialSignInClient
 import com.example.wellnessgame.data.network.ApiClient
+import com.example.wellnessgame.data.network.ApiException
 import com.example.wellnessgame.data.network.AuthTokenResponse
 import com.example.wellnessgame.domain.LoginProvider
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** 로그인 수단별로 자격 증명을 받아 서버 토큰으로 교환하고 세션에 저장한다. */
 class AuthRepository(
@@ -32,10 +34,24 @@ class AuthRepository(
         session.signIn(response, provider)
     }
 
-    /** 서버 세션을 지우고, 소셜 SDK에 남은 토큰도 정리한다(실패해도 로그아웃은 진행). */
+    /**
+     * 로컬 세션을 먼저 지우고, 서버에 이 기기 리프레시 토큰 family 폐기를 요청한 뒤 소셜 SDK 토큰도 정리한다.
+     * 서버·SDK 정리가 실패해도 로컬 로그아웃은 유지한다. 리프레시 토큰이 없는 이전 세션은 서버에 폐기할 것이 없다.
+     */
     suspend fun signOut() {
         val provider = session.state.value.provider
-        session.signOut()
+        val refreshToken = session.signOut()
+        if (refreshToken != null) {
+            try {
+                withTimeoutOrNull(LOGOUT_TIMEOUT_MILLIS) { api.logOut(refreshToken) }
+            } catch (_: ApiException) {
+                // 서버가 폐기하지 못해도 토큰은 이 기기에서 지워졌고 만료(최대 30일)로 사라진다.
+            }
+        }
         provider?.let { socialClients[it] }?.let { runCatching { it.signOut() } }
+    }
+
+    private companion object {
+        const val LOGOUT_TIMEOUT_MILLIS = 5_000L
     }
 }

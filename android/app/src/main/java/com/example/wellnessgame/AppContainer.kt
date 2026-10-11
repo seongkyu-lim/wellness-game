@@ -33,7 +33,7 @@ class AppContainer(context: Context) {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val settings = SettingsStore(appContext)
-    val session = SessionManager(KeystoreTokenStore(appContext), appScope)
+    val session = SessionManager(KeystoreTokenStore(appContext))
     private val restoreJob = appScope.launch { session.restore() }
 
     suspend fun awaitSessionRestored() = restoreJob.join()
