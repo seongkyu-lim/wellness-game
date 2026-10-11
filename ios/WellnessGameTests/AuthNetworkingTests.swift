@@ -104,6 +104,40 @@ final class InMemoryTokenStore: AccessTokenStore, @unchecked Sendable {
     }
 }
 
+/// 기존 테스트용: 액세스 토큰 저장소만 주고 리프레시 토큰은 없는(이전 버전) 세션을 만든다.
+extension SessionCredentialStore {
+    static func legacy(_ accessStore: InMemoryTokenStore, defaults: UserDefaults = .testScratch) -> SessionCredentialStore {
+        SessionCredentialStore(accessStore: accessStore, refreshStore: InMemoryTokenStore(), defaults: defaults)
+    }
+}
+
+extension UserDefaults {
+    /// 만료 시각을 검증하지 않는 테스트가 쓰는 공용 저장소.
+    static let testScratch = UserDefaults(suiteName: "WellnessGameTests.scratch")!
+}
+
+extension UserSession {
+    convenience init(
+        defaults: UserDefaults,
+        tokenStore: InMemoryTokenStore,
+        watchPublisher: WatchAuthPublishing,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.init(
+            defaults: defaults,
+            credentials: .legacy(tokenStore, defaults: defaults),
+            watchPublisher: watchPublisher,
+            now: now
+        )
+    }
+}
+
+extension NetworkClient {
+    init(baseURL: URL, session: URLSession, tokenStore: InMemoryTokenStore?) {
+        self.init(baseURL: baseURL, session: session, credentials: tokenStore.map { .legacy($0) })
+    }
+}
+
 // MARK: - Fixtures
 
 private enum Fixture {
@@ -144,7 +178,7 @@ private enum Fixture {
 // MARK: - NetworkClient
 
 final class NetworkClientAuthTests: XCTestCase {
-    private func makeClient(tokenStore: AccessTokenStore?) -> NetworkClient {
+    private func makeClient(tokenStore: InMemoryTokenStore?) -> NetworkClient {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
         return NetworkClient(
@@ -254,7 +288,7 @@ final class UserSessionAuthTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeClient(tokenStore: AccessTokenStore) -> NetworkClient {
+    private func makeClient(tokenStore: InMemoryTokenStore) -> NetworkClient {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
         return NetworkClient(

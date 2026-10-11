@@ -35,7 +35,13 @@ final class DashboardViewModel: ObservableObject {
     /// 앱 실행·포그라운드 복귀 시 호출되며, 잦은 복귀로 서버를 반복 호출하지 않도록
     /// 최소 간격(AutoSyncPolicy)을 지킨다. 당겨서 새로고침은 force로 간격을 무시한다.
     /// 로그인하지 않았으면 건강 데이터를 읽지도, 서버에 보내지도 않는다.
+    /// 동기화 간격과 무관하게 Watch 조회 토큰이 만료 1시간 전이면 다시 발급해 보낸다.
     func autoSync(force: Bool = false) async {
+        if userSession.isSignedIn {
+            await userSession.refreshWatchTokenIfNeeded { [networkClient] in
+                try await networkClient.issueWatchToken()
+            }
+        }
         guard let userId = userSession.userId else {
             statusMessage = userSession.reloginNotice ?? UserSession.signInPrompt
             return
