@@ -1,0 +1,57 @@
+{
+  "sourceLanguage": "ko",
+  "strings": {
+    "CFBundleDisplayName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wellness Game"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wellness Game"
+          }
+        }
+      }
+    },
+    "NSHealthShareUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reads heart rate, active energy, and distance to show them live during workouts you record on Apple Watch."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watch에서 기록한 운동의 심박수, 활동 에너지, 거리를 운동 중에 보여 주기 위해 건강 데이터를 읽습니다."
+          }
+        }
+      }
+    },
+    "NSHealthUpdateUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saves workouts you record on Apple Watch, with heart rate, active energy, and distance, to the Health app. The iPhone app turns these workouts into XP."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watch에서 기록한 운동과 심박수, 활동 에너지, 거리를 건강 앱에 저장합니다. iPhone 앱이 이 운동을 XP로 반영합니다."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

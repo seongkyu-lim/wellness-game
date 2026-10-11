@@ -2,18 +2,19 @@ import SwiftUI
 
 struct WatchContentView: View {
     @ObservedObject var model: WatchDashboardModel
+    @ObservedObject var workout: WorkoutViewModel
     @Environment(\.scenePhase) private var scenePhase
+    @State private var showsWorkoutPicker = false
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if model.isSignedIn {
-                    SignedInView(model: model)
-                } else {
-                    SignedOutView()
-                }
+        Group {
+            // 운동이 시작되면(복구 포함) 홈 대신 세션 화면을 보여 주고, 요약·오류 화면을 닫으면 홈으로 돌아온다.
+            // 시스템 닫기 버튼이 생기는 fullScreenCover 대신 직접 바꿔 끼워 운동 중에 실수로 닫히지 않게 한다.
+            if workout.phase != .idle {
+                WorkoutSessionView(model: workout)
+            } else {
+                home
             }
-            .background(WatchTheme.background.ignoresSafeArea())
         }
         .task {
             await model.refresh()
@@ -24,11 +25,37 @@ struct WatchContentView: View {
             }
         }
     }
+
+    private var home: some View {
+        NavigationStack {
+            Group {
+                if model.isSignedIn {
+                    SignedInView(model: model, onStartWorkout: openWorkoutPicker)
+                } else {
+                    // 로그인 전에도 운동 기록(HealthKit 저장)은 할 수 있다. XP 반영은 iPhone 로그인 후 동기화 때.
+                    SignedOutView(onStartWorkout: openWorkoutPicker)
+                }
+            }
+            .background(WatchTheme.background.ignoresSafeArea())
+            .navigationDestination(isPresented: $showsWorkoutPicker) {
+                WorkoutKindPicker { kind in
+                    showsWorkoutPicker = false
+                    Task { await workout.start(kind) }
+                }
+            }
+        }
+    }
+
+    private func openWorkoutPicker() {
+        showsWorkoutPicker = true
+    }
 }
 
 // MARK: - 로그인 전
 
 private struct SignedOutView: View {
+    let onStartWorkout: () -> Void
+
     var body: some View {
         ScrollView {
             VStack(spacing: 10) {
@@ -41,6 +68,8 @@ private struct SignedOutView: View {
                     .font(.watchRounded(.footnote, weight: .regular))
                     .foregroundStyle(WatchTheme.textSecondary)
                     .multilineTextAlignment(.center)
+                StartWorkoutButton(action: onStartWorkout)
+                    .padding(.top, 4)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 4)
@@ -52,12 +81,14 @@ private struct SignedOutView: View {
 
 private struct SignedInView: View {
     @ObservedObject var model: WatchDashboardModel
+    let onStartWorkout: () -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 if let snapshot = model.snapshot {
                     CharacterHeader(snapshot: snapshot)
+                    StartWorkoutButton(action: onStartWorkout)
                     QuestList(quests: snapshot.quests)
                     if model.isSnapshotStale() {
                         Label("업데이트 필요", systemImage: "exclamationmark.arrow.circlepath")
@@ -69,6 +100,7 @@ private struct SignedInView: View {
                         .foregroundStyle(WatchTheme.textSecondary)
                 } else {
                     placeholder
+                    StartWorkoutButton(action: onStartWorkout)
                 }
                 statusMessage
                 Button {

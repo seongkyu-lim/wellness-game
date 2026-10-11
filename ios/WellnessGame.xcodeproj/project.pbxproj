@@ -118,6 +118,23 @@
 		6B0000000000000000000507 /* SharedConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0000000000000000000506 /* SharedConfigurationTests.swift */; };
 		6B0000000000000000000509 /* WatchDashboardModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0000000000000000000508 /* WatchDashboardModelTests.swift */; };
 		6B000000000000000000050A /* WatchDashboardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F000000000000000000000E /* WatchDashboardModel.swift */; };
+		5B0000000000000000000711 /* WorkoutKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000701 /* WorkoutKind.swift */; };
+		5B0000000000000000000712 /* WorkoutSyncRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000702 /* WorkoutSyncRules.swift */; };
+		5B0000000000000000000721 /* WorkoutKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000701 /* WorkoutKind.swift */; };
+		5B0000000000000000000722 /* WorkoutSyncRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000702 /* WorkoutSyncRules.swift */; };
+		5B0000000000000000000723 /* WorkoutSessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000703 /* WorkoutSessionState.swift */; };
+		5B0000000000000000000724 /* WorkoutViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000704 /* WorkoutViewModel.swift */; };
+		5B0000000000000000000725 /* WatchWorkoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000709 /* WatchWorkoutTests.swift */; };
+		5B0000000000000000000731 /* WorkoutKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000701 /* WorkoutKind.swift */; };
+		5B0000000000000000000732 /* WorkoutSyncRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000702 /* WorkoutSyncRules.swift */; };
+		5B0000000000000000000733 /* WorkoutSessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000703 /* WorkoutSessionState.swift */; };
+		5B0000000000000000000734 /* WorkoutViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000704 /* WorkoutViewModel.swift */; };
+		5B0000000000000000000735 /* HealthKitWorkoutController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000705 /* HealthKitWorkoutController.swift */; };
+		5B0000000000000000000736 /* DemoWorkoutController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000706 /* DemoWorkoutController.swift */; };
+		5B0000000000000000000737 /* WorkoutViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000707 /* WorkoutViews.swift */; };
+		5B0000000000000000000738 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000708 /* InfoPlist.xcstrings */; };
+		5B0000000000000000000739 /* WorkoutSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F000000000000000000070A /* WorkoutSessionController.swift */; };
+		5B0000000000000000000726 /* WorkoutSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F000000000000000000070A /* WorkoutSessionController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -232,6 +249,16 @@
 		6F0000000000000000000508 /* WatchDashboardModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchDashboardModelTests.swift; sourceTree = "<group>"; };
 		6F0000000000000000000601 /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-Debug.plist"; sourceTree = "<group>"; };
 		6F0000000000000000000602 /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-Debug.plist"; sourceTree = "<group>"; };
+		5F0000000000000000000701 /* WorkoutKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutKind.swift; sourceTree = "<group>"; };
+		5F0000000000000000000702 /* WorkoutSyncRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSyncRules.swift; sourceTree = "<group>"; };
+		5F0000000000000000000703 /* WorkoutSessionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSessionState.swift; sourceTree = "<group>"; };
+		5F0000000000000000000704 /* WorkoutViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutViewModel.swift; sourceTree = "<group>"; };
+		5F0000000000000000000705 /* HealthKitWorkoutController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitWorkoutController.swift; sourceTree = "<group>"; };
+		5F0000000000000000000706 /* DemoWorkoutController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoWorkoutController.swift; sourceTree = "<group>"; };
+		5F0000000000000000000707 /* WorkoutViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutViews.swift; sourceTree = "<group>"; };
+		5F0000000000000000000708 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		5F0000000000000000000709 /* WatchWorkoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutTests.swift; sourceTree = "<group>"; };
+		5F000000000000000000070A /* WorkoutSessionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSessionController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -380,6 +407,7 @@
 				7F0000000000000000000013 /* WatchCompanionTests.swift */,
 				6F0000000000000000000506 /* SharedConfigurationTests.swift */,
 				6F0000000000000000000508 /* WatchDashboardModelTests.swift */,
+				5F0000000000000000000709 /* WatchWorkoutTests.swift */,
 );
 			path = WellnessGameTests;
 			sourceTree = "<group>";
@@ -413,6 +441,7 @@
 			isa = PBXGroup;
 			children = (
 				7D000000000000000000005D /* Models */,
+				5D0000000000000000000701 /* Workout */,
 				7F0000000000000000000004 /* GrowthStage.swift */,
 				B10000000000000000000013 /* CharacterAvatarView.swift */,
 				7F0000000000000000000005 /* ThemePalette.swift */,
@@ -449,6 +478,7 @@
 			children = (
 				7F000000000000000000000A /* WellnessGameWatchApp.swift */,
 				7D0000000000000000000060 /* Core */,
+				5D0000000000000000000702 /* Workout */,
 				7D0000000000000000000061 /* Views */,
 				7D0000000000000000000062 /* Resources */,
 							6F0000000000000000000501 /* WatchAppDelegate.swift */,
@@ -472,6 +502,7 @@
 			children = (
 				7F000000000000000000000F /* WatchContentView.swift */,
 				7F0000000000000000000010 /* WatchTheme.swift */,
+				5F0000000000000000000707 /* WorkoutViews.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -482,6 +513,7 @@
 				7F0000000000000000000017 /* Info.plist */,
 				7F0000000000000000000019 /* WellnessGameWatch.entitlements */,
 				7F0000000000000000000015 /* Localizable.xcstrings */,
+				5F0000000000000000000708 /* InfoPlist.xcstrings */,
 							6F0000000000000000000602 /* Info-Debug.plist */,
 );
 			path = Resources;
@@ -497,6 +529,27 @@
 							6F0000000000000000000503 /* LevelTimeline.swift */,
 );
 			path = WellnessGameWatchWidgets;
+			sourceTree = "<group>";
+		};
+		5D0000000000000000000701 /* Workout */ = {
+			isa = PBXGroup;
+			children = (
+				5F0000000000000000000701 /* WorkoutKind.swift */,
+				5F0000000000000000000702 /* WorkoutSyncRules.swift */,
+			);
+			path = Workout;
+			sourceTree = "<group>";
+		};
+		5D0000000000000000000702 /* Workout */ = {
+			isa = PBXGroup;
+			children = (
+				5F0000000000000000000703 /* WorkoutSessionState.swift */,
+				5F0000000000000000000704 /* WorkoutViewModel.swift */,
+				5F000000000000000000070A /* WorkoutSessionController.swift */,
+				5F0000000000000000000705 /* HealthKitWorkoutController.swift */,
+				5F0000000000000000000706 /* DemoWorkoutController.swift */,
+			);
+			path = Workout;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -655,6 +708,7 @@
 			files = (
 				7B0000000000000000000051 /* res */,
 				7B0000000000000000000052 /* res */,
+				5B0000000000000000000738 /* InfoPlist.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -695,6 +749,8 @@
 				A10000000000000000000015 /* CharacterAvatarView.swift in Sources */,
 				A10000000000000000000016 /* AutoSyncPolicy.swift in Sources */,
 				A10000000000000000000017 /* LoginSheetView.swift in Sources */,
+				5B0000000000000000000711 /* WorkoutKind.swift in Sources */,
+				5B0000000000000000000712 /* WorkoutSyncRules.swift in Sources */,
 							7B0000000000000000000029 /* src */,
 				7B000000000000000000002A /* src */,
 				7B000000000000000000002B /* src */,
@@ -750,6 +806,12 @@
 				6B0000000000000000000507 /* SharedConfigurationTests.swift in Sources */,
 				6B0000000000000000000509 /* WatchDashboardModelTests.swift in Sources */,
 				6B000000000000000000050A /* WatchDashboardModel.swift in Sources */,
+				5B0000000000000000000721 /* WorkoutKind.swift in Sources */,
+				5B0000000000000000000722 /* WorkoutSyncRules.swift in Sources */,
+				5B0000000000000000000723 /* WorkoutSessionState.swift in Sources */,
+				5B0000000000000000000724 /* WorkoutViewModel.swift in Sources */,
+				5B0000000000000000000725 /* WatchWorkoutTests.swift in Sources */,
+				5B0000000000000000000726 /* WorkoutSessionController.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -776,6 +838,14 @@
 				7B000000000000000000004F /* src */,
 				7B0000000000000000000050 /* src */,
 							6B0000000000000000000502 /* WatchAppDelegate.swift in Sources */,
+				5B0000000000000000000731 /* WorkoutKind.swift in Sources */,
+				5B0000000000000000000732 /* WorkoutSyncRules.swift in Sources */,
+				5B0000000000000000000733 /* WorkoutSessionState.swift in Sources */,
+				5B0000000000000000000734 /* WorkoutViewModel.swift in Sources */,
+				5B0000000000000000000735 /* HealthKitWorkoutController.swift in Sources */,
+				5B0000000000000000000736 /* DemoWorkoutController.swift in Sources */,
+				5B0000000000000000000737 /* WorkoutViews.swift in Sources */,
+				5B0000000000000000000739 /* WorkoutSessionController.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};
