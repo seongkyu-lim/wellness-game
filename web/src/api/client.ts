@@ -1,5 +1,5 @@
 import { sessionManager } from '../lib/session'
-import { ApiError, BASE_URL, errorMessage, languageHeaders } from './http'
+import { BASE_URL, ensureOk, languageHeaders } from './http'
 import type { CharacterSummary, DailyActivitiesResponse } from './types'
 
 export { ApiError, isUnauthorized } from './http'
@@ -29,9 +29,7 @@ export async function fetchMyCharacter(): Promise<CharacterSummary | null> {
   if (res.status === 404) {
     return null
   }
-  if (!res.ok) {
-    throw new ApiError(res.status, await errorMessage(res))
-  }
+  await ensureOk(res)
   return res.json()
 }
 
@@ -42,8 +40,6 @@ export async function fetchMyCharacter(): Promise<CharacterSummary | null> {
 export async function fetchDailyActivities(userId: string, date: string): Promise<DailyActivitiesResponse> {
   const params = new URLSearchParams({ userId, date })
   const res = await authorizedFetch(`${BASE_URL}/api/health-activities?${params}`)
-  if (!res.ok) {
-    throw new ApiError(res.status, await errorMessage(res))
-  }
+  await ensureOk(res)
   return res.json()
 }

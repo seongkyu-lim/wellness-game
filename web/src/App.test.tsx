@@ -150,7 +150,7 @@ describe('App Auth v2 세션', () => {
     )
     const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/auth/logout'))!
     expect(JSON.parse(init.body)).toEqual({ refreshToken: 'ref-2' })
-    expect(init.headers.Authorization).toBe('Bearer acc-2')
+    expect(init.headers).not.toHaveProperty('Authorization')
     expect(localStorage.getItem('wellness.session')).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
   })

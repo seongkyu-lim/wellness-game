@@ -29,6 +29,13 @@ export function languageHeaders(): Record<string, string> {
   return { 'Accept-Language': getLanguage() }
 }
 
+/** 실패 응답이면 서버 메시지를 담은 ApiError를 던진다. */
+export async function ensureOk(res: Response): Promise<void> {
+  if (!res.ok) {
+    throw new ApiError(res.status, await errorMessage(res))
+  }
+}
+
 /** 서버가 번역해 보낸 message가 있으면 그대로(raw), 없으면 상태 코드를 담은 사전 키로 돌려준다. */
 export async function errorMessage(res: Response): Promise<Message> {
   const fallback: Message = { key: 'error.request', params: { status: res.status } }

@@ -229,7 +229,7 @@ describe('Auth v2 토큰 갱신', () => {
 describe('로그아웃', () => {
   const logoutCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/auth/logout'))
 
-  it('Bearer와 refreshToken을 보내 서버 세션을 폐기하고 로컬 세션을 지운다', async () => {
+  it('Authorization 없이 refreshToken body만 보내 서버 세션을 폐기하고 로컬 세션을 지운다', async () => {
     startV2Session()
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
 
@@ -238,7 +238,8 @@ describe('로그아웃', () => {
     expect(logoutCalls()).toHaveLength(1)
     const init = logoutCalls()[0][1] as RequestInit
     expect(init.method).toBe('POST')
-    expect(bearer(init)).toBe('Bearer acc-1')
+    expect(bearer(init)).toBeUndefined()
+    expect(init.headers).toEqual({ 'Accept-Language': 'ko', 'Content-Type': 'application/json' })
     expect(JSON.parse(init.body as string)).toEqual({ refreshToken: 'ref-1' })
     expect(sessionManager.current()).toBeNull()
     expect(localStorage.getItem('wellness.session')).toBeNull()
@@ -252,15 +253,15 @@ describe('로그아웃', () => {
     expect(localStorage.getItem('wellness.session')).toBeNull()
   })
 
-  it('액세스 토큰이 없으면 한 번 회전해 받은 토큰으로 폐기한다', async () => {
+  it('액세스 토큰이 만료됐어도 갱신 없이 리프레시 토큰으로 바로 로그아웃 요청한다', async () => {
     sessionManager.start('kakao', v2Tokens(1, 0))
-    fetchMock.mockImplementation(async (url: string) =>
-      url.endsWith('/api/auth/refresh') ? jsonResponse(200, v2Tokens(2)) : new Response(null, { status: 204 }),
-    )
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
     await sessionManager.logout()
+    expect(refreshCalls()).toHaveLength(0)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     const init = logoutCalls()[0][1] as RequestInit
-    expect(bearer(init)).toBe('Bearer acc-2')
-    expect(JSON.parse(init.body as string)).toEqual({ refreshToken: 'ref-2' })
+    expect(bearer(init)).toBeUndefined()
+    expect(JSON.parse(init.body as string)).toEqual({ refreshToken: 'ref-1' })
   })
 
   it('리프레시 토큰이 없는 기존 세션은 서버 호출 없이 로컬만 지운다', async () => {

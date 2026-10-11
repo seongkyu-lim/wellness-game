@@ -62,7 +62,7 @@ export interface SessionManagerOptions {
   tab: KeyValueStore
   channel: ChannelLike | null
   refresh?: (refreshToken: string) => Promise<TokenResponse>
-  logout?: (accessToken: string, refreshToken: string) => Promise<void>
+  logout?: (refreshToken: string) => Promise<void>
   now?: () => number
   tabId?: string
   claimWindowMs?: number
@@ -261,8 +261,8 @@ export class SessionManager {
   }
 
   /**
-   * 사용자 로그아웃. 로컬 세션은 즉시 지우고, 서버에 리프레시 토큰 family 폐기를 요청한다.
-   * 서버 요청이 실패해도(네트워크·만료) 로컬 로그아웃은 이미 끝났으므로 오류를 삼킨다.
+   * 사용자 로그아웃. 로컬 세션은 즉시 지우고, 서버에 리프레시 토큰 family 폐기를 요청한다(액세스 토큰 불필요).
+   * 서버 요청이 실패해도(네트워크 등) 로컬 로그아웃은 이미 끝났으므로 오류를 삼킨다.
    */
   async logout(): Promise<void> {
     const ended = this.clear('logout')
@@ -270,15 +270,7 @@ export class SessionManager {
       return
     }
     try {
-      let accessToken = ended.accessToken && ended.expiresAt > this.now() ? ended.accessToken : null
-      let refreshToken = ended.refreshToken
-      if (!accessToken) {
-        // logout은 Bearer가 필요하다. 액세스 토큰이 없으면 한 번 회전해 받은 토큰으로 폐기한다.
-        const rotated = await this.opts.refresh(refreshToken)
-        accessToken = rotated.accessToken
-        refreshToken = rotated.refreshToken ?? refreshToken
-      }
-      await this.opts.logout(accessToken, refreshToken)
+      await this.opts.logout(ended.refreshToken)
     } catch {
       // 로컬 로그아웃은 완료됐다.
     }
@@ -354,21 +346,16 @@ export class SessionManager {
   private async refreshAcrossTabs(): Promise<string> {
     const generation = this.generation
     const startToken = this.session?.refreshToken
-    for (let attempt = 0; attempt < MAX_REFRESH_ATTEMPTS; attempt++) {
+    // 마지막 회차는 선점하지 않고 다른 탭 결과만 기다려 본다(계속 선점에 진 경우).
+    for (let attempt = 0; attempt <= MAX_REFRESH_ATTEMPTS; attempt++) {
       await this.waitForRemoteRefresh()
       const adopted = this.adoptOtherTabResult(generation, startToken)
       if (adopted) {
         return adopted
       }
-      if (await this.claim()) {
+      if (attempt < MAX_REFRESH_ATTEMPTS && (await this.claim())) {
         return this.refreshNow(generation)
       }
-    }
-    // 계속 선점에 졌다면 마지막으로 다른 탭 결과를 기다려 본다.
-    await this.waitForRemoteRefresh()
-    const adopted = this.adoptOtherTabResult(generation, startToken)
-    if (adopted) {
-      return adopted
     }
     throw new ApiError(0, { key: 'error.network' })
   }
