@@ -127,10 +127,12 @@ public class ApiExceptionHandler {
                 || AnnotatedElementUtils.hasAnnotation(exception.getClass(), ResponseStatus.class);
     }
 
-    /** 스프링 기본 400 예외: 키에 해당하는 일반 문구로 응답하고 상세는 warn 로그에만 남긴다. */
+    /**
+     * 스프링 기본 400 예외: 키에 해당하는 일반 문구로 응답한다.
+     * 이 예외들의 메시지에는 요청 본문 조각(건강 데이터·토큰)이 섞일 수 있어 로그에는 클래스명만 남긴다.
+     */
     private ResponseEntity<Map<String, Object>> badRequest(String messageCode, Exception exception) {
-        logFor(HttpStatus.BAD_REQUEST, describe(exception), exception);
-        return error(HttpStatus.BAD_REQUEST, Messages.get(messageCode));
+        return localized(HttpStatus.BAD_REQUEST, messageCode, exception.getClass().getSimpleName(), exception);
     }
 
     /** 사용자용 예외: 메시지를 그대로 응답한다. */
@@ -141,8 +143,13 @@ public class ApiExceptionHandler {
 
     /** 사용자용이 아닌 예외: 상태 코드는 유지하고 일반 문구로 응답한다. 상세는 로그에만 남긴다. */
     private ResponseEntity<Map<String, Object>> generic(HttpStatus status, Exception exception) {
-        logFor(status, describe(exception), exception);
-        return error(status, Messages.get("error.generic"));
+        return localized(status, "error.generic", describe(exception), exception);
+    }
+
+    private ResponseEntity<Map<String, Object>> localized(
+            HttpStatus status, String messageCode, String logSummary, Exception exception) {
+        logFor(status, logSummary, exception);
+        return error(status, Messages.get(messageCode));
     }
 
     /** 4xx 는 클라이언트 문제라 스택 없이 한 줄(warn), 5xx 는 스택과 함께 error 로 남긴다. */
