@@ -9,6 +9,18 @@ final class AppLanguageTests: XCTestCase {
         XCTAssertEqual(AppLanguage.acceptLanguage(preferredLanguages: []), "en")
     }
 
+    /// 기본값은 기기 선호 언어가 아니라 앱이 화면에 쓰는 현지화(`Bundle.main.preferredLocalizations.first`)를 따른다.
+    func test_acceptLanguage_defaultsToDisplayedLocalization() {
+        let displayed = Bundle.main.preferredLocalizations.first
+        XCTAssertEqual(AppLanguage.acceptLanguage(), AppLanguage.normalized(displayed) ?? AppLanguage.fallback)
+        XCTAssertTrue(AppLanguage.supported.contains(AppLanguage.acceptLanguage()))
+    }
+
+    func test_acceptLanguage_skipsBaseLocalization() {
+        XCTAssertEqual(AppLanguage.acceptLanguage(preferredLanguages: ["Base", "ko"]), "ko")
+        XCTAssertEqual(AppLanguage.acceptLanguage(preferredLanguages: ["Base"]), "en")
+    }
+
     func test_normalized_mapsIdentifiersToSupportedCodes() {
         XCTAssertEqual(AppLanguage.normalized("ko_KR"), "ko")
         XCTAssertEqual(AppLanguage.normalized("en"), "en")
