@@ -46,7 +46,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -75,6 +74,8 @@ import com.example.wellnessgame.ui.components.celOutline
 import com.example.wellnessgame.ui.components.displayName
 import com.example.wellnessgame.ui.components.durationText
 import com.example.wellnessgame.ui.components.labelRes
+import com.example.wellnessgame.ui.components.MessageCard
+import com.example.wellnessgame.ui.components.rateLimitedText
 import com.example.wellnessgame.ui.theme.Wellness
 import com.example.wellnessgame.ui.theme.WellnessMetrics
 import java.text.NumberFormat
@@ -280,14 +281,13 @@ private fun CharacterDetails(state: HomeUiState, actions: HomeActions) {
     val colors = Wellness.colors
     val character = state.character
     when {
-        !state.session.isSignedIn -> CelCard {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.signin_prompt_title), style = MaterialTheme.typography.titleLarge, color = colors.textPrimary)
-                if (state.session.reloginRequired || state.status == HomeStatus.SessionExpired) {
-                    DangerNotice(stringResource(R.string.status_session_expired))
-                } else {
-                    Text(stringResource(R.string.signin_prompt_body), style = MaterialTheme.typography.bodyMedium, color = colors.textSecondary)
-                }
+        !state.session.isSignedIn -> {
+            val expired = state.session.reloginRequired || state.status == HomeStatus.SessionExpired
+            MessageCard(
+                title = stringResource(R.string.signin_prompt_title),
+                body = if (expired) null else stringResource(R.string.signin_prompt_body),
+            ) {
+                if (expired) DangerNotice(stringResource(R.string.status_session_expired))
                 CelButton(stringResource(R.string.signin_prompt_button), onClick = actions.onOpenLogin)
             }
         }
@@ -300,15 +300,11 @@ private fun CharacterDetails(state: HomeUiState, actions: HomeActions) {
                 StatTile("REC", stringResource(R.string.stat_recovery), character.stats.recovery, colors.statRecovery, Modifier.weight(1f))
             }
         }
-        else -> CelCard {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(stringResource(R.string.waiting_title), style = MaterialTheme.typography.titleLarge, color = colors.textPrimary)
-                Text(stringResource(R.string.waiting_body), style = MaterialTheme.typography.bodyMedium, color = colors.textSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PillBadge(stringResource(R.string.level_chip, 1, stringResource(R.string.stage_seed)), fill = colors.lilac)
-                    GrowthStage.nextAfter(1)?.let {
-                        PillBadge(stringResource(R.string.next_stage_chip, stringResource(it.labelRes()), it.minLevel), fill = colors.mint)
-                    }
+        else -> MessageCard(stringResource(R.string.waiting_title), stringResource(R.string.waiting_body)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PillBadge(stringResource(R.string.level_chip, 1, stringResource(R.string.stage_seed)), fill = colors.lilac)
+                GrowthStage.nextAfter(1)?.let {
+                    PillBadge(stringResource(R.string.next_stage_chip, stringResource(it.labelRes()), it.minLevel), fill = colors.mint)
                 }
             }
         }
@@ -341,31 +337,30 @@ private fun XpCard(character: CharacterState) {
     }
 }
 
+/** 건강 데이터 안내 카드 한 종류: 제목·본문과 (있으면) 버튼 문구·동작. */
+private data class HealthNoticeContent(val title: Int, val body: Int, val button: Int? = null, val onClick: () -> Unit = {})
+
 @Composable
 private fun HealthNotice(state: HomeUiState, actions: HomeActions) {
     if (!state.session.isSignedIn || state.useMockData) return
-    val colors = Wellness.colors
-    val (title, body, button) = when (state.healthAccess) {
-        HealthAccess.PERMISSION_REQUIRED -> Triple(R.string.health_permission_title, R.string.health_permission_body, R.string.health_permission_button)
-        HealthAccess.PROVIDER_UPDATE_REQUIRED -> Triple(R.string.health_update_title, R.string.health_update_body, R.string.health_update_button)
-        HealthAccess.UNSUPPORTED -> Triple(R.string.health_unsupported_title, R.string.health_unsupported_body, null)
+    val notice = when (state.healthAccess) {
+        HealthAccess.PERMISSION_REQUIRED -> HealthNoticeContent(
+            R.string.health_permission_title, R.string.health_permission_body,
+            R.string.health_permission_button, actions.onRequestHealthPermission,
+        )
+        HealthAccess.PROVIDER_UPDATE_REQUIRED -> HealthNoticeContent(
+            R.string.health_update_title, R.string.health_update_body,
+            R.string.health_update_button, actions.onInstallHealthConnect,
+        )
+        HealthAccess.UNSUPPORTED -> HealthNoticeContent(R.string.health_unsupported_title, R.string.health_unsupported_body)
         else -> return
     }
-    CelCard(fill = colors.surface) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(stringResource(title), style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
-            Text(stringResource(body), style = MaterialTheme.typography.bodyMedium, color = colors.textSecondary)
-            if (button != null) {
-                CelButton(
-                    stringResource(button),
-                    onClick = if (state.healthAccess == HealthAccess.PERMISSION_REQUIRED) {
-                        actions.onRequestHealthPermission
-                    } else {
-                        actions.onInstallHealthConnect
-                    },
-                )
-            }
-        }
+    MessageCard(
+        title = stringResource(notice.title),
+        body = stringResource(notice.body),
+        titleStyle = MaterialTheme.typography.titleMedium,
+    ) {
+        notice.button?.let { CelButton(stringResource(it), onClick = notice.onClick) }
     }
 }
 
@@ -467,8 +462,7 @@ private fun statusText(status: HomeStatus): String = when (status) {
     HomeStatus.HealthUnavailable -> stringResource(R.string.health_unsupported_title)
     HomeStatus.HealthReadFailed -> stringResource(R.string.status_health_error)
     HomeStatus.SessionExpired -> stringResource(R.string.status_session_expired)
-    is HomeStatus.RateLimited -> status.retryAfterSeconds?.let { pluralStringResource(R.plurals.status_rate_limited, it.toInt(), it.toInt()) }
-        ?: stringResource(R.string.status_rate_limited_unknown)
+    is HomeStatus.RateLimited -> rateLimitedText(status.retryAfterSeconds)
     HomeStatus.NetworkError -> stringResource(R.string.status_network)
     is HomeStatus.ServerError -> stringResource(R.string.status_server_error, status.message ?: stringResource(R.string.error_unknown))
 }

@@ -1,13 +1,15 @@
 package com.example.wellnessgame
 
 import android.app.Application
+import com.example.wellnessgame.sync.BackgroundSync
+import com.example.wellnessgame.sync.BackgroundSyncProvider
 import com.example.wellnessgame.sync.SyncWorker
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-class WellnessApp : Application() {
+class WellnessApp : Application(), BackgroundSyncProvider {
     lateinit var container: AppContainer
         private set
 
@@ -25,4 +27,10 @@ class WellnessApp : Application() {
                 }
         }
     }
+
+    override fun backgroundSync() = BackgroundSync(
+        awaitSessionRestored = container::awaitSessionRestored,
+        isSignedIn = { container.session.state.value.isSignedIn },
+        repository = container.dashboard,
+    )
 }

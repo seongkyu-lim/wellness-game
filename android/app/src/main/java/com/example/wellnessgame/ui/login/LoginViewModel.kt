@@ -66,16 +66,16 @@ class LoginViewModel(
 
     fun socialSignIn(provider: LoginProvider, host: SignInHost) {
         if (_state.value.isBusy || provider !in _state.value.configured) return
-        run(onSocialFailure = provider) { auth.socialSignIn(provider, host) }
+        launchAuth(onSocialFailure = provider) { auth.socialSignIn(provider, host) }
     }
 
     private fun submitCredentials(action: suspend (String, String) -> Unit) {
         val current = _state.value
         if (!current.canSubmitCredentials) return
-        run(onSocialFailure = null) { action(current.username, current.password) }
+        launchAuth(onSocialFailure = null) { action(current.username, current.password) }
     }
 
-    private fun run(onSocialFailure: LoginProvider?, block: suspend () -> Unit) {
+    private fun launchAuth(onSocialFailure: LoginProvider?, block: suspend () -> Unit) {
         _state.update { it.copy(isBusy = true, error = null) }
         viewModelScope.launch {
             val error: LoginError? = try {

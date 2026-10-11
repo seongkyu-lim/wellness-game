@@ -11,7 +11,7 @@ interface AccessTokenSource {
     fun currentToken(): String?
 
     /** 서버가 [rejectedToken]을 거절(401)했다. 현재 토큰과 같을 때만 세션을 지워야 한다. */
-    fun onUnauthorized(rejectedToken: String)
+    suspend fun onUnauthorized(rejectedToken: String)
 }
 
 /**

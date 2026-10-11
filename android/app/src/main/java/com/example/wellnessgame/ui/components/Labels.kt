@@ -2,6 +2,7 @@ package com.example.wellnessgame.ui.components
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.example.wellnessgame.R
 import com.example.wellnessgame.domain.GrowthStage
@@ -48,3 +49,9 @@ fun durationText(minutes: Int): String {
         else -> stringResource(R.string.duration_hours_minutes, hours, rest)
     }
 }
+
+/** 429 안내. `Retry-After`가 없으면 "잠시 후" 문구. */
+@Composable
+fun rateLimitedText(retryAfterSeconds: Long?): String =
+    retryAfterSeconds?.let { pluralStringResource(R.plurals.status_rate_limited, it.toInt(), it.toInt()) }
+        ?: stringResource(R.string.status_rate_limited_unknown)

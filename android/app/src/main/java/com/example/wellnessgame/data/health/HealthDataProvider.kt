@@ -12,6 +12,9 @@ interface HealthDataProvider {
 
     suspend fun hasPermissions(): Boolean
 
+    /** 권한 요청 화면에 넘길 권한. 기본은 [requiredPermissions]. */
+    suspend fun permissionsToRequest(): Set<String> = requiredPermissions
+
     /** 오늘 걸음 합계, 오늘(로컬 0시 이후 시작) 운동, 전날 12:00~지금 수면을 읽는다. */
     suspend fun loadToday(): DailyHealthSnapshot
 }

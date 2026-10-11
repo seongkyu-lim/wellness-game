@@ -3,7 +3,6 @@ package com.example.wellnessgame.sync
 import com.example.wellnessgame.auth.SessionManager
 import com.example.wellnessgame.data.health.DailyHealthSnapshot
 import com.example.wellnessgame.data.health.HealthAvailability
-import com.example.wellnessgame.data.health.HealthConnectProvider
 import com.example.wellnessgame.data.health.HealthDataProvider
 import com.example.wellnessgame.data.network.ApiClient
 import com.example.wellnessgame.data.network.ApiException
@@ -26,6 +25,9 @@ data class SyncResult(val snapshot: DailyHealthSnapshot, val response: HealthAct
 interface DashboardRepository {
     suspend fun healthAccess(): HealthAccess
 
+    /** 디버그용 Mock 데이터를 쓰는 중인지. */
+    suspend fun isUsingMockData(): Boolean
+
     /** Health Connect 권한 요청 목록(백그라운드 읽기 지원 시 포함). */
     suspend fun permissionsToRequest(): Set<String>
 
@@ -38,20 +40,22 @@ interface DashboardRepository {
     /** 서버의 내 캐릭터. 첫 동기화 전이면 null. */
     suspend fun character(): CharacterState?
 
-    /** 서버에 저장된 오늘 기록으로 만든 퀘스트 현재값. */
-    suspend fun todayQuests(): DailyQuestProgress
+    /** 서버에 저장된 [date]의 기록으로 만든 퀘스트 현재값. 날짜는 동기화한 스냅샷의 날짜를 넘긴다(자정 경계). */
+    suspend fun todayQuests(date: LocalDate): DailyQuestProgress
 }
 
 class DefaultDashboardRepository(
     private val api: ApiClient,
     private val session: SessionManager,
-    private val healthConnect: HealthConnectProvider,
+    private val healthConnect: HealthDataProvider,
     private val mock: HealthDataProvider,
     private val settings: AppSettings,
     private val clock: Clock = Clock.systemDefaultZone(),
 ) : DashboardRepository {
 
-    private suspend fun provider(): HealthDataProvider = if (settings.useMockData.first()) mock else healthConnect
+    override suspend fun isUsingMockData(): Boolean = settings.useMockData.first()
+
+    private suspend fun provider(): HealthDataProvider = if (isUsingMockData()) mock else healthConnect
 
     override suspend fun healthAccess(): HealthAccess {
         val provider = provider()
@@ -78,6 +82,6 @@ class DefaultDashboardRepository(
 
     override suspend fun character(): CharacterState? = api.myCharacter()?.character
 
-    override suspend fun todayQuests(): DailyQuestProgress =
-        DailyQuestProgress.fromActivities(api.dailyActivities(LocalDate.now(clock).toString()).activities)
+    override suspend fun todayQuests(date: LocalDate): DailyQuestProgress =
+        DailyQuestProgress.fromActivities(api.dailyActivities(date.toString()).activities)
 }

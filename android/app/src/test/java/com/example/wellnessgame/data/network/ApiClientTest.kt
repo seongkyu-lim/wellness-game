@@ -1,6 +1,9 @@
 package com.example.wellnessgame.data.network
 
+import com.example.wellnessgame.testing.CHARACTER_JSON
 import com.example.wellnessgame.testing.FakeTokenSource
+import com.example.wellnessgame.testing.apiClient
+import com.example.wellnessgame.testing.jsonResponse
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -27,19 +30,18 @@ class ApiClientTest {
     fun setUp() {
         server = MockWebServer().apply { start() }
         tokens = FakeTokenSource("token-1")
-        val http = NetworkModule.okHttpClient(language = { language })
-        client = ApiClient(NetworkModule.api(server.url("/").toString(), http), tokens)
+        client = server.apiClient(tokens) { language }
     }
 
     @After
     fun tearDown() = server.shutdown()
 
-    private fun json(body: String, code: Int = 200) =
-        MockResponse().setResponseCode(code).setHeader("Content-Type", "application/json").setBody(body)
+    private fun json(body: String, code: Int = 200) = jsonResponse(body, code)
 
+    /** 서버의 예전 필드(userIdentifier)가 함께 와도 디코딩되는지 본다. */
     private val authBody = """{"userId":"u-1","displayName":"새싹","accessToken":"jwt","tokenType":"Bearer","expiresIn":3600,"userIdentifier":"legacy"}"""
 
-    private val characterJson = """{"level":3,"currentXp":40,"totalXp":240,"nextLevelXp":150,"stats":{"str":1,"vit":2,"intStat":3,"discipline":4,"recovery":5}}"""
+    private val characterJson = CHARACTER_JSON
 
     @Test
     fun login_postsCredentials_withAcceptLanguage_andWithoutAuthorization() = runTest {

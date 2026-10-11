@@ -36,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -51,6 +50,7 @@ import com.example.wellnessgame.ui.components.CelButton
 import com.example.wellnessgame.ui.components.DangerNotice
 import com.example.wellnessgame.ui.components.SproutyAvatar
 import com.example.wellnessgame.ui.components.displayName
+import com.example.wellnessgame.ui.components.rateLimitedText
 import com.example.wellnessgame.ui.theme.Wellness
 import com.example.wellnessgame.ui.theme.WellnessMetrics
 
@@ -242,8 +242,7 @@ private fun CredentialField(
 @Composable
 private fun errorText(error: LoginError): String = when (error) {
     is LoginError.Server -> error.message ?: stringResource(R.string.login_error_generic)
-    is LoginError.RateLimited -> error.retryAfterSeconds?.let { pluralStringResource(R.plurals.status_rate_limited, it.toInt(), it.toInt()) }
-        ?: stringResource(R.string.status_rate_limited_unknown)
+    is LoginError.RateLimited -> rateLimitedText(error.retryAfterSeconds)
     LoginError.Network -> stringResource(R.string.status_network)
     is LoginError.Social -> stringResource(R.string.login_error_social, error.provider.displayName())
 }

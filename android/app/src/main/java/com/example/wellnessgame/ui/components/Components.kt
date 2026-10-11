@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -44,6 +45,7 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -95,6 +97,25 @@ fun CelCard(
             .celOutline(fill, colors.ink, colors.popShadow, radius = radius)
             .padding(16.dp),
     ) { content() }
+}
+
+/** 제목 + 본문(선택) + 추가 내용(버튼·칩 등)을 담은 카드. */
+@Composable
+fun MessageCard(
+    title: String,
+    body: String?,
+    modifier: Modifier = Modifier,
+    titleStyle: TextStyle = MaterialTheme.typography.titleLarge,
+    content: @Composable ColumnScope.() -> Unit = {},
+) {
+    val colors = Wellness.colors
+    CelCard(modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, style = titleStyle, color = colors.textPrimary)
+            body?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.textSecondary) }
+            content()
+        }
+    }
 }
 
 /** 버튼: 3 외곽선 + 아래로 떨어지는 그림자, 누르면 그림자 쪽으로 내려앉는다. */

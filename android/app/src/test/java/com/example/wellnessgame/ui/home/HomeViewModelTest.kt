@@ -10,9 +10,12 @@ import com.example.wellnessgame.data.network.CharacterState
 import com.example.wellnessgame.data.network.CharacterStats
 import com.example.wellnessgame.data.network.HealthActivitySyncResponse
 import com.example.wellnessgame.domain.DailyQuestProgress
-import com.example.wellnessgame.sync.DashboardRepository
+import com.example.wellnessgame.data.network.AuthTokenResponse
+import com.example.wellnessgame.domain.LoginProvider
 import com.example.wellnessgame.sync.HealthAccess
+import kotlinx.coroutines.CompletableDeferred
 import com.example.wellnessgame.sync.SyncResult
+import com.example.wellnessgame.testing.FakeDashboardRepository
 import com.example.wellnessgame.testing.FakeSettings
 import com.example.wellnessgame.testing.FakeTokenStore
 import com.example.wellnessgame.testing.MainDispatcherRule
@@ -45,30 +48,7 @@ class HomeViewModelTest {
         ),
     )
 
-    private class FakeRepository(
-        var access: HealthAccess = HealthAccess.GRANTED,
-        var syncResult: () -> SyncResult,
-        var character: CharacterState? = null,
-        var quests: () -> DailyQuestProgress = { DailyQuestProgress(9_000, 10, 400) },
-        val snapshot: DailyHealthSnapshot,
-    ) : DashboardRepository {
-        var syncCount = 0
-        var characterCount = 0
-        override suspend fun healthAccess() = access
-        override suspend fun permissionsToRequest() = setOf("perm")
-        override suspend fun loadSnapshot() = snapshot
-        override suspend fun syncToday(): SyncResult {
-            syncCount++
-            return syncResult()
-        }
-        override suspend fun character(): CharacterState? {
-            characterCount++
-            return character
-        }
-        override suspend fun todayQuests() = quests()
-    }
-
-    private fun syncResult(levelUp: Boolean = false) = SyncResult(
+    private fun okResult(levelUp: Boolean = false) = SyncResult(
         snapshot,
         HealthActivitySyncResponse(
             userId = "u-1",
@@ -80,10 +60,10 @@ class HomeViewModelTest {
         ),
     )
 
-    private fun repository() = FakeRepository(syncResult = { syncResult() }, snapshot = snapshot)
+    private fun repository() = FakeDashboardRepository(snapshot = snapshot, syncResult = { okResult() })
 
-    private suspend fun TestScope.session(signedIn: Boolean): SessionManager {
-        val store = FakeTokenStore(if (signedIn) StoredSession("u-1", null, "google", "jwt") else null)
+    private suspend fun TestScope.session(signedIn: Boolean, store: FakeTokenStore = FakeTokenStore()): SessionManager {
+        if (signedIn) store.stored = StoredSession("u-1", null, "google", "jwt")
         return SessionManager(store, backgroundScope, clock).also { it.restore() }
     }
 
@@ -195,5 +175,84 @@ class HomeViewModelTest {
         assertEquals(true, settings.mockFlow.value)
         assertEquals(true, vm.state.value.useMockData)
         assertEquals(2, repo.syncCount)
+    }
+
+    @Test
+    fun serverQuests_useSyncedSnapshotDate() = runTest {
+        val repo = repository()
+        HomeViewModel(repo, session(signedIn = true), FakeSettings(), clock)
+        advanceUntilIdle()
+        assertEquals(listOf(snapshot.date), repo.questDates)
+    }
+
+    @Test
+    fun nonForcedRefreshForSameUser_isSkippedWhileRunning() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val repo = repository().apply {
+            syncResult = {
+                gate.await()
+                okResult()
+            }
+        }
+        val vm = HomeViewModel(repo, session(signedIn = true), FakeSettings(), clock)
+        advanceUntilIdle()
+        assertEquals(1, repo.syncCount)
+        vm.onForeground()
+        advanceUntilIdle()
+        assertEquals(1, repo.syncCount)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, repo.syncCount)
+        assertEquals(HomeStatus.Synced(false), vm.state.value.status)
+    }
+
+    @Test
+    fun signingInAsAnotherUser_cancelsRunningRefresh_andSyncsAgain() = runTest {
+        val firstGate = CompletableDeferred<Unit>()
+        var calls = 0
+        val repo = repository().apply {
+            syncResult = {
+                calls++
+                if (calls == 1) firstGate.await()
+                okResult()
+            }
+        }
+        val session = session(signedIn = true)
+        val vm = HomeViewModel(repo, session, FakeSettings(), clock)
+        advanceUntilIdle()
+        assertEquals(1, repo.syncCount) // u-1 동기화가 멈춰 있음
+
+        session.signIn(AuthTokenResponse("u-2", null, "jwt-2", null, null), LoginProvider.KAKAO)
+        advanceUntilIdle()
+
+        assertEquals(2, repo.syncCount)
+        assertEquals("u-2", vm.state.value.session.userId)
+        assertEquals(HomeStatus.Synced(false), vm.state.value.status)
+        assertFalse(vm.state.value.isLoading)
+        // 취소된 첫 작업이 늦게 풀려도 새 사용자의 화면을 바꾸지 않는다.
+        firstGate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(2, repo.syncCount)
+        assertEquals("u-2", vm.state.value.session.userId)
+    }
+
+    @Test
+    fun forcedRefresh_restartsRunningRefresh() = runTest {
+        val firstGate = CompletableDeferred<Unit>()
+        var calls = 0
+        val repo = repository().apply {
+            syncResult = {
+                calls++
+                if (calls == 1) firstGate.await()
+                okResult()
+            }
+        }
+        val vm = HomeViewModel(repo, session(signedIn = true), FakeSettings(), clock)
+        advanceUntilIdle()
+        vm.refresh(force = true)
+        advanceUntilIdle()
+        assertEquals(2, repo.syncCount)
+        assertFalse(vm.state.value.isLoading)
+        assertEquals(HomeStatus.Synced(false), vm.state.value.status)
     }
 }

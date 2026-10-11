@@ -104,10 +104,13 @@ private fun WellnessApp(container: AppContainer, signInHost: SignInHost, onOpenI
         PermissionController.createRequestPermissionResultContract(),
     ) { homeViewModel.onPermissionsResult() }
 
-    BackHandler(enabled = route != Route.HOME) {
+    // 로그인 화면을 닫을 때는 재로그인 안내도 함께 닫는다.
+    val goHome = {
         container.session.dismissReloginNotice()
         route = Route.HOME
     }
+
+    BackHandler(enabled = route != Route.HOME, onBack = goHome)
 
     when (route) {
         Route.HOME -> HomeScreen(
@@ -141,10 +144,7 @@ private fun WellnessApp(container: AppContainer, signInHost: SignInHost, onOpenI
                     onSignUp = loginViewModel::signUp,
                     onSocial = { loginViewModel.socialSignIn(it, signInHost) },
                     onToggleOtherProviders = loginViewModel::toggleOtherProviders,
-                    onClose = {
-                        container.session.dismissReloginNotice()
-                        route = Route.HOME
-                    },
+                    onClose = goHome,
                 ),
             )
         }

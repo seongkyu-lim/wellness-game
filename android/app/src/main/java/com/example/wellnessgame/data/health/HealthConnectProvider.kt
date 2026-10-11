@@ -44,7 +44,7 @@ class HealthConnectProvider(
     }
 
     /** 백그라운드(WorkManager) 읽기를 지원하면 요청할 권한까지 포함한 집합. */
-    suspend fun permissionsToRequest(): Set<String> {
+    override suspend fun permissionsToRequest(): Set<String> {
         if (availability() != HealthAvailability.AVAILABLE) return requiredPermissions
         val background = client.features.getFeatureStatus(
             HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND,

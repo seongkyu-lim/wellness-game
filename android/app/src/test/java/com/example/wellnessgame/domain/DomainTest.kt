@@ -105,6 +105,18 @@ class ServerConfigTest {
     }
 
     @Test
+    fun debug_allowsCleartextForLocalBackend_andKeepsExistingSlash() {
+        assertEquals("http://10.0.2.2:8080/", ServerConfig.resolveBaseUrl(" http://10.0.2.2:8080/ ", isDebug = true))
+    }
+
+    @Test
+    fun release_isCaseInsensitiveAboutScheme_andRejectsOtherSchemes() {
+        assertEquals("HTTPS://api.example.com/", ServerConfig.resolveBaseUrl("HTTPS://api.example.com/", isDebug = false))
+        assertEquals(ServerConfig.RELEASE_FALLBACK, ServerConfig.resolveBaseUrl("", isDebug = false))
+        assertEquals(ServerConfig.RELEASE_FALLBACK, ServerConfig.resolveBaseUrl("ftp://api.example.com", isDebug = false))
+    }
+
+    @Test
     fun release_acceptsHttpsOnly() {
         assertEquals("https://api.example.com/", ServerConfig.resolveBaseUrl("https://api.example.com", isDebug = false))
         assertEquals(ServerConfig.RELEASE_FALLBACK, ServerConfig.resolveBaseUrl("http://api.example.com", isDebug = false))

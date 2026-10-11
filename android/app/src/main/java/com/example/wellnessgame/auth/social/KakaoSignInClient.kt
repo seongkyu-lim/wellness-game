@@ -30,10 +30,10 @@ class KakaoSignInClient(
         val token = if (client.isKakaoTalkLoginAvailable(activity)) {
             try {
                 login { callback -> client.loginWithKakaoTalk(activity, callback = callback) }
-            } catch (e: SocialSignInCancelled) {
-                throw e
             } catch (e: SocialSignInFailed) {
-                // 카카오톡에 연결된 계정이 없는 등: 카카오계정 로그인으로 이어서 시도한다.
+                // 공식 가이드: 사용자 취소는 [login]이 SocialSignInCancelled로 끝낸다. 카카오톡 미설치·미연결 등
+                // 클라이언트 오류일 때만 카카오계정 로그인으로 이어 가고, 서버·인증 오류는 그대로 실패로 둔다.
+                if (!shouldFallBackToAccountLogin(e.cause)) throw e
                 login { callback -> client.loginWithKakaoAccount(activity, callback = callback) }
             }
         } else {
@@ -45,6 +45,12 @@ class KakaoSignInClient(
     override suspend fun signOut() {
         if (!isConfigured) return
         suspendCancellableCoroutine { cont -> UserApiClient.instance.logout { cont.resume(Unit) } }
+    }
+
+    companion object {
+        /** 카카오톡 로그인 실패 후 카카오계정 로그인으로 넘어갈지. 취소가 아닌 [ClientError]일 때만. */
+        fun shouldFallBackToAccountLogin(error: Throwable?): Boolean =
+            error is ClientError && error.reason != ClientErrorCause.Cancelled
     }
 
     private suspend fun login(

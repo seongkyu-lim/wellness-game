@@ -5,10 +5,10 @@ import com.example.wellnessgame.auth.SessionManager
 import com.example.wellnessgame.auth.social.SocialCredential
 import com.example.wellnessgame.auth.social.SocialSignInCancelled
 import com.example.wellnessgame.auth.social.SocialSignInFailed
-import com.example.wellnessgame.data.network.ApiClient
-import com.example.wellnessgame.data.network.NetworkModule
 import com.example.wellnessgame.domain.LoginProvider
+import com.example.wellnessgame.testing.AUTH_BODY
 import com.example.wellnessgame.testing.FakeSocialClient
+import com.example.wellnessgame.testing.apiClient
 import com.example.wellnessgame.testing.FakeTokenStore
 import com.example.wellnessgame.testing.MainDispatcherRule
 import com.example.wellnessgame.testing.NoHost
@@ -52,11 +52,11 @@ class LoginViewModelTest {
         withTimeout(5_000) { state.first { !it.isBusy } }
     }
 
-    private val authBody = """{"userId":"u-1","displayName":"Leaf","accessToken":"jwt","tokenType":"Bearer","expiresIn":3600}"""
+    private val authBody = AUTH_BODY
 
     private fun TestScope.fixture(region: String? = "US"): Pair<LoginViewModel, SessionManager> {
         val session = SessionManager(FakeTokenStore(), backgroundScope)
-        val api = ApiClient(NetworkModule.api(server.url("/").toString(), NetworkModule.okHttpClient({ "en" })), session)
+        val api = server.apiClient(session) { "en" }
         val auth = AuthRepository(
             api,
             session,

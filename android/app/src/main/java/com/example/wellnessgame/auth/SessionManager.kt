@@ -79,24 +79,23 @@ class SessionManager(
     override fun currentToken(): String? {
         val current = session ?: return null
         if (current.isExpired()) {
-            expire(current.accessToken)
+            scope.launch { expire(current.accessToken) }
             return null
         }
         return current.accessToken
     }
 
-    override fun onUnauthorized(rejectedToken: String) = expire(rejectedToken)
+    override suspend fun onUnauthorized(rejectedToken: String) = expire(rejectedToken)
 
-    private fun expire(token: String) {
-        if (session?.accessToken != token) return
+    /**
+     * [token]이 지금 세션의 토큰일 때만 세션을 끝낸다. 비교·메모리 정리·저장소 삭제를 한 잠금 안에서 해서
+     * 로그인([signIn])과 겹쳐도 늦게 온 401이 새로 저장된 세션을 지우지 않는다.
+     */
+    private suspend fun expire(token: String) = mutex.withLock {
+        if (session?.accessToken != token) return@withLock
         session = null
+        store.clear()
         _state.value = SessionState(restored = true, reloginRequired = true)
-        scope.launch {
-            mutex.withLock {
-                // 그사이 다시 로그인했다면 새 세션을 지우지 않는다.
-                if (session == null) store.clear()
-            }
-        }
     }
 
     private fun StoredSession.isExpired(): Boolean =
