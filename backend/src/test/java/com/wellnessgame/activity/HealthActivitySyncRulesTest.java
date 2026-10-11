@@ -72,7 +72,7 @@ class HealthActivitySyncRulesTest {
         assertThat(response.activityResults()).extracting(r -> r.duplicate())
                 .containsExactly(false, true, false);
         assertThat(response.activityResults().get(1).gainedXp()).isZero();
-        assertThat(response.activityResults().get(1).message()).isEqualTo("CYCLING 겹치는 기록이 이미 반영됨");
+        assertThat(response.activityResults().get(1).message()).isEqualTo("자전거 겹치는 기록이 이미 반영됨");
         assertThat(response.gainedXp()).isEqualTo(70 + 95); // 걸음 70 + 걷기 90+5
         assertThat(response.character().stats().vit()).isEqualTo(4); // 겹친 자전거는 스탯도 미반영
         assertThat(activityRepository.count()).isEqualTo(3);
@@ -108,7 +108,7 @@ class HealthActivitySyncRulesTest {
                 sleepWithScore90(400, "2026-06-16T22:30:00Z", "2026-06-17T05:10:00Z"));
 
         assertThat(response.activityResults()).extracting(r -> r.duplicate()).containsExactly(true, false, true);
-        assertThat(response.activityResults().get(0).message()).isEqualTo("SLEEP 이미 반영됨");
+        assertThat(response.activityResults().get(0).message()).isEqualTo("수면 이미 반영됨");
         assertThat(response.gainedXp()).isEqualTo(80); // 420분 60 + 품질 20
         assertThat(activityRepository.count()).isEqualTo(1);
         assertThat(activityRepository.findAll().get(0).getSleepMinutes()).isEqualTo(420);
@@ -196,12 +196,12 @@ class HealthActivitySyncRulesTest {
                 .containsExactly(false, true, true, true, true, true, true, false);
         assertThat(response.activityResults()).extracting(r -> r.message()).containsExactly(
                 "걸음 수 보상 +70 XP",
-                "STEPS 기록을 반영하지 않았어요: 걸음 수는 0 이상 100000 이하여야 합니다.",
-                "RUNNING 기록을 반영하지 않았어요: 칼로리가 운동 시간 대비 너무 큽니다(분당 최대 20kcal).",
-                "SLEEP 기록을 반영하지 않았어요: 수면 시간(sleepMinutes)이 시작~종료 구간 길이보다 깁니다.",
-                "SWIMMING 기록을 반영하지 않았어요: 활동 시간이 동기화 날짜 범위를 벗어났습니다.",
-                "WALKING 기록을 반영하지 않았어요: 운동 종료 시간은 시작 시간보다 늦어야 합니다.",
-                "CYCLING 기록을 반영하지 않았어요: 활동 시간은 현재 시각 이후일 수 없습니다.",
+                "걸음 수 기록을 반영하지 않았어요: 걸음 수는 0 이상 100000 이하여야 합니다.",
+                "달리기 기록을 반영하지 않았어요: 칼로리가 운동 시간 대비 너무 큽니다(분당 최대 20kcal).",
+                "수면 기록을 반영하지 않았어요: 수면 시간(sleepMinutes)이 시작~종료 구간 길이보다 깁니다.",
+                "수영 기록을 반영하지 않았어요: 활동 시간이 동기화 날짜 범위를 벗어났습니다.",
+                "걷기 기록을 반영하지 않았어요: 운동 종료 시간은 시작 시간보다 늦어야 합니다.",
+                "자전거 기록을 반영하지 않았어요: 활동 시간은 현재 시각 이후일 수 없습니다.",
                 "달리기 완료 +105 XP");
         assertThat(response.gainedXp()).isEqualTo(175);
         assertThat(activityRepository.count()).isEqualTo(2);

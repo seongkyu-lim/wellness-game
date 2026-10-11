@@ -14,11 +14,15 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageConversionException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
 import java.util.Map;
@@ -86,9 +90,27 @@ public class ApiExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, message);
     }
 
+    /** 본문 JSON 파싱 실패·형식 불일치: 400 + 일반 문구. 파서 상세(필드 경로, 입력 조각)는 로그에만 남긴다. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException exception) {
+        return badRequest("error.unreadable-body", exception);
+    }
+
+    /** 경로 변수·쿼리 파라미터 타입 변환 실패(예: 숫자 자리에 문자열, 잘못된 날짜): 400 + 일반 문구. */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException exception) {
+        return badRequest("error.invalid-parameter", exception);
+    }
+
+    /** 필수 쿼리 파라미터·헤더 누락: 400 + 일반 문구. */
+    @ExceptionHandler({MissingServletRequestParameterException.class, MissingRequestHeaderException.class})
+    ResponseEntity<Map<String, Object>> handleMissingParameter(Exception exception) {
+        return badRequest("error.missing-parameter", exception);
+    }
+
     /**
      * 그 밖의 런타임 예외는 500 + 일반 문구. 단, 스프링 MVC 가 자체 상태 코드로 처리하는 예외
-     * (잘못된 JSON 400, 경로 변수 타입 오류 400, {@code ResponseStatusException} 등)는 다시 던져 기본 처리에 맡긴다.
+     * (위에서 따로 다루지 않은 {@code ResponseStatusException}, {@code @ResponseStatus} 예외 등)는 다시 던져 기본 처리에 맡긴다.
      */
     @ExceptionHandler(RuntimeException.class)
     ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException exception) {
@@ -105,6 +127,14 @@ public class ApiExceptionHandler {
                 || AnnotatedElementUtils.hasAnnotation(exception.getClass(), ResponseStatus.class);
     }
 
+    /**
+     * 스프링 기본 400 예외: 키에 해당하는 일반 문구로 응답한다.
+     * 이 예외들의 메시지에는 요청 본문 조각(건강 데이터·토큰)이 섞일 수 있어 로그에는 클래스명만 남긴다.
+     */
+    private ResponseEntity<Map<String, Object>> badRequest(String messageCode, Exception exception) {
+        return localized(HttpStatus.BAD_REQUEST, messageCode, exception.getClass().getSimpleName(), exception);
+    }
+
     /** 사용자용 예외: 메시지를 그대로 응답한다. */
     private ResponseEntity<Map<String, Object>> userFacing(HttpStatus status, RuntimeException exception) {
         logFor(status, describe(exception), exception);
@@ -113,8 +143,13 @@ public class ApiExceptionHandler {
 
     /** 사용자용이 아닌 예외: 상태 코드는 유지하고 일반 문구로 응답한다. 상세는 로그에만 남긴다. */
     private ResponseEntity<Map<String, Object>> generic(HttpStatus status, Exception exception) {
-        logFor(status, describe(exception), exception);
-        return error(status, Messages.get("error.generic"));
+        return localized(status, "error.generic", describe(exception), exception);
+    }
+
+    private ResponseEntity<Map<String, Object>> localized(
+            HttpStatus status, String messageCode, String logSummary, Exception exception) {
+        logFor(status, logSummary, exception);
+        return error(status, Messages.get(messageCode));
     }
 
     /** 4xx 는 클라이언트 문제라 스택 없이 한 줄(warn), 5xx 는 스택과 함께 error 로 남긴다. */
