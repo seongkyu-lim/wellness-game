@@ -1,14 +1,15 @@
-import { getLanguage, t } from '../i18n/core'
+import { getLanguage, LocalizedError, type Message } from '../i18n/core'
 import type { CharacterSummary, DailyActivitiesResponse } from './types'
 
 const BASE_URL: string = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
-export class ApiError extends Error {
+/** HTTP 실패. 화면 문구는 서버 메시지(raw) 또는 사전 키로 보관해 렌더링 시 번역한다. */
+export class ApiError extends LocalizedError {
   constructor(
     readonly status: number,
-    message: string,
+    userMessage: Message,
   ) {
-    super(message)
+    super(userMessage)
     this.name = 'ApiError'
   }
 }
@@ -78,16 +79,18 @@ export async function postSocialLogin(provider: string, code: string, redirectUr
   }
   const body = (await res.json()) as Partial<TokenResponse>
   if (typeof body.accessToken !== 'string' || !body.accessToken || typeof body.userId !== 'string') {
-    throw new ApiError(res.status, t('error.noToken'))
+    throw new ApiError(res.status, { key: 'error.noToken' })
   }
   return body as TokenResponse
 }
 
-async function errorMessage(res: Response): Promise<string> {
+/** 서버가 번역해 보낸 message가 있으면 그대로(raw), 없으면 상태 코드를 담은 사전 키로 돌려준다. */
+async function errorMessage(res: Response): Promise<Message> {
+  const fallback: Message = { key: 'error.request', params: { status: res.status } }
   try {
-    const body = (await res.json()) as { message?: string }
-    return body.message ?? t('error.request', { status: res.status })
+    const body = (await res.json()) as { message?: unknown }
+    return typeof body.message === 'string' && body.message ? { raw: body.message } : fallback
   } catch {
-    return t('error.request', { status: res.status })
+    return fallback
   }
 }

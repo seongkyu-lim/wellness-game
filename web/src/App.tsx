@@ -3,8 +3,10 @@ import { fetchDailyActivities, fetchMyCharacter, isUnauthorized } from './api/cl
 import type { ActivityEntry, Character } from './api/types'
 import { AccountSection } from './components/AccountSection'
 import { CharacterCard } from './components/CharacterCard'
+import { ErrorBanner } from './components/ErrorBanner'
 import { Landing } from './components/Landing'
 import { TodayActivities } from './components/TodayActivities'
+import { toMessage, type Message } from './i18n/core'
 import { useI18n } from './i18n/I18nProvider'
 import { LanguageToggle } from './components/LanguageToggle'
 import { clearSession, completeLoginFromRedirect, loadSession, type Session } from './lib/auth'
@@ -12,13 +14,14 @@ import { clearSession, completeLoginFromRedirect, loadSession, type Session } fr
 const REFRESH_INTERVAL_MS = 30_000
 
 export default function App() {
-  const { t, formatDate } = useI18n()
+  const { formatDate } = useI18n()
   const [session, setSession] = useState<Session | null>(loadSession)
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [character, setCharacter] = useState<Character | null>(null)
   const [activities, setActivities] = useState<ActivityEntry[]>([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // 번역된 문자열이 아니라 Message로 보관해, 언어를 바꾸면 떠 있는 배너도 다시 번역되게 한다.
+  const [error, setError] = useState<Message | null>(null)
   // 소셜 로그인에서 돌아온 직후(?code=)에는 토큰 교환이 끝날 때까지 랜딩을 그리지 않는다.
   const [completingLogin, setCompletingLogin] = useState(() => new URLSearchParams(window.location.search).has('code'))
 
@@ -35,11 +38,11 @@ export default function App() {
           setSession(newSession)
         }
       })
-      .catch((e) => setError(e instanceof Error ? e.message : t('error.loginFailed')))
+      .catch((e) => setError(toMessage(e, 'error.loginFailed')))
       .finally(() => setCompletingLogin(false))
   }, [])
 
-  const signOut = useCallback((message: string | null) => {
+  const signOut = useCallback((message: Message | null) => {
     clearSession()
     setSession(null)
     setCharacter(null)
@@ -47,6 +50,10 @@ export default function App() {
     setError(message)
   }, [])
 
+  // refresh는 언어(t)를 쓰지도, 의존성에 넣지도 않는다. 언어가 바뀌어도 재조회·30초 타이머 재시작을 하지 않기 위해서다.
+  // 근거: 조회 응답(캐릭터 수치·활동 기록)에는 서버가 번역한 문구가 없고 화면 문구는 모두 클라이언트 사전으로 그린다.
+  // 서버가 번역하는 것은 오류 message(`{ raw }`)뿐인데, 이는 떠 있는 동안만 이전 언어로 남고 다음 자동 새로고침
+  // (최대 30초, 성공 시 배너 제거 또는 새 Accept-Language로 다시 받음)에서 자연히 갱신되므로 즉시 재조회할 가치가 없다.
   const refresh = useCallback(async () => {
     if (!session) {
       return
@@ -69,16 +76,16 @@ export default function App() {
         return
       }
       if (isUnauthorized(e)) {
-        signOut(t('error.sessionExpired'))
+        signOut({ key: 'error.sessionExpired' })
         return
       }
-      setError(e instanceof Error ? e.message : t('error.network'))
+      setError(toMessage(e, 'error.network'))
     } finally {
       if (activeTokenRef.current === accessToken) {
         setLoading(false)
       }
     }
-  }, [session, date, signOut, t])
+  }, [session, date, signOut])
 
   // 앱이 동기화하면 자동으로 반영되도록 주기적으로 새로고침한다. 로그인 상태에서만 동작한다.
   useEffect(() => {
@@ -110,11 +117,7 @@ export default function App() {
         </div>
       </header>
 
-      {error && (
-        <div className="error-banner" role="alert">
-          {error}
-        </div>
-      )}
+      <ErrorBanner message={error} />
 
       {session ? (
         <>

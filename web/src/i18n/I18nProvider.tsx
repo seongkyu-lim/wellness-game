@@ -5,7 +5,9 @@ import {
   saveLanguage,
   setLanguage as setGlobalLanguage,
   translate,
+  translateMessage,
   type Language,
+  type Message,
   type MessageKey,
   type Params,
 } from './core'
@@ -14,6 +16,8 @@ interface I18n {
   lang: Language
   setLang: (lang: Language) => void
   t: (key: MessageKey, params?: Params) => string
+  /** 보관해 둔 Message(`{ key, params } | { raw }`)를 현재 언어로 그린다. */
+  tMessage: (message: Message) => string
   formatNumber: (value: number) => string
   formatDate: (date: Date, options: Intl.DateTimeFormatOptions) => string
 }
@@ -41,6 +45,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       lang,
       setLang,
       t: (key, params) => translate(lang, key, params),
+      tMessage: (message) => translateMessage(lang, message),
       formatNumber: (n) => new Intl.NumberFormat(locale).format(n),
       formatDate: (date, options) => new Intl.DateTimeFormat(locale, options).format(date),
     }

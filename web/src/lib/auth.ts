@@ -1,5 +1,5 @@
 import { postSocialLogin } from '../api/client'
-import { t } from '../i18n/core'
+import { LocalizedError } from '../i18n/core'
 
 // iOS 앱과 동일한 provider 집합 (Apple은 유료 개발자 계정 + HTTPS 필요로 웹 미지원)
 export type Provider = 'google' | 'kakao' | 'naver'
@@ -100,12 +100,12 @@ export async function completeLoginFromRedirect(): Promise<Session | null> {
   window.history.replaceState(null, '', window.location.pathname)
 
   if (state !== savedState) {
-    throw new Error(t('error.stateMismatch'))
+    throw new LocalizedError({ key: 'error.stateMismatch' })
   }
 
   const provider = state.split(':')[0]
   if (!isProvider(provider)) {
-    throw new Error(t('error.unsupportedProvider'))
+    throw new LocalizedError({ key: 'error.unsupportedProvider' })
   }
   const result = await postSocialLogin(provider, code, redirectUri())
   const session: Session = {
