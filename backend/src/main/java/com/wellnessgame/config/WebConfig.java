@@ -8,6 +8,7 @@ import com.wellnessgame.auth.JwtProperties;
 import com.wellnessgame.auth.KakaoNativeProperties;
 import com.wellnessgame.auth.LoginLockoutProperties;
 import com.wellnessgame.auth.OAuthProperties;
+import com.wellnessgame.auth.RefreshTokenProperties;
 import com.wellnessgame.ratelimit.RateLimitInterceptors;
 import com.wellnessgame.ratelimit.RateLimitProperties;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,6 +29,7 @@ import java.util.List;
         KakaoNativeProperties.class,
         AppleNativeProperties.class,
         JwtProperties.class,
+        RefreshTokenProperties.class,
         LoginLockoutProperties.class,
         RateLimitProperties.class
 })
@@ -59,7 +61,9 @@ public class WebConfig implements WebMvcConfigurer {
     }
 
     /**
-     * /api/auth/** 를 제외한 모든 API 는 Bearer 토큰이 필요하다. /error 등 /api 밖 경로는 대상이 아니다.
+     * 아래 공개 경로를 뺀 모든 /api 는 Bearer 토큰이 필요하다. /error 등 /api 밖 경로는 대상이 아니다.
+     * /api/auth/logout, /api/auth/logout-all, /api/auth/watch-token 은 보호 경로다(공개 목록에 없음).
+     * 웹 코드 교환 {provider} 는 지원 공급자만 공개해 새 /api/auth/* 경로가 조용히 공개되지 않게 한다.
      * 레이트 리밋(#48): 인증 엔드포인트는 IP 별로 인증 전에, 동기화는 userId 별로 인증 뒤에 센다(등록 순서 = 실행 순서).
      */
     @Override
@@ -76,7 +80,8 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/auth/kakao/native",
                         "/api/auth/naver/native",
                         "/api/auth/apple/native",
-                        "/api/auth/{provider}");
+                        "/api/auth/refresh",
+                        "/api/auth/{provider:kakao|naver|google}");
         registry.addInterceptor(rateLimitInterceptors.sync()).addPathPatterns("/api/health-activities/sync");
     }
 

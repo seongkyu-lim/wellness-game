@@ -1,6 +1,7 @@
 package com.wellnessgame.auth;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 import java.time.Duration;
 
@@ -10,12 +11,14 @@ import java.time.Duration;
  * @param bundleId     앱 번들 ID. identity token 의 aud 와 같아야 한다. 비어 있으면 503.
  * @param jwksUri      Apple 공개키(JWKS) URI
  * @param jwksCacheTtl JWKS 메모리 캐시 유지 시간. 지나면 다음 요청에서 다시 받는다.
+ * @param requireNonce true 면 nonce 없는 요청을 401 로 거부한다(#64). nonce 를 보내는 앱이 배포된 뒤 켠다.
  */
 @ConfigurationProperties(prefix = "oauth.apple")
-public record AppleNativeProperties(String bundleId, String jwksUri, Duration jwksCacheTtl) {
+public record AppleNativeProperties(String bundleId, String jwksUri, Duration jwksCacheTtl, boolean requireNonce) {
     public static final String DEFAULT_JWKS_URI = "https://appleid.apple.com/auth/keys";
     public static final Duration DEFAULT_JWKS_CACHE_TTL = Duration.ofHours(1);
 
+    @ConstructorBinding
     public AppleNativeProperties {
         bundleId = bundleId == null ? "" : bundleId.trim();
         if (jwksUri == null || jwksUri.isBlank()) {
@@ -24,6 +27,10 @@ public record AppleNativeProperties(String bundleId, String jwksUri, Duration jw
         if (jwksCacheTtl == null || jwksCacheTtl.isNegative() || jwksCacheTtl.isZero()) {
             jwksCacheTtl = DEFAULT_JWKS_CACHE_TTL;
         }
+    }
+
+    public AppleNativeProperties(String bundleId, String jwksUri, Duration jwksCacheTtl) {
+        this(bundleId, jwksUri, jwksCacheTtl, false);
     }
 
     public boolean configured() {

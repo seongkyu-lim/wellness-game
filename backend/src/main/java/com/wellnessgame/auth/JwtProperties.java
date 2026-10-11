@@ -14,6 +14,7 @@ import java.time.Instant;
  * @param legacyCutoff       iss·aud 가 둘 다 없는 #55 이전 형식 토큰은 iat 가 이 시각보다 이전일 때만 통과시킨다.
  *                           null(설정이 비어 있음)이면 이전 형식 토큰을 받지 않는다. 기본값은 application.yml 에 있다.
  *                           cutoff 이후 발급된 이전 형식 토큰은 위조로 보고 거부하며, 이전 토큰은 ttl 이 지나면 자연히 사라진다.
+ * @param watchTtl           Watch 전용 조회 토큰(scope=read, #76) 유효 기간. 비어 있으면 12시간.
  */
 @ConfigurationProperties(prefix = "auth.jwt")
 public record JwtProperties(
@@ -21,9 +22,11 @@ public record JwtProperties(
         Duration ttl,
         String issuer,
         String audience,
-        Instant legacyCutoff
+        Instant legacyCutoff,
+        Duration watchTtl
 ) {
-    public static final Duration DEFAULT_TTL = Duration.ofDays(30);
+    public static final Duration DEFAULT_TTL = Duration.ofHours(1);
+    public static final Duration DEFAULT_WATCH_TTL = Duration.ofHours(12);
     public static final String DEFAULT_ISSUER = "wellness-game";
     public static final String DEFAULT_AUDIENCE = "wellness-game-api";
 
@@ -38,9 +41,16 @@ public record JwtProperties(
         if (audience == null || audience.isBlank()) {
             audience = DEFAULT_AUDIENCE;
         }
+        if (watchTtl == null) {
+            watchTtl = DEFAULT_WATCH_TTL;
+        }
+    }
+
+    public JwtProperties(String secret, Duration ttl, String issuer, String audience, Instant legacyCutoff) {
+        this(secret, ttl, issuer, audience, legacyCutoff, null);
     }
 
     public JwtProperties(String secret, Duration ttl) {
-        this(secret, ttl, null, null, null);
+        this(secret, ttl, null, null, null, null);
     }
 }
