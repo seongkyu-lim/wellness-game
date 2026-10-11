@@ -1,0 +1,98 @@
+name: iOS CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-ci.yml'
+  push:
+    branches: [dev, main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# macOS 러너는 느리고 비싸므로 같은 브랜치/PR의 이전 실행을 취소한다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: ios
+
+env:
+  PROJECT: WellnessGame.xcodeproj
+
+jobs:
+  build-and-test:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - name: Pick an available iPhone simulator
+        id: sim
+        # 시뮬레이터 이름은 러너 이미지마다 다르므로 가장 최신 iOS 런타임의 iPhone을 고른다.
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          devices = json.load(sys.stdin)["devices"]
+          def version(runtime):
+              return [int(n) for n in re.findall(r"\d+", runtime.split("iOS-")[-1])]
+          for runtime in sorted((r for r in devices if ".iOS-" in r), key=version, reverse=True):
+              for d in devices[runtime]:
+                  if d["name"].startswith("iPhone"):
+                      print(d["udid"]); sys.exit(0)
+          sys.exit("no available iPhone simulator")
+          ')
+          echo "Using simulator $udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      # 테스트 스킴은 앱(Watch 임베드)을 빌드하지 않으므로 watchOS 런타임 없이 돈다.
+      - name: Unit tests (WellnessGameTests)
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme WellnessGameTests \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -resultBundlePath "$RUNNER_TEMP/WellnessGameTests.xcresult" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build watch app
+        run: |
+          xcodebuild build \
+            -project "$PROJECT" \
+            -scheme WellnessGameWatch \
+            -sdk watchsimulator \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+
+      # 앱은 Watch 앱을 임베드한다. -target + -sdk iphonesimulator는 Watch 타깃까지 iOS SDK로 빌드해 실패하므로
+      # 스킴 + generic 목적지로 빌드한다(generic 빌드는 시뮬레이터 런타임이 필요 없다).
+      - name: Build iOS app (with embedded watch app)
+        run: |
+          xcodebuild build \
+            -project "$PROJECT" \
+            -scheme WellnessGame \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: ${{ runner.temp }}/WellnessGameTests.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
