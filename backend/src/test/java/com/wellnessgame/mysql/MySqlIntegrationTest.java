@@ -20,23 +20,25 @@ import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
 import org.flywaydb.core.api.MigrationState;
 import org.hibernate.type.SqlTypes;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Import;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -57,16 +59,18 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * #66 실제 MySQL 8.4 에서만 확인할 수 있는 동작: Flyway 스키마와 ddl-auto=validate, 기존 DB baseline,
  * 행 잠금·갭 잠금·REQUIRES_NEW 를 쓰는 동시 동기화, 작은 연결 풀에서의 동시 요청.
  *
- * <p>{@code ./gradlew mysqlTest} 로 실행한다(기본 {@code test} 에서는 제외). Docker 가 없으면 건너뛴다.
+ * <p>{@code ./gradlew mysqlTest} 로 실행한다(기본 {@code test} 에서는 제외). Docker 가 없으면 로컬에서는 건너뛰고,
+ * {@code CI} 환경변수가 있으면 조용히 건너뛰지 않도록 실패한다. 컨테이너는 그 확인 뒤 {@link #startMySql()} 에서 직접 띄운다.
  */
 @Tag("mysql")
-@Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(classes = WellnessGameApplication.class, properties = {
         // 운영 설정과 같게: Flyway 가 스키마를 만들고 Hibernate 는 검증만 한다.
         "spring.flyway.baseline-on-migrate=true",
@@ -85,7 +89,6 @@ class MySqlIntegrationTest {
     private static final String USER = "mysql-user";
     private static final LocalDate DAY = LocalDate.of(2026, 6, 17);
 
-    @Container
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4.10")
             .withDatabaseName("wellness_game")
             .withUsername("wellness")
@@ -94,6 +97,23 @@ class MySqlIntegrationTest {
             .withUrlParam("useSSL", "false")
             .withUrlParam("allowPublicKeyRetrieval", "true")
             .withUrlParam("serverTimezone", "UTC");
+
+    @BeforeAll
+    static void startMySql() {
+        if (!DockerClientFactory.instance().isDockerAvailable()) {
+            String ci = System.getenv("CI");
+            if (ci != null && !ci.isBlank()) {
+                fail("CI 환경에서는 mysqlTest 를 건너뛰지 않는다: Docker 를 사용할 수 없음");
+            }
+            assumeTrue(false, "Docker 를 사용할 수 없어 MySQL 통합 테스트를 건너뜀");
+        }
+        MYSQL.start();
+    }
+
+    @AfterAll
+    static void stopMySql() {
+        MYSQL.stop();
+    }
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
@@ -145,27 +165,26 @@ class MySqlIntegrationTest {
     }
 
     @Test
-    void existingDdlAutoDatabaseIsBaselinedAndOnlySleepKeyMigrationRuns() throws Exception {
-        // Flyway 이전에 ddl-auto 로 만들어진 DB 를 흉내 낸다: 같은 스키마, 이력 테이블 없음, 구 형식 수면 로그.
+    void existingDdlAutoDatabaseIsBaselinedAndPassesValidateWithV1EquivalentSchema() throws Exception {
+        // Flyway 이전 방식 그대로 Hibernate ddl-auto=create 로 스키마를 만든다(V1 SQL 을 쓰지 않아 V1 을 독립적으로 검증).
         String url = MYSQL.getJdbcUrl().replace("/wellness_game", "/legacy_db");
         try (Connection root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
              Statement statement = root.createStatement()) {
             statement.execute("create database legacy_db");
         }
+        startApplication(url, "spring.flyway.enabled=false", "spring.jpa.hibernate.ddl-auto=create").close();
+
+        // 이력 테이블 없음 + 구 형식 수면 로그
         UUID nap = UUID.randomUUID();
         UUID night = UUID.randomUUID();
         try (Connection legacy = DriverManager.getConnection(url, "root", MYSQL.getPassword())) {
-            try (Statement statement = legacy.createStatement()) {
-                for (String sql : baselineStatements()) {
-                    statement.execute(sql);
-                }
-            }
             insertSleep(legacy, nap, USER + "|2026-06-17T01:00:00Z|2026-06-17T06:00:00Z|SLEEP", 300, 25);
             insertSleep(legacy, night, USER + "|2026-06-16T22:00:00Z|2026-06-17T05:30:00Z|SLEEP", 450, 80);
         }
 
-        Flyway.configure().dataSource(url, "root", MYSQL.getPassword())
-                .baselineOnMigrate(true).baselineVersion("1").load().migrate();
+        // 운영 설정 그대로 기동: baseline(1) → V2 → ddl-auto=validate. 기동에 실패하면 여기서 예외가 난다.
+        startApplication(url, "spring.flyway.baseline-on-migrate=true", "spring.flyway.baseline-version=1",
+                "spring.jpa.hibernate.ddl-auto=validate").close();
 
         Flyway legacyFlyway = Flyway.configure().dataSource(url, "root", MYSQL.getPassword()).load();
         assertThat(legacyFlyway.info().applied()).extracting(MigrationInfo::getState)
@@ -176,6 +195,9 @@ class MySqlIntegrationTest {
             assertThat(keyAndXp(query, night)).isEqualTo(USER + "|2026-06-17|SLEEP:105");
             assertThat(keyAndXp(query, nap)).isEqualTo(USER + "|2026-06-17T01:00:00Z|2026-06-17T06:00:00Z|SLEEP|legacy|" + nap + ":0");
         }
+
+        // V1(빈 DB 에서 Flyway 로 만든 wellness_game)과 Hibernate 가 만든 legacy_db 의 컬럼·인덱스가 같아야 한다.
+        assertThat(schemaShape("legacy_db")).isEqualTo(schemaShape("wellness_game"));
     }
 
     @Test
@@ -333,11 +355,51 @@ class MySqlIntegrationTest {
         return names;
     }
 
-    private static List<String> baselineStatements() throws Exception {
-        String script = new ClassPathResource("db/migration/V1__baseline.sql").getContentAsString(StandardCharsets.UTF_8);
-        String withoutComments = script.lines().filter(line -> !line.trim().startsWith("--"))
-                .reduce("", (a, b) -> a + "\n" + b);
-        return Arrays.stream(withoutComments.split(";")).map(String::trim).filter(sql -> !sql.isEmpty()).toList();
+    /** 테스트 컨텍스트와 별개로 legacy_db 에 연결한 앱을 웹 서버 없이 띄운다. */
+    private static ConfigurableApplicationContext startApplication(String url, String... properties) {
+        List<String> all = new ArrayList<>(List.of(
+                "spring.datasource.url=" + url,
+                "spring.datasource.username=root",
+                "spring.datasource.password=" + MYSQL.getPassword(),
+                "spring.datasource.driver-class-name=" + MYSQL.getDriverClassName(),
+                "spring.jpa.properties.hibernate.type.preferred_uuid_jdbc_type=" + SqlTypes.UUID,
+                "spring.jpa.properties.hibernate.type.preferred_instant_jdbc_type=" + SqlTypes.TIMESTAMP_UTC));
+        all.addAll(List.of(properties));
+        return new SpringApplicationBuilder(WellnessGameApplication.class)
+                .web(WebApplicationType.NONE)
+                .properties(all.toArray(String[]::new))
+                .run();
+    }
+
+    /** 스키마의 컬럼(이름·타입·NULL 허용)과 인덱스(이름·유일 여부·컬럼 순서). Flyway 이력 테이블은 뺀다. */
+    private static List<String> schemaShape(String schema) throws SQLException {
+        List<String> shape = new ArrayList<>();
+        // 앱 계정은 legacy_db 를 볼 권한이 없으므로 root 로 information_schema 를 읽는다.
+        try (Connection connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword())) {
+            for (String sql : List.of("""
+                    select concat_ws(' ', table_name, column_name, column_type, is_nullable)
+                    from information_schema.columns
+                    where table_schema = ? and table_name <> 'flyway_schema_history'
+                    order by table_name, column_name
+                    """, """
+                    select concat_ws(' ', table_name, index_name, non_unique,
+                                     group_concat(column_name order by seq_in_index))
+                    from information_schema.statistics
+                    where table_schema = ? and table_name <> 'flyway_schema_history'
+                    group by table_name, index_name, non_unique
+                    order by table_name, index_name
+                    """)) {
+                try (PreparedStatement query = connection.prepareStatement(sql)) {
+                    query.setString(1, schema);
+                    try (ResultSet rs = query.executeQuery()) {
+                        while (rs.next()) {
+                            shape.add(rs.getString(1));
+                        }
+                    }
+                }
+            }
+        }
+        return shape;
     }
 
     private static void insertSleep(Connection connection, UUID id, String externalKey, int minutes, int gainedXp)
@@ -347,8 +409,7 @@ class MySqlIntegrationTest {
                     (id, user_id, activity_date, type, source_type, sleep_minutes, gained_xp, external_key, created_at)
                 values (?, ?, '2026-06-17', 'SLEEP', 'SLEEP', ?, ?, ?, now(6))
                 """)) {
-            insert.setBytes(1, ByteBuffer.allocate(16)
-                    .putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).array());
+            insert.setBytes(1, bytes(id));
             insert.setString(2, USER);
             insert.setInt(3, minutes);
             insert.setInt(4, gainedXp);
@@ -358,11 +419,15 @@ class MySqlIntegrationTest {
     }
 
     private static String keyAndXp(PreparedStatement query, UUID id) throws SQLException {
-        query.setBytes(1, ByteBuffer.allocate(16)
-                .putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).array());
+        query.setBytes(1, bytes(id));
         try (ResultSet rs = query.executeQuery()) {
             assertThat(rs.next()).isTrue();
             return rs.getString(1) + ":" + rs.getInt(2);
         }
+    }
+
+    /** Hibernate 가 UUID 를 binary(16) 에 저장하는 바이트 순서. */
+    private static byte[] bytes(UUID id) {
+        return ByteBuffer.allocate(16).putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).array();
     }
 }

@@ -43,6 +43,10 @@ public class V2__sleep_key_normalization extends BaseJavaMigration {
     private static final Logger log = LoggerFactory.getLogger(V2__sleep_key_normalization.class);
     static final String LEGACY_MARKER = "|legacy|";
 
+    /** 두 단계가 함께 쓰는 SLEEP 로그 조회 컬럼({@link #querySleepRows} 가 이름으로 읽는다). */
+    private static final String SLEEP_ROW_COLUMNS =
+            "id, user_id, activity_date, external_key, sleep_minutes, created_at, gained_xp";
+
     private static final Comparator<SleepRow> WINNER_FIRST = Comparator
             .comparingInt(SleepRow::sleepMinutes).reversed()
             .thenComparing(SleepRow::createdAt, Comparator.nullsLast(Comparator.<Timestamp>naturalOrder()))
@@ -95,6 +99,9 @@ public class V2__sleep_key_normalization extends BaseJavaMigration {
         int archived = 0;
         for (Map.Entry<String, List<SleepRow>> group : legacyGroupsBySleepKey(connection).entrySet()) {
             List<SleepRow> rows = group.getValue().stream().sorted(WINNER_FIRST).toList();
+            // 이 마이그레이션은 기동 시(Flyway) 앱이 요청을 받기 전에 돈다. 그래도 롤링 배포 중이면 아직 떠 있는 구버전
+            // 인스턴스가 같은 날 새 키 수면 로그를 쓸 수 있어, 존재 확인과 키 변경 사이에 새 키가 생기는 경합이 남는다.
+            // 그 경우에만 유일 제약에 걸리므로 그룹 단위 savepoint 로 이 그룹만 되돌리고 전부 legacy 로 내린다.
             Savepoint savepoint = connection.getAutoCommit() ? null : connection.setSavepoint();
             boolean promotedOne;
             try {
@@ -121,12 +128,16 @@ public class V2__sleep_key_normalization extends BaseJavaMigration {
     /**
      * 키 정리 후보: 이미 legacy 로 바꾼 행과 새 형식으로 보이는 행을 뺀 SLEEP 로그를 새 형식 키별로 묶는다.
      * LIKE 는 대략 거르기만 하고, 새 형식 여부는 계산한 키와 비교해 정확히 확인한다.
+     *
+     * <p>{@code '%-__|SLEEP'} 의 {@code _} 는 임의의 한 글자 와일드카드다(이스케이프하지 않음). 날짜 끝자리
+     * ({@code -17|SLEEP})를 노린 패턴이라 그 외에도 "-두 글자|SLEEP" 으로 끝나는 키는 후보에서 빠질 수 있다.
+     * 구 형식 키는 {@code ...Z|SLEEP} 처럼 ISO 시각으로 끝나므로 빠지지 않는다. 반대로 통과한 행은 아래에서
+     * 계산한 새 키와 정확히 비교해 이미 새 형식인 행을 다시 거른다. 즉 LIKE 는 스캔 범위만 줄이고 정확성은 재검증이 책임진다.
      */
     private Map<String, List<SleepRow>> legacyGroupsBySleepKey(Connection connection) throws SQLException {
         Map<String, List<SleepRow>> groups = new LinkedHashMap<>();
-        for (SleepRow row : querySleepRows(connection, """
-                select id, user_id, activity_date, external_key, sleep_minutes, created_at, gained_xp
-                from health_activity_log
+        for (SleepRow row : querySleepRows(connection, "select " + SLEEP_ROW_COLUMNS + """
+                 from health_activity_log
                 where type = 'SLEEP'
                   and external_key not like '%|legacy|%'
                   and external_key not like '%-__|SLEEP'
@@ -172,9 +183,8 @@ public class V2__sleep_key_normalization extends BaseJavaMigration {
 
     private void consolidateLegacyXp(Connection connection) throws SQLException {
         Map<String, List<SleepRow>> groups = new LinkedHashMap<>();
-        for (SleepRow row : querySleepRows(connection, """
-                select id, user_id, activity_date, external_key, sleep_minutes, created_at, gained_xp
-                from health_activity_log
+        for (SleepRow row : querySleepRows(connection, "select " + SLEEP_ROW_COLUMNS + """
+                 from health_activity_log
                 where type = 'SLEEP'
                   and external_key like '%|legacy|%'
                   and gained_xp <> 0

@@ -92,7 +92,9 @@ cd backend
 - `test`는 MySQL 호환 모드의 인메모리 H2에 운영과 같은 Flyway 마이그레이션을 적용해 돕니다.
 - `mysqlTest`는 `@Tag("mysql")` 테스트만 실행합니다. 실제 MySQL에서만 확인할 수 있는 Flyway 스키마·`ddl-auto=validate`,
   기존 DB baseline, 동시 동기화(신규 사용자 경합, 일일·운동 XP 상한), 작은 연결 풀에서의 동시 요청을 검증합니다.
-  Docker가 없으면 테스트가 실패하지 않고 건너뛰어집니다(skipped).
+  Docker가 없으면 로컬에서는 건너뛰어지고(skipped), `CI` 환경변수가 설정돼 있으면 조용히 넘어가지 않도록 실패합니다.
+- 테스트(H2)는 Instant를 `preferred_instant_jdbc_type: TIMESTAMP`(JVM 시간대 기준)로 매핑해 운영 기본값(`TIMESTAMP_UTC`)과 다릅니다. 시간대 관련 회귀는 `mysqlTest`로 확인하세요.
+- 후속: 백엔드 CI 워크플로에 `./gradlew test mysqlTest`를 추가해야 합니다(아직 없음).
 
 ### DB 스키마 (Flyway)
 
@@ -107,6 +109,12 @@ cd backend
 - **빈 DB:** V1부터 순서대로 실행합니다.
 - **Flyway 도입 전(`ddl-auto: update`)에 만들어진 기존 DB:** 첫 기동 때 `flyway_schema_history`가 없고 테이블이 있으므로
   `baseline-on-migrate`로 버전 1 기준선을 기록해 V1을 건너뛰고, V2부터 적용합니다. 이후에는 새 버전만 실행됩니다.
+- **Flyway 도입 후 첫 운영 배포 전 확인:** baseline은 기존 테이블이 V1과 같다고 가정하고 V1을 건너뜁니다. 예전
+  `ddl-auto: update`는 컬럼을 추가만 하고 타입은 고치지 않으므로, 운영 DB가 V1과 다를 수 있습니다(예: 오래전에 만들어진
+  `health_activity_log.type`이 `enum(...)`이 아니라 `varchar(255)`). 배포 전에 운영 DB에서
+  `SHOW CREATE TABLE user_character;`, `SHOW CREATE TABLE health_activity_log;`, `SHOW CREATE TABLE user_credential;`을
+  실행해 `V1__baseline.sql`과 컬럼 타입·NULL 허용·유일 제약·인덱스를 비교하세요. 다르면 운영 DB를 V1에 맞추는 정렬 SQL을
+  먼저(백업 후) 적용한 뒤 배포합니다. 그대로 배포하면 `ddl-auto: validate`가 기동을 막거나, 통과하더라도 V1과 다른 상태로 남습니다.
 - 스키마를 바꿀 때는 기존 파일을 고치지 말고 `V3__설명.sql`처럼 새 버전을 추가하세요. 적용된 마이그레이션을 고치면 체크섬 검증에 실패합니다.
 
 ### 소셜 로그인 서버 환경변수
