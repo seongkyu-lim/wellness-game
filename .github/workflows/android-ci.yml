@@ -34,7 +34,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      # ubuntu 러너에 Android SDK가 설치돼 있고(ANDROID_HOME) 라이선스도 동의돼 있다.
+      # setup-android 는 sdkmanager 프리뷰 약관 단계에서 실패해 사용하지 않는다.
+      - name: Android SDK
+        run: echo "ANDROID_HOME=$ANDROID_HOME" && test -d "$ANDROID_HOME"
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: ${{ !contains(fromJSON('["refs/heads/dev","refs/heads/main"]'), github.ref) }}
