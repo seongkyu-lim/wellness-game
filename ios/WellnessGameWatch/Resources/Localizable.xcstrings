@@ -256,6 +256,40 @@
         }
       }
     },
+    "로그인 정보를 기기에 저장하지 못했습니다." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save your sign-in info on this device."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인 정보를 기기에 저장하지 못했습니다."
+          }
+        }
+      }
+    },
+    "로그인 정보를 기기에 저장하지 못했습니다. (Keychain %d)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save your sign-in info on this device. (Keychain %d)"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인 정보를 기기에 저장하지 못했습니다. (Keychain %d)"
+          }
+        }
+      }
+    },
     "마지막 동기화 %@" : {
       "extractionState" : "manual",
       "localizations" : {

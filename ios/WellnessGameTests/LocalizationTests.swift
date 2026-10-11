@@ -106,11 +106,7 @@ final class LocalizationCatalogCoverageTests: XCTestCase {
 
     /// 알려진 누락(카탈로그 경로, 원문 키). 이 브랜치 범위 밖 카탈로그라 여기서 고치지 않았다.
     /// 채워지면 테스트가 "목록에서 지우라"고 실패하므로 방치되지 않는다.
-    private static let knownMissing: Set<[String]> = [
-        // Shared/KeychainTokenStore.swift는 Watch 앱에도 컴파일되지만 Watch 카탈로그에 오류 문구가 없다.
-        ["WellnessGameWatch/Resources/Localizable.xcstrings", "로그인 정보를 기기에 저장하지 못했습니다. (Keychain %d)"],
-        ["WellnessGameWatch/Resources/Localizable.xcstrings", "로그인 정보를 기기에 저장하지 못했습니다."],
-    ]
+    private static let knownMissing: Set<[String]> = []
 
     func test_everyLocalizedLiteralInCode_existsInStringCatalogWithEnglish() throws {
         var cache: [String: [String: String]] = [:]
