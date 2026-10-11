@@ -99,3 +99,59 @@ describe('App 배너와 언어 전환', () => {
     expect(screen.getByRole('alert').textContent).toBe('Request failed (502).')
   })
 })
+
+describe('App Auth v2 세션', () => {
+  // 새 탭처럼 sessionStorage에 액세스 토큰이 없는 v2 세션: 첫 요청 전에 refresh한다.
+  const V2_STORED = {
+    provider: 'kakao',
+    userId: 'kakao:1',
+    displayName: '홍길동',
+    refreshToken: 'ref-1',
+    refreshExpiresAt: Date.now() + 86_400_000,
+  }
+
+  it('refresh가 실패하면 세션을 지우고 로그인 만료 배너를 보인다', async () => {
+    localStorage.setItem('wellness.session', JSON.stringify(V2_STORED))
+    fetchMock.mockImplementation(async () => json(401, { message: '만료' }))
+    renderApp()
+
+    expect((await screen.findByRole('alert')).textContent).toBe('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+    expect(localStorage.getItem('wellness.session')).toBeNull()
+    const refreshCalls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/auth/refresh'))
+    expect(refreshCalls).toHaveLength(1)
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/characters/me'))).toBe(false)
+  })
+
+  it('로그아웃 버튼은 refreshToken을 서버에 보내고 로그인 화면으로 돌아간다', async () => {
+    localStorage.setItem('wellness.session', JSON.stringify(V2_STORED))
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/api/auth/refresh')) {
+        return json(200, {
+          userId: 'kakao:1',
+          accessToken: 'acc-2',
+          tokenType: 'Bearer',
+          expiresIn: 3600,
+          refreshToken: 'ref-2',
+          refreshExpiresIn: 2_592_000,
+        })
+      }
+      if (url.endsWith('/api/auth/logout')) {
+        return new Response(null, { status: 204 })
+      }
+      return url.includes('/api/characters/me') ? json(404, {}) : json(200, { userId: 'kakao:1', date: '2026-01-01', activities: [] })
+    })
+    renderApp()
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('wellness.session')!).refreshToken).toBe('ref-2'))
+
+    act(() => screen.getByRole('button', { name: '로그아웃' }).click())
+
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/auth/logout'))).toBe(true),
+    )
+    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/auth/logout'))!
+    expect(JSON.parse(init.body)).toEqual({ refreshToken: 'ref-2' })
+    expect(init.headers.Authorization).toBe('Bearer acc-2')
+    expect(localStorage.getItem('wellness.session')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})

@@ -1,28 +1,10 @@
-import { postSocialLogin } from '../api/client'
+import { postSocialLogin } from '../api/authApi'
 import { LocalizedError } from '../i18n/core'
+import { isProvider, sessionManager, type Provider, type Session } from './session'
 
-// iOS 앱과 동일한 provider 집합 (Apple은 유료 개발자 계정 + HTTPS 필요로 웹 미지원)
-export type Provider = 'google' | 'kakao' | 'naver'
+export type { Provider, Session } from './session'
 
-export interface Session {
-  provider: Provider
-  userId: string
-  displayName: string | null
-  /** 백엔드가 발급한 Bearer 토큰. 보호 API 호출에 사용한다. */
-  accessToken: string
-  /** 토큰 만료 시각 (epoch ms) */
-  expiresAt: number
-}
-
-const SESSION_KEY = 'wellness.session'
 const STATE_KEY = 'wellness.oauth-state'
-// 제거된 게스트 기능이 남긴 키. 더 이상 사용하지 않으므로 발견하면 지운다.
-const LEGACY_GUEST_ID_KEY = 'wellness.userId'
-const PROVIDERS: readonly Provider[] = ['google', 'kakao', 'naver']
-
-function isProvider(value: unknown): value is Provider {
-  return PROVIDERS.includes(value as Provider)
-}
 
 const CLIENT_IDS: Record<Provider, string | undefined> = {
   google: import.meta.env.VITE_GOOGLE_CLIENT_ID,
@@ -39,42 +21,21 @@ export function isConfigured(provider: Provider): boolean {
  * 지우고 로그아웃 상태(null)로 처리한다.
  */
 export function loadSession(): Session | null {
-  localStorage.removeItem(LEGACY_GUEST_ID_KEY)
-  const raw = localStorage.getItem(SESSION_KEY)
-  if (!raw) {
-    return null
-  }
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (isValidSession(parsed) && parsed.expiresAt > Date.now()) {
-      return parsed
-    }
-  } catch {
-    // 손상된 값은 아래에서 제거한다.
-  }
-  localStorage.removeItem(SESSION_KEY)
-  return null
+  return sessionManager.load()
 }
 
-function isValidSession(value: unknown): value is Session {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  const v = value as Record<string, unknown>
-  return (
-    isProvider(v.provider) &&
-    typeof v.userId === 'string' &&
-    v.userId.length > 0 &&
-    typeof v.accessToken === 'string' &&
-    v.accessToken.length > 0 &&
-    typeof v.expiresAt === 'number' &&
-    (v.displayName === null || typeof v.displayName === 'string')
-  )
-}
-
+/** 로컬 세션만 지운다(401 등). 다른 탭에는 로그인 만료로 알린다. */
 export function clearSession(): void {
-  localStorage.removeItem(SESSION_KEY)
+  sessionManager.clear('expired')
 }
+
+/** 사용자 로그아웃. 로컬 세션을 지우고 서버에 리프레시 토큰 폐기를 요청한다(실패해도 로컬 로그아웃은 유지). */
+export function logout(): Promise<void> {
+  return sessionManager.logout()
+}
+
+/** 다른 탭에서 로그아웃·세션 만료가 일어나면 호출된다. 해제 함수를 돌려준다. */
+export const onRemoteSignOut = sessionManager.onRemoteSignOut.bind(sessionManager)
 
 /** provider 인증 페이지로 이동한다. 완료되면 같은 주소로 code와 함께 돌아온다. */
 export function startLogin(provider: Provider): void {
@@ -108,15 +69,7 @@ export async function completeLoginFromRedirect(): Promise<Session | null> {
     throw new LocalizedError({ key: 'error.unsupportedProvider' })
   }
   const result = await postSocialLogin(provider, code, redirectUri())
-  const session: Session = {
-    provider,
-    userId: result.userId,
-    displayName: result.displayName ?? null,
-    accessToken: result.accessToken,
-    expiresAt: Date.now() + Math.max(0, result.expiresIn) * 1000,
-  }
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-  return session
+  return sessionManager.start(provider, result)
 }
 
 function redirectUri(): string {
