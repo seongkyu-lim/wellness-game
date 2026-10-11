@@ -78,6 +78,8 @@ final class SessionCredentialStore: @unchecked Sendable {
     }
 
     /// 로그인·회전 응답으로 저장값을 바꾼다. 리프레시 토큰을 먼저 저장하고, 실패하면 아무것도 바꾸지 않는다.
+    /// 회전 응답 저장이 실패해도 이전 리프레시 토큰은 남으므로, 서버 유예 구간(30초) 안의 다음 요청이
+    /// 이전 토큰으로 다시 리프레시해 복구할 수 있다.
     /// 응답에 리프레시 토큰이 없으면(이전 서버) 남아 있던 리프레시 토큰을 지운다.
     func save(_ tokens: SessionTokens, now: Date) throws {
         try lock.withLock {

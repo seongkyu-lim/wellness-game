@@ -50,8 +50,8 @@ final class UserSession: ObservableObject {
         static let legacyAppleUserIdentifier = "auth.appleUserIdentifier"
     }
 
-    /// Watch 토큰이 이 시간 안에 만료되면 다시 발급한다.
-    static let watchTokenRenewalLeadTime: TimeInterval = 3600
+    /// Watch 토큰(기본 7일)이 이 시간 안에 만료되면 다시 발급한다.
+    static let watchTokenRenewalLeadTime: TimeInterval = 86_400
 
     private let defaults: UserDefaults
     private let credentials: SessionCredentialStore
@@ -60,14 +60,22 @@ final class UserSession: ObservableObject {
     /// 마지막으로 Watch에 보낸 조회 토큰. 앱을 다시 실행하면 비어 있어 첫 동기화 때 다시 발급한다.
     private var watchToken: WatchAuthContext?
     private var isIssuingWatchToken = false
+    /// 로그인 직후 첫 발급을 아직 시도하지 않았으면 true. 그 발급이 실패하면 한 번만 지연 재시도한다.
+    private var isAwaitingFirstWatchToken = false
+    /// 로그인 직후 발급 실패 시 재시도까지 기다리는 시간.
+    private let watchTokenRetryDelay: TimeInterval
+    /// 예약된 지연 재시도. 로그아웃하면 취소한다.
+    private(set) var watchTokenRetryTask: Task<Void, Never>?
 
     /// - Parameter credentials: `NetworkClient`와 같은 인스턴스를 넘겨야 한다. nil이면 `defaults`를 쓰는 Keychain 저장소.
     init(
         defaults: UserDefaults = .standard,
         credentials: SessionCredentialStore? = nil,
         watchPublisher: WatchAuthPublishing = WatchAuthRelay.shared,
+        watchTokenRetryDelay: TimeInterval = 30,
         now: @escaping () -> Date = Date.init
     ) {
+        self.watchTokenRetryDelay = watchTokenRetryDelay
         self.defaults = defaults
         self.credentials = credentials ?? SessionCredentialStore(defaults: defaults)
         self.watchPublisher = watchPublisher
@@ -104,6 +112,9 @@ final class UserSession: ObservableObject {
         }
         // 새 세션이므로 Watch 토큰도 다음 동기화 때 새로 발급한다.
         watchToken = nil
+        watchTokenRetryTask?.cancel()
+        watchTokenRetryTask = nil
+        isAwaitingFirstWatchToken = true
         statusMessage = String(localized: "\(provider.displayName) 계정으로 로그인했습니다.")
     }
 
@@ -125,10 +136,11 @@ final class UserSession: ObservableObject {
         statusMessage = message
     }
 
-    /// Watch 조회 토큰이 없거나 만료 1시간 전이면 다시 발급받아 Watch에 보낸다.
-    /// 앱 포그라운드·백그라운드 동기화 때 호출한다. 발급이 실패하면 이전 값을 유지하고,
+    /// Watch 조회 토큰이 없거나 만료 1일 전이면 다시 발급받아 Watch에 보낸다.
+    /// 앱 포그라운드·백그라운드 동기화 때 호출한다. 발급이 실패하면 이전 값을 유지하고 다음 호출에서 다시 시도한다.
+    /// 로그인 직후 첫 발급이 실패하면 `watchTokenRetryDelay` 뒤 한 번만 다시 시도한다.
     /// 리프레시까지 거절(401)되면 세션이 끝난 것이므로 재로그인을 안내한다.
-    func refreshWatchTokenIfNeeded(issue: () async throws -> WatchTokenResponse) async {
+    func refreshWatchTokenIfNeeded(issue: @escaping () async throws -> WatchTokenResponse) async {
         guard let userId, !isIssuingWatchToken else { return }
         if let watchToken, watchToken.userId == userId {
             guard let expiresAt = watchToken.expiresAt,
@@ -136,6 +148,8 @@ final class UserSession: ObservableObject {
                 return
             }
         }
+        let isFirstAfterSignIn = isAwaitingFirstWatchToken
+        isAwaitingFirstWatchToken = false
         isIssuingWatchToken = true
         defer { isIssuingWatchToken = false }
         do {
@@ -156,6 +170,18 @@ final class UserSession: ObservableObject {
             handleUnauthorized()
         } catch {
             // 일시적 실패: Watch는 이전 토큰을 계속 쓴다.
+            guard isFirstAfterSignIn, self.userId == userId else { return }
+            scheduleWatchTokenRetry(issue: issue)
+        }
+    }
+
+    private func scheduleWatchTokenRetry(issue: @escaping () async throws -> WatchTokenResponse) {
+        watchTokenRetryTask?.cancel()
+        let delay = watchTokenRetryDelay
+        watchTokenRetryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(delay, 0) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await self?.refreshWatchTokenIfNeeded(issue: issue)
         }
     }
 
@@ -174,9 +200,10 @@ final class UserSession: ObservableObject {
         let token = credentials.accessToken
         let date = now()
         let canRefresh = credentials.hasUsableRefreshToken(at: date)
-        let isExpired = credentials.isAccessTokenExpired(at: date) && !canRefresh
+        let accessExpired = credentials.isAccessTokenExpired(at: date)
+        let isExpired = accessExpired && !canRefresh
         // 액세스 토큰이 만료됐거나 없어도 리프레시 토큰이 유효하면 첫 요청에서 갱신한다.
-        let hasCredentials = (token != nil && !credentials.isAccessTokenExpired(at: date)) || canRefresh
+        let hasCredentials = (token != nil && !accessExpired) || canRefresh
 
         if let storedProvider, let storedUserId, hasCredentials {
             provider = storedProvider
@@ -204,6 +231,9 @@ final class UserSession: ObservableObject {
         userId = nil
         displayName = nil
         watchToken = nil
+        isAwaitingFirstWatchToken = false
+        watchTokenRetryTask?.cancel()
+        watchTokenRetryTask = nil
         defaults.removeObject(forKey: Key.provider)
         defaults.removeObject(forKey: Key.userId)
         defaults.removeObject(forKey: Key.displayName)

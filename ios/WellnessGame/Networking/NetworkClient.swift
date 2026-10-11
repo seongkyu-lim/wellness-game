@@ -83,9 +83,15 @@ struct NetworkClient: Sendable {
     }
 
     /// 이 기기 로그아웃. 저장된 리프레시 토큰의 family를 서버에서 폐기한다.
+    /// 공개 경로라 Authorization 없이 리프레시 토큰만 보낸다(액세스 갱신이 실패해도 폐기를 시도할 수 있게).
+    /// 리프레시 토큰이 없으면(이전 세션) 서버에서 폐기할 것이 없으므로 보내지 않는다.
     func logOut() async throws {
-        let body = LogoutRequest(refreshToken: credentials?.refreshToken)
-        let _: EmptyResponse = try await authorizedPost(path: "api/auth/logout", body: body, timeout: Self.logoutTimeout)
+        guard let refreshToken = credentials?.refreshToken else { return }
+        let _: EmptyResponse = try await post(
+            path: "api/auth/logout",
+            body: LogoutRequest(refreshToken: refreshToken),
+            timeout: Self.logoutTimeout
+        )
     }
 
     /// Watch 전용 조회(`scope: read`) 토큰을 발급받는다. 전체 권한 토큰으로만 발급된다.
@@ -124,10 +130,8 @@ struct NetworkClient: Sendable {
         }
         do {
             return try await refreshAccessToken(rejecting: token, credentials)
-        } catch let error as NetworkError {
-            if case .unauthorized = error { throw error }
-            return token
         } catch {
+            if case NetworkError.unauthorized = error { throw error }
             return token
         }
     }
@@ -242,9 +246,9 @@ struct RefreshRequest: Encodable {
     let refreshToken: String
 }
 
-/// 로그아웃 요청. 리프레시 토큰이 없으면(이전 세션) 생략한다.
+/// 로그아웃 요청(무인증). 폐기할 리프레시 토큰.
 struct LogoutRequest: Encodable {
-    let refreshToken: String?
+    let refreshToken: String
 }
 
 /// 로그인·회원가입·구글 토큰 교환의 공통 응답.

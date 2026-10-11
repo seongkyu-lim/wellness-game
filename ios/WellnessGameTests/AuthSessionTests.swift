@@ -64,6 +64,32 @@ final class ScriptedURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+/// 다음 저장 한 번을 실패시키는 토큰 저장소(Keychain 저장 실패 흉내).
+final class FlakyTokenStore: AccessTokenStore, @unchecked Sendable {
+    private let lock = NSLock()
+    private var token: String?
+    private var _failNextSave = false
+
+    var failNextSave: Bool {
+        get { lock.withLock { _failNextSave } }
+        set { lock.withLock { _failNextSave = newValue } }
+    }
+
+    func loadToken() -> String? { lock.withLock { token } }
+
+    func saveToken(_ token: String) throws {
+        try lock.withLock {
+            if _failNextSave {
+                _failNextSave = false
+                throw KeychainError.unexpectedStatus(errSecInteractionNotAllowed)
+            }
+            self.token = token
+        }
+    }
+
+    func deleteToken() { lock.withLock { token = nil } }
+}
+
 /// 테스트에서 시간을 움직이는 시계.
 final class TestClock: @unchecked Sendable {
     private let lock = NSLock()
@@ -118,7 +144,7 @@ private enum AuthV2 {
     }
 
     static func watchToken(_ token: String) -> String {
-        #"{"accessToken":"\#(token)","tokenType":"Bearer","expiresIn":43200}"#
+        #"{"accessToken":"\#(token)","tokenType":"Bearer","expiresIn":604800}"#
     }
 
     static func syncRequest() -> HealthActivitySyncRequest {
@@ -172,9 +198,18 @@ final class AuthRefreshTests: XCTestCase {
         )
     }
 
-    private func makeSession(publisher: WatchAuthPublishing = NoopWatchPublisher()) -> UserSession {
+    private func makeSession(
+        publisher: WatchAuthPublishing = NoopWatchPublisher(),
+        watchTokenRetryDelay: TimeInterval = 30
+    ) -> UserSession {
         let clock = clock!
-        return UserSession(defaults: defaults, credentials: credentials, watchPublisher: publisher, now: { clock.now })
+        return UserSession(
+            defaults: defaults,
+            credentials: credentials,
+            watchPublisher: publisher,
+            watchTokenRetryDelay: watchTokenRetryDelay,
+            now: { clock.now }
+        )
     }
 
     /// access-1은 401, access-2는 200. refresh-1 → (access-2, refresh-2)로 회전.
@@ -398,16 +433,55 @@ final class AuthRefreshTests: XCTestCase {
 
     // MARK: Logout
 
-    func test_logOut_sendsBearerAndRefreshTokenBody() async throws {
+    func test_logOut_sendsOnlyRefreshToken_withoutAuthorization() async throws {
         try credentials.save(AuthV2.login().sessionTokens, now: clock.now)
+        // 액세스 토큰이 만료돼도 갱신 없이 바로 폐기를 요청한다.
+        clock.advance(7200)
         ScriptedURLProtocol.respond { _ in .init(status: 204, json: "") }
 
         try await makeClient().logOut()
 
-        let request = try XCTUnwrap(ScriptedURLProtocol.requests(path: AuthV2.logoutPath).first)
+        XCTAssertEqual(ScriptedURLProtocol.requests.map { $0.url?.path }, [AuthV2.logoutPath])
+        let request = try XCTUnwrap(ScriptedURLProtocol.requests.first)
         XCTAssertEqual(request.httpMethod, "POST")
-        XCTAssertEqual(AuthV2.bearer(request), "Bearer access-1")
+        XCTAssertNil(AuthV2.bearer(request), "로그아웃은 무인증 공개 경로다")
         XCTAssertEqual(ScriptedURLProtocol.json(of: request), ["refreshToken": "refresh-1"])
+    }
+
+    func test_logOut_withoutRefreshToken_sendsNothing() async throws {
+        try credentials.save(AuthV2.login(refresh: nil).sessionTokens, now: clock.now)
+        ScriptedURLProtocol.respond { _ in .init(status: 204, json: "") }
+
+        try await makeClient().logOut()
+
+        XCTAssertTrue(ScriptedURLProtocol.requests.isEmpty)
+    }
+
+    func test_refreshSaveFailure_keepsPreviousRefreshToken_andNextRequestRecovers() async throws {
+        let flaky = FlakyTokenStore()
+        credentials = SessionCredentialStore(accessStore: accessStore, refreshStore: flaky, defaults: defaults)
+        try credentials.save(AuthV2.login().sessionTokens, now: clock.now)
+        flaky.failNextSave = true
+        respondWithRotation()
+        let client = makeClient()
+
+        do {
+            _ = try await client.sync(AuthV2.syncRequest())
+            XCTFail("회전 토큰 저장 실패는 에러가 나야 합니다")
+        } catch {
+            XCTAssertTrue(error is KeychainError, "\(error)")
+        }
+        XCTAssertEqual(flaky.loadToken(), "refresh-1", "저장 실패 시 이전 리프레시 토큰을 유지한다")
+        XCTAssertEqual(accessStore.loadToken(), "access-1")
+
+        // 서버 유예 구간(30초) 안에 이전 토큰으로 다시 리프레시하면 복구된다.
+        let response = try await client.sync(AuthV2.syncRequest())
+
+        XCTAssertEqual(response.gainedXp, 10)
+        let refreshes = ScriptedURLProtocol.requests(path: AuthV2.refreshPath)
+        XCTAssertEqual(refreshes.compactMap { ScriptedURLProtocol.json(of: $0)?["refreshToken"] }, ["refresh-1", "refresh-1"])
+        XCTAssertEqual(flaky.loadToken(), "refresh-2")
+        XCTAssertEqual(accessStore.loadToken(), "access-2")
     }
 
     func test_signOutFlow_clearsLocalSession_evenWhenServerFails() async throws {
@@ -464,16 +538,17 @@ final class AuthRefreshTests: XCTestCase {
         XCTAssertEqual(first.accessToken, "watch-1")
         XCTAssertEqual(first.userId, "password:alice")
         XCTAssertEqual(first.displayName, "Alice")
-        XCTAssertEqual(first.expiresAt, clock.now.addingTimeInterval(43200))
+        XCTAssertEqual(first.expiresAt, clock.now.addingTimeInterval(604_800))
         let issue = try XCTUnwrap(ScriptedURLProtocol.requests(path: AuthV2.watchTokenPath).first)
         XCTAssertEqual(AuthV2.bearer(issue), "Bearer access-1", "watch-token은 전체 권한 토큰으로 발급받는다")
 
-        // 만료까지 1시간 넘게 남았으면 다시 발급하지 않는다(동기화 간격과 무관).
-        clock.advance(43200 - 3601)
+        // 만료까지 1일 넘게 남았으면 다시 발급하지 않는다(동기화 간격과 무관).
+        clock.advance(604_800 - 86_401)
+        try credentials.save(AuthV2.login(access: "access-1").sessionTokens, now: clock.now)
         await viewModel.autoSync()
         XCTAssertEqual(ScriptedURLProtocol.requests(path: AuthV2.watchTokenPath).count, 1)
 
-        // 1시간 이내로 들어오면 재발급해 다시 보낸다.
+        // 1일 이내로 들어오면 재발급해 다시 보낸다.
         clock.advance(2)
         try credentials.save(AuthV2.login(access: "access-1").sessionTokens, now: clock.now)
         await viewModel.autoSync()
@@ -490,7 +565,7 @@ final class AuthRefreshTests: XCTestCase {
 
         await session.refreshWatchTokenIfNeeded { try await client.issueWatchToken() }
         let publishedCount = spy.published.count
-        clock.advance(43200 - 60)
+        clock.advance(604_800 - 60)
         try credentials.save(AuthV2.login().sessionTokens, now: clock.now)
         await session.refreshWatchTokenIfNeeded { try await client.issueWatchToken() }
 
@@ -498,6 +573,41 @@ final class AuthRefreshTests: XCTestCase {
         XCTAssertEqual(spy.published.count, publishedCount, "실패하면 빈 값이나 새 값을 보내지 않는다")
         XCTAssertEqual((spy.published.last ?? nil)?.accessToken, "watch-1")
         XCTAssertTrue(session.isSignedIn)
+    }
+
+    func test_watchTokenFailureRightAfterSignIn_isRetriedOnceAfterDelay() async throws {
+        let spy = SpyWatchPublisher()
+        let session = makeSession(publisher: spy, watchTokenRetryDelay: 0.01)
+        try session.signIn(provider: .password, auth: AuthV2.login())
+        respondWithWatchTokens([nil, "watch-1"])
+        let client = makeClient()
+
+        await session.refreshWatchTokenIfNeeded { try await client.issueWatchToken() }
+        XCTAssertNotNil(session.watchTokenRetryTask)
+        await session.watchTokenRetryTask?.value
+
+        XCTAssertEqual(ScriptedURLProtocol.requests(path: AuthV2.watchTokenPath).count, 2)
+        XCTAssertEqual((spy.published.last ?? nil)?.accessToken, "watch-1")
+    }
+
+    func test_watchTokenRetryAfterSignIn_happensOnlyOnce() async throws {
+        let session = makeSession(watchTokenRetryDelay: 0.01)
+        try session.signIn(provider: .password, auth: AuthV2.login())
+        respondWithWatchTokens([])
+        let client = makeClient()
+
+        await session.refreshWatchTokenIfNeeded { try await client.issueWatchToken() }
+        let retry = try XCTUnwrap(session.watchTokenRetryTask)
+        await retry.value
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(ScriptedURLProtocol.requests(path: AuthV2.watchTokenPath).count, 2)
+        XCTAssertTrue(session.isSignedIn)
+
+        // 이후 실패는 지연 재시도 없이 다음 포그라운드에서 다시 시도한다.
+        await session.refreshWatchTokenIfNeeded { try await client.issueWatchToken() }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(ScriptedURLProtocol.requests(path: AuthV2.watchTokenPath).count, 3)
     }
 
     func test_watchToken_isReissuedAfterSignInAgain() async throws {

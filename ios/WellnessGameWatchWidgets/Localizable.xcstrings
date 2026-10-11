@@ -86,19 +86,19 @@
         }
       }
     },
-    "iPhone에서 로그인하세요" : {
+    "iPhone 앱을 열어 주세요" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sign in on your iPhone"
+            "value" : "Open the iPhone app"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iPhone에서 로그인하세요"
+            "value" : "iPhone 앱을 열어 주세요"
           }
         }
       }
