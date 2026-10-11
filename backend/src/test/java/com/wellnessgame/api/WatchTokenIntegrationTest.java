@@ -66,7 +66,7 @@ class WatchTokenIntegrationTest {
 
         assertThat(fieldNames(body)).containsExactlyInAnyOrder("accessToken", "tokenType", "expiresIn");
         assertThat(body.path("tokenType").asText()).isEqualTo("Bearer");
-        assertThat(body.path("expiresIn").asLong()).isEqualTo(Duration.ofHours(12).toSeconds());
+        assertThat(body.path("expiresIn").asLong()).isEqualTo(Duration.ofDays(7).toSeconds());
         assertThat(tokenService.authenticate(body.path("accessToken").asText()).scope()).isEqualTo(TokenScope.READ);
         assertThat(tokenService.verify(body.path("accessToken").asText())).isEqualTo(USER);
     }
@@ -100,7 +100,7 @@ class WatchTokenIntegrationTest {
                         .content("{\"activities\": []}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message", is(READ_ONLY_KO)));
-        for (String path : List.of("/api/auth/watch-token", "/api/auth/logout", "/api/auth/logout-all")) {
+        for (String path : List.of("/api/auth/watch-token", "/api/auth/logout-all")) {
             mockMvc.perform(post(path).with(bearerToken(watchToken)))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.message", is(READ_ONLY_KO)));
@@ -115,10 +115,13 @@ class WatchTokenIntegrationTest {
     }
 
     @Test
-    void readOnlyTokenExpiresAfterTwelveHours() throws Exception {
+    void readOnlyTokenExpiresAfterSevenDays() throws Exception {
         String watchToken = issueWatchToken().path("accessToken").asText();
 
-        clock.setInstant(TestClockConfig.DEFAULT_NOW.plus(Duration.ofHours(12)).plusSeconds(1));
+        clock.setInstant(TestClockConfig.DEFAULT_NOW.plus(Duration.ofDays(7)).minusSeconds(1));
+        mockMvc.perform(get("/api/characters/me").with(bearerToken(watchToken)))
+                .andExpect(status().isOk());
+        clock.setInstant(TestClockConfig.DEFAULT_NOW.plus(Duration.ofDays(7)).plusSeconds(1));
         mockMvc.perform(get("/api/characters/me").with(bearerToken(watchToken)))
                 .andExpect(status().isUnauthorized());
     }

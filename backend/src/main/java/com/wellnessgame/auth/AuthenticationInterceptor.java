@@ -15,7 +15,8 @@ import org.springframework.web.util.pattern.PathPatternParser;
 import java.util.List;
 
 /**
- * 보호 API 요청의 {@code Authorization: Bearer <jwt>} 를 검증하고 주체·권한 범위를 요청 속성에 담는다.
+ * 보호 API 요청의 {@code Authorization: Bearer <jwt>} 를 검증하고 주체를 요청 속성에 담는다.
+ * 사용자의 무효화 기준({@link TokenValidityService}) 이전에 발급된 토큰은 401 이다.
  * 실패하면 {@link UnauthorizedException} 을 던져 ApiExceptionHandler 가 401 로 응답하게 한다.
  * CORS preflight 는 토큰 없이 통과시킨다.
  *
@@ -25,17 +26,19 @@ import java.util.List;
 @Component
 public class AuthenticationInterceptor implements HandlerInterceptor {
     public static final String USER_ID_ATTRIBUTE = AuthenticationInterceptor.class.getName() + ".userId";
-    public static final String SCOPE_ATTRIBUTE = AuthenticationInterceptor.class.getName() + ".scope";
     private static final String BEARER_PREFIX = "Bearer ";
     /** 조회 전용 토큰이 GET 으로 부를 수 있는 경로. */
     static final List<PathPattern> READ_ONLY_PATHS = List.of(
+            PathPatternParser.defaultInstance.parse("/api/characters/me"),
             PathPatternParser.defaultInstance.parse("/api/characters/{userId}"),
             PathPatternParser.defaultInstance.parse("/api/health-activities"));
 
     private final JwtTokenService tokenService;
+    private final TokenValidityService tokenValidityService;
 
-    public AuthenticationInterceptor(JwtTokenService tokenService) {
+    public AuthenticationInterceptor(JwtTokenService tokenService, TokenValidityService tokenValidityService) {
         this.tokenService = tokenService;
+        this.tokenValidityService = tokenValidityService;
     }
 
     @Override
@@ -55,11 +58,13 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
             throw new UnauthorizedException(Messages.get("auth.token-invalid"));
         }
         AccessTokenPrincipal principal = tokenService.authenticate(token);
+        if (tokenValidityService.isRevoked(principal.userId(), principal.issuedAt())) {
+            throw new UnauthorizedException(Messages.get("auth.session-revoked"));
+        }
         if (principal.scope() == TokenScope.READ && !isReadOnlyRequest(request)) {
             throw new ForbiddenException(Messages.get("auth.read-only-token"));
         }
         request.setAttribute(USER_ID_ATTRIBUTE, principal.userId());
-        request.setAttribute(SCOPE_ATTRIBUTE, principal.scope());
         return true;
     }
 

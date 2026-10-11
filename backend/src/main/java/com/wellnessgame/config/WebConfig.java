@@ -62,7 +62,8 @@ public class WebConfig implements WebMvcConfigurer {
 
     /**
      * 아래 공개 경로를 뺀 모든 /api 는 Bearer 토큰이 필요하다. /error 등 /api 밖 경로는 대상이 아니다.
-     * /api/auth/logout, /api/auth/logout-all, /api/auth/watch-token 은 보호 경로다(공개 목록에 없음).
+     * /api/auth/logout 은 리프레시 토큰 소유로 권한을 증명하므로 공개다. /api/auth/logout-all, /api/auth/watch-token 은
+     * 보호 경로다(공개 목록에 없음).
      * 웹 코드 교환 {provider} 는 지원 공급자만 공개해 새 /api/auth/* 경로가 조용히 공개되지 않게 한다.
      * 레이트 리밋(#48): 인증 엔드포인트는 IP 별로 인증 전에, 동기화는 userId 별로 인증 뒤에 센다(등록 순서 = 실행 순서).
      */
@@ -81,6 +82,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/auth/naver/native",
                         "/api/auth/apple/native",
                         "/api/auth/refresh",
+                        "/api/auth/logout",
                         "/api/auth/{provider:kakao|naver|google}");
         registry.addInterceptor(rateLimitInterceptors.sync()).addPathPatterns("/api/health-activities/sync");
     }

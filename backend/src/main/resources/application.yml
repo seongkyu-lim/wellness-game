@@ -49,8 +49,8 @@ auth:
     secret: ${AUTH_JWT_SECRET:}
     # 액세스 토큰 유효 기간(Auth v2). 만료되면 클라이언트가 /api/auth/refresh 로 새로 받는다.
     ttl: ${AUTH_JWT_TTL:1h}
-    # Watch 전용 조회 토큰(scope=read, POST /api/auth/watch-token) 유효 기간(#76)
-    watch-ttl: ${AUTH_WATCH_TOKEN_TTL:12h}
+    # Watch 전용 조회 토큰(scope=read, POST /api/auth/watch-token) 유효 기간(#76). iPhone 앱을 며칠 열지 않아도 Watch 가 끊기지 않게 길게 둔다.
+    watch-ttl: ${AUTH_WATCH_TOKEN_TTL:7d}
     issuer: ${AUTH_JWT_ISSUER:wellness-game}
     audience: ${AUTH_JWT_AUDIENCE:wellness-game-api}
     # iss·aud 가 없는 #55 이전 형식 토큰은 iat 가 이 시각(ISO-8601) 이전일 때만 허용한다. 비우면 허용하지 않는다(README 참고).
@@ -58,6 +58,10 @@ auth:
   # 회전 리프레시 토큰(Auth v2). DB(refresh_token)에는 SHA-256 해시만 저장한다.
   refresh:
     ttl: ${AUTH_REFRESH_TTL:30d}
+    # 한 로그인(family)의 절대 수명. 회전해도 이 기간을 넘지 못한다.
+    absolute-ttl: ${AUTH_REFRESH_ABSOLUTE_TTL:90d}
+    # 회전된 지 이 시간 안의 토큰이 다시 오면(응답 유실·동시 요청) 재사용으로 보지 않고 형제 토큰을 준다.
+    reuse-grace: ${AUTH_REFRESH_REUSE_GRACE:30s}
     # 폐기된 행을 재사용 감지용으로 남겨 두는 기간. 만료 행과 함께 정리 작업이 지운다.
     revoked-retention: ${AUTH_REFRESH_REVOKED_RETENTION:7d}
     # 정리 작업 시각(app.timezone 기준, 기본 매일 04:00)
@@ -94,11 +98,14 @@ oauth:
     client-ids: ${OAUTH_GOOGLE_IOS_CLIENT_ID:}
     jwks-uri: https://www.googleapis.com/oauth2/v3/certs
     jwks-cache-ttl: 1h
+    # JWKS 조회가 계속 실패할 때 마지막으로 받은 키를 쓰는 최대 기간(마지막 조회 기준). 넘으면 503.
+    jwks-stale-max: 24h
   # iOS Sign in with Apple identity token 검증(POST /api/auth/apple/native).
   # aud 가 bundle-id 와 같아야 한다. 비어 있으면 해당 엔드포인트는 503.
   apple:
     bundle-id: ${OAUTH_APPLE_BUNDLE_ID:}
     jwks-uri: https://appleid.apple.com/auth/keys
     jwks-cache-ttl: 1h
+    jwks-stale-max: 24h
     # true 면 nonce 없는 apple/native 요청을 401 로 거부한다(#64). nonce 를 보내는 앱 배포 후 켠다.
     require-nonce: ${OAUTH_APPLE_REQUIRE_NONCE:false}

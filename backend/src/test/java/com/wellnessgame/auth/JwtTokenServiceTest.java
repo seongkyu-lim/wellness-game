@@ -43,11 +43,11 @@ class JwtTokenServiceTest {
     }
 
     @Test
-    void defaultsTtlToOneHourAndWatchTtlToTwelveHours() {
+    void defaultsTtlToOneHourAndWatchTtlToSevenDays() {
         JwtTokenService defaults = new JwtTokenService(new JwtProperties(SECRET, null), clock);
 
         assertThat(defaults.issue("password:abc").expiresIn()).isEqualTo(3_600L);
-        assertThat(defaults.issueReadOnly("password:abc").expiresIn()).isEqualTo(43_200L);
+        assertThat(defaults.issueReadOnly("password:abc").expiresIn()).isEqualTo(604_800L);
     }
 
     // ---- 조회 전용 토큰(#76) ----
@@ -59,9 +59,9 @@ class JwtTokenServiceTest {
 
         assertThat(read.tokenType()).isEqualTo("Bearer");
         assertThat(service.authenticate(read.accessToken()))
-                .isEqualTo(new AccessTokenPrincipal("google:123", TokenScope.READ));
+                .isEqualTo(new AccessTokenPrincipal("google:123", TokenScope.READ, NOW));
         assertThat(service.authenticate(full.accessToken()))
-                .isEqualTo(new AccessTokenPrincipal("google:123", TokenScope.FULL));
+                .isEqualTo(new AccessTokenPrincipal("google:123", TokenScope.FULL, NOW));
         assertThat(payload(read.accessToken())).contains("\"scope\":\"read\"");
         assertThat(payload(full.accessToken())).doesNotContain("scope");
     }

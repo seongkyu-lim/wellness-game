@@ -140,7 +140,8 @@ public class JwtTokenService {
         if (scope == null) {
             throw new UnauthorizedException(Messages.get("auth.token-invalid"));
         }
-        return new AccessTokenPrincipal(claims.getSubject(), scope);
+        Date issuedAt = claims.getIssuedAt();
+        return new AccessTokenPrincipal(claims.getSubject(), scope, issuedAt == null ? null : issuedAt.toInstant());
     }
 
     /** iss·aud 가 설정값과 맞거나, 둘 다 없는 이전 형식 토큰이고 cutoff 이전에 발급된 경우. */
@@ -159,7 +160,4 @@ public class JwtTokenService {
         return ttl;
     }
 
-    public Duration watchTtl() {
-        return watchTtl;
-    }
 }

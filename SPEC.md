@@ -232,14 +232,21 @@ if sleepScore >= 80: xp += 20   # 수면 품질 보너스
 - 액세스 토큰(JWT, HS256) 기본 1시간(`auth.jwt.ttl`), 리프레시 토큰 기본 30일(`auth.refresh.ttl`, 불투명 43자, DB에는 SHA-256 hex만).
 - 로그인·가입·소셜 교환 응답: 기존 필드(`userId`, `displayName`, `accessToken`, `tokenType`, `expiresIn`, 아이디 로그인은 `userIdentifier`)
   + `refreshToken`, `refreshExpiresIn`(초).
-- `POST /api/auth/refresh {refreshToken}`: 유효하면 기존 토큰 폐기·`replaced_by` 기록 후 같은 family로 새 리프레시(새 30일)와 새 액세스 토큰.
-  이미 폐기된 토큰이면 family 전체 폐기 후 401, 없음·만료도 401. 공개 경로이며 `/api/auth/**` IP 한도를 받는다.
-- `POST /api/auth/logout {refreshToken?}`: 그 토큰이 요청자 것이면 family 폐기. `POST /api/auth/logout-all`: 요청자의 모든 리프레시 폐기. 둘 다 204.
-- `POST /api/auth/watch-token`: `{accessToken, tokenType, expiresIn}`, `scope: "read"`, 12시간(`auth.jwt.watch-ttl`).
+- `POST /api/auth/refresh {refreshToken}`: 유효하면 기존 토큰 폐기·`replaced_by` 기록 후 같은 family로 새 리프레시와 새 액세스 토큰.
+  새 리프레시 만료 = min(지금 + 30일, family 생성 + 90일 `auth.refresh.absolute-ttl`).
+  회전된 지 30초(`auth.refresh.reuse-grace`) 안의 토큰이 다시 오면 같은 family에 형제 토큰을 발급(기존 후계 유지, 200).
+  유예 구간이 지난 회전된 토큰이면 family 전체 폐기 + 사용자 액세스 토큰 무효화 후 401. 로그아웃으로 폐기된 토큰·없음·만료는 401.
+  공개 경로이며 `/api/auth/**` IP 한도를 받는다.
+- `POST /api/auth/logout {refreshToken}`: 공개 경로(토큰 소유가 권한). 그 토큰의 family 폐기. 없는·폐기된 토큰도 204, 빈 값 400.
+- `POST /api/auth/logout-all`(Bearer): 요청자의 모든 리프레시 폐기 + `tokens_valid_after` 갱신. 204.
+- 액세스 토큰은 `iat < tokens_valid_after`(사용자별, 초 단위)면 scope와 무관하게 401(`auth.session-revoked`). 서버 메모리 캐시 30초.
+- `POST /api/auth/watch-token`: `{accessToken, tokenType, expiresIn}`, `scope: "read"`, 7일(`auth.jwt.watch-ttl`).
   read 토큰은 `GET /api/characters/{userId|me}`, `GET /api/health-activities`만 허용, 나머지는 403(`auth.read-only-token`).
   scope 클레임이 없는 토큰은 전체 권한, 모르는 scope 값은 401.
 - 정리 작업: 하루 1회 만료 행과 폐기 후 7일 지난 행 삭제.
-- 공개 경로: `signup`, `login`, `{google|kakao|naver|apple}/native`, `refresh`, `{kakao|naver|google}`(웹 코드 교환). 그 밖의 `/api/**`는 Bearer 필요.
+- 공개 경로: `signup`, `login`, `{google|kakao|naver|apple}/native`, `refresh`, `logout`, `{kakao|naver|google}`(웹 코드 교환).
+  그 밖의 `/api/**`는 Bearer 필요(지원하지 않는 `/api/auth/{x}`도 401).
+- 외부 ID 토큰 JWKS: 조회 실패 시 마지막 키를 최대 24시간(`jwks-stale-max`) 사용, 넘으면 503.
 
 ### 오류 응답 문구
 

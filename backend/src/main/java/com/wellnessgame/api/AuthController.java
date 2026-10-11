@@ -126,19 +126,17 @@ public class AuthController {
         return RefreshResponse.of(rotation.userId(), tokenService.issue(rotation.userId()), rotation.refreshToken());
     }
 
-    /** 이 기기 로그아웃: body 의 리프레시 토큰 family 를 폐기한다. body 가 없으면 서버에서 할 일이 없다. */
+    /**
+     * 이 기기 로그아웃: body 의 리프레시 토큰 family 를 폐기한다. 공개 경로다(토큰 소유가 곧 권한 증명이라 액세스 토큰이
+     * 만료된 뒤에도 로그아웃할 수 있다). 토큰이 없거나 이미 폐기됐어도 같은 204 로 응답해 토큰 유효 여부를 드러내지 않는다.
+     */
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(
-            @AuthenticatedUser String userId,
-            @Valid @RequestBody(required = false) LogoutRequest request
-    ) {
-        if (request != null && request.refreshToken() != null) {
-            refreshTokenService.revokeFamily(userId, request.refreshToken());
-        }
+    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest request) {
+        refreshTokenService.revokeFamily(request.refreshToken());
         return ResponseEntity.noContent().build();
     }
 
-    /** 모든 기기 로그아웃: 사용자의 리프레시 토큰을 모두 폐기한다(이미 발급된 액세스 토큰은 만료까지 유효). */
+    /** 모든 기기 로그아웃: 사용자의 리프레시 토큰을 모두 폐기하고 이미 발급된 액세스 토큰도 무효로 만든다. */
     @PostMapping("/logout-all")
     public ResponseEntity<Void> logoutAll(@AuthenticatedUser String userId) {
         refreshTokenService.revokeAll(userId);
@@ -221,11 +219,6 @@ public class AuthController {
 
     public record RefreshRequest(
             @NotBlank @Size(max = MAX_REFRESH_TOKEN_LENGTH, message = "{validation.token.size}") String refreshToken
-    ) {
-    }
-
-    public record LogoutRequest(
-            @Size(max = MAX_REFRESH_TOKEN_LENGTH, message = "{validation.token.size}") String refreshToken
     ) {
     }
 

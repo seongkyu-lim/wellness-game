@@ -45,7 +45,7 @@ public class GoogleNativeAuthService {
         this.allowedAudiences = allowedAudiences(oauthProperties, nativeProperties);
         this.clock = clock;
         JwksKeyCache keys = new JwksKeyCache("Google", restClientBuilder.build(),
-                nativeProperties.jwksUri(), nativeProperties.jwksCacheTtl(), clock);
+                nativeProperties.jwksUri(), nativeProperties.jwksCacheTtl(), nativeProperties.jwksStaleMax(), clock);
         this.parser = Jwts.parser()
                 .keyLocator(keys.locator())
                 .clock(() -> Date.from(clock.instant()))

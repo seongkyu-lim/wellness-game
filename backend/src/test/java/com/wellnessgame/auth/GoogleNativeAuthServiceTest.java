@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
@@ -189,6 +190,30 @@ class GoogleNativeAuthServiceTest {
         assertThat(service.authenticate(token).userId()).isEqualTo("google:109876");
         clock.setInstant(later.plus(JwksKeyCache.FAILURE_BACKOFF).minusSeconds(1));
         assertThat(service.authenticate(token).userId()).isEqualTo("google:109876");
+        server.verify();
+    }
+
+    /** stale-on-error 는 마지막 조회 후 jwks-stale-max(기본 24시간)까지만. 넘으면 503. */
+    @Test
+    void stopsUsingStaleKeysAfterStaleMax() {
+        expectJwks(jwks(KID, googleKey));
+        Instant staleLimit = NOW.plus(GoogleNativeProperties.DEFAULT_JWKS_STALE_MAX);
+        String token = token(b -> b.expiration(Date.from(staleLimit.plus(Duration.ofHours(1)))));
+        service.authenticate(token);
+        server.verify();
+
+        server.reset();
+        server.expect(ExpectedCount.twice(), requestTo(JWKS)).andRespond(withServerError());
+        clock.setInstant(staleLimit);
+        assertThat(service.authenticate(token).userId()).isEqualTo("google:109876");
+
+        clock.setInstant(staleLimit.plusSeconds(1).plus(JwksKeyCache.FAILURE_BACKOFF));
+        assertThatIllegalStateException()
+                .isThrownBy(() -> service.authenticate(token))
+                .withMessageContaining("구글 ID 토큰을 검증하지 못했습니다");
+        // 재시도 억제 구간에도 stale-max 를 넘은 키는 쓰지 않는다.
+        clock.setInstant(staleLimit.plusSeconds(2).plus(JwksKeyCache.FAILURE_BACKOFF));
+        assertThatIllegalStateException().isThrownBy(() -> service.authenticate(token));
         server.verify();
     }
 

@@ -97,7 +97,8 @@ public class AppleNativeAuthService {
     }
 
     private JwtParser buildParser(RestClient restClient, Clock clock) {
-        JwksKeyCache keys = new JwksKeyCache("Apple", restClient, properties.jwksUri(), properties.jwksCacheTtl(), clock);
+        JwksKeyCache keys = new JwksKeyCache("Apple", restClient, properties.jwksUri(), properties.jwksCacheTtl(),
+                properties.jwksStaleMax(), clock);
         return Jwts.parser()
                 .keyLocator(keys.locator())
                 .requireIssuer(APPLE_ISSUER)

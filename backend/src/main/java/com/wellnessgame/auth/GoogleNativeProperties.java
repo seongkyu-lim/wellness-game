@@ -1,6 +1,7 @@
 package com.wellnessgame.auth;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 import java.time.Duration;
 import java.util.List;
@@ -11,12 +12,15 @@ import java.util.List;
  *
  * @param jwksUri      Google 공개키(JWKS) URI
  * @param jwksCacheTtl JWKS 메모리 캐시 유지 시간
+ * @param jwksStaleMax JWKS 조회 실패 시 마지막으로 받은 키를 쓰는 최대 기간. 비어 있으면 24시간.
  */
 @ConfigurationProperties(prefix = "oauth.google-native")
-public record GoogleNativeProperties(List<String> clientIds, String jwksUri, Duration jwksCacheTtl) {
+public record GoogleNativeProperties(List<String> clientIds, String jwksUri, Duration jwksCacheTtl, Duration jwksStaleMax) {
     public static final String DEFAULT_JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs";
     public static final Duration DEFAULT_JWKS_CACHE_TTL = Duration.ofHours(1);
+    public static final Duration DEFAULT_JWKS_STALE_MAX = Duration.ofHours(24);
 
+    @ConstructorBinding
     public GoogleNativeProperties {
         clientIds = clientIds == null ? List.of() : List.copyOf(clientIds);
         if (jwksUri == null || jwksUri.isBlank()) {
@@ -25,5 +29,12 @@ public record GoogleNativeProperties(List<String> clientIds, String jwksUri, Dur
         if (jwksCacheTtl == null || jwksCacheTtl.isNegative() || jwksCacheTtl.isZero()) {
             jwksCacheTtl = DEFAULT_JWKS_CACHE_TTL;
         }
+        if (jwksStaleMax == null || jwksStaleMax.isNegative()) {
+            jwksStaleMax = DEFAULT_JWKS_STALE_MAX;
+        }
+    }
+
+    public GoogleNativeProperties(List<String> clientIds, String jwksUri, Duration jwksCacheTtl) {
+        this(clientIds, jwksUri, jwksCacheTtl, null);
     }
 }

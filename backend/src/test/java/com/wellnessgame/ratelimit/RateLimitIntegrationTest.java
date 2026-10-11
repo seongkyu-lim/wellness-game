@@ -129,6 +129,22 @@ class RateLimitIntegrationTest {
         refresh("198.51.100.61").andExpect(status().isUnauthorized());
     }
 
+    /** 공개 경로인 /api/auth/logout 도 /api/auth/** IP 한도에 포함된다. */
+    @Test
+    void logoutCountsTowardWholeAuthLimitPerIp() throws Exception {
+        for (int i = 0; i < 4; i++) {
+            mockMvc.perform(fromIp(post("/api/auth/logout"), "198.51.100.80")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"refreshToken\": \"unknown-refresh-token\"}"))
+                    .andExpect(status().isNoContent());
+        }
+
+        mockMvc.perform(fromIp(post("/api/auth/logout"), "198.51.100.80")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\": \"unknown-refresh-token\"}"))
+                .andExpect(status().isTooManyRequests());
+    }
+
     private ResultActions refresh(String ip) throws Exception {
         return mockMvc.perform(fromIp(post("/api/auth/refresh"), ip)
                 .contentType(MediaType.APPLICATION_JSON)
