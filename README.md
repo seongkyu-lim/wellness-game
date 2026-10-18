@@ -2,7 +2,7 @@
 
 Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송하고 XP·레벨·캐릭터 스탯으로 변환하는 iOS + Spring Boot MVP입니다.
 
-웹은 서버에 쌓인 결과를 보여 주는 조회 전용 대시보드입니다([`web/`](web/), [배포 페이지](https://seongkyu-lim.github.io/wellness-game/)). HealthKit은 서버나 브라우저에서 직접 읽을 수 없으므로 iOS 앱이 사용자의 명시적 권한을 받은 뒤 필요한 요약 데이터만 서버에 전송합니다.
+웹은 서버에 쌓인 결과를 보여 주는 조회 전용 대시보드입니다([`web/`](web/), Vercel 배포 — [운영 배포](#운영-배포)). HealthKit은 서버나 브라우저에서 직접 읽을 수 없으므로 iOS 앱이 사용자의 명시적 권한을 받은 뒤 필요한 요약 데이터만 서버에 전송합니다.
 
 ## 구현 범위
 
@@ -39,7 +39,7 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 ├── ios/
 │   ├── WellnessGame.xcodeproj   Xcode 프로젝트
 │   └── WellnessGame/            SwiftUI·HealthKit 소스
-├── web/                         React 조회 전용 대시보드 (GitHub Pages 배포)
+├── web/                         React 조회 전용 대시보드 (Vercel 배포)
 ├── docs/
 │   ├── DESIGN.md                디자인 가이드 (토큰·컴포넌트·새싹이·모션)
 │   └── design/                  디자인 시안 원본
@@ -397,16 +397,89 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 화면의 `Mock 데이터 사용`을 켜면 HealthKit 대신 테스트용 걸음·수영·수면 데이터가 로드됩니다. 실제 HealthKit 연동이 기본이며 Mock은 개발 fallback입니다.
 
+## 운영 배포
+
+웹은 **Vercel**, 백엔드는 **Render**(Docker, `render.yaml` Blueprint), DB는 **Supabase PostgreSQL**입니다.
+아래 순서대로 진행합니다. (개인정보 처리방침·이용약관 페이지 문구는 일반적인 서비스 고지를 바탕으로 쓴 초안이며 **법률 자문이 아닙니다.**
+출시 전 실제 운영 방식에 맞는지 검토하고, 필요하면 전문가 확인을 받으세요.)
+
+### 1. Supabase 프로젝트·연결 문자열
+
+1. Supabase에서 프로젝트를 만듭니다. 리전은 Render와 같은 **Singapore(ap-southeast-1)** 를 권장합니다.
+2. **Project Settings › Database › Connection string**에서 접속 정보를 확인합니다. Render는 항상 켜진 단일 컨테이너라
+   **Session pooler**(포트 5432) 또는 Direct connection을 씁니다. Direct는 IPv6 전용일 수 있으니 Render에서 연결되지 않으면 Session pooler를 씁니다.
+   Transaction pooler(6543)는 서버측 prepared statement와 맞지 않으므로 쓰지 않습니다.
+3. JDBC 형식으로 바꿔 둡니다: `DATABASE_URL=jdbc:postgresql://<host>:5432/postgres?sslmode=require`,
+   `DATABASE_USERNAME`(pooler면 `postgres.<project-ref>`), `DATABASE_PASSWORD`.
+4. 스키마는 백엔드 첫 기동 때 Flyway가 만듭니다. 별도로 테이블을 만들지 않습니다.
+
+### 2. Render 서비스·환경변수
+
+1. Render 대시보드 **New › Blueprint**에서 이 저장소를 고르면 루트의 `render.yaml`로 `wellness-game-api` 웹 서비스가 만들어집니다
+   (Docker, `rootDir: backend`, `main` 브랜치 자동 배포, region `singapore`, plan `starter`).
+2. `sync: false` 항목은 생성 화면에서 값을 입력합니다: `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`,
+   `CORS_ALLOWED_ORIGINS`(3단계 후 채워도 됨), 소셜 로그인 키([소셜 로그인 서버 환경변수](#소셜-로그인-서버-환경변수) 표).
+   `AUTH_JWT_SECRET`은 Render가 256비트 무작위 값을 생성합니다(바꾸면 모든 로그인 세션이 끊김).
+3. 고정값: `AUTH_JWT_TTL=1h`, `OAUTH_APPLE_REQUIRE_NONCE=true`, `AUTH_JWT_LEGACY_CUTOFF=`(빈 값), `APP_TIMEZONE=Asia/Seoul`, `DB_POOL_MAX=5`.
+4. 포트는 Render가 주는 `PORT`를 `server.port: ${PORT:8080}`이 따릅니다. 헬스체크는 `GET /healthz`(`{"status":"UP"}`,
+   인증·레이트 리밋 대상 아님, DB 미확인)입니다. 배포 후 `https://<서비스>.onrender.com/healthz`로 확인합니다.
+5. JVM 옵션은 Dockerfile 기본값 `JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"`입니다.
+   starter(512MB)에서 메모리 초과로 재시작되면 Render 환경변수 `JAVA_TOOL_OPTIONS`로 `-XX:MaxRAMPercentage=65` 등으로 낮춥니다(설정하면 기본값 전체를 대체).
+
+> **출시 전이라 TTL·nonce를 최종값으로 시작합니다.** [인증 세션의 배포 순서](#인증-세션-auth-v2-55-64-76)(처음엔 `AUTH_JWT_TTL=30d`,
+> nonce 강제는 나중에)는 리프레시·nonce를 모르는 **구버전 앱 사용자를 위한 것**입니다. 첫 운영 배포에는 그런 클라이언트가 없으므로
+> 액세스 토큰 1시간·Apple nonce 강제로 바로 시작하고, `iss`·`aud` 없는 이전 형식 토큰도 받을 이유가 없어 `AUTH_JWT_LEGACY_CUTOFF`를 비웁니다.
+> 나중에 올리면 이미 배포된 앱과의 호환 때문에 다시 낮추기 어렵습니다.
+
+> **Render 무료 플랜 주의:** free 인스턴스는 15분 동안 요청이 없으면 잠들고, 다음 요청 때 JVM 기동(수십 초)을 기다려야 합니다.
+> 앱 백그라운드 동기화가 타임아웃되거나 첫 화면이 오래 걸리고, 잠든 동안에는 리프레시 토큰 정리 작업(매일 04:00)도 돌지 않습니다.
+> 운영은 starter 이상을 쓰고, free는 출시 전 테스트에만 씁니다.
+
+> **레이트 리밋과 프록시:** Render는 프록시 뒤에서 요청을 전달합니다. `APP_RATE_LIMIT_TRUST_FORWARDED_HEADER`가 기본값(`false`)이면
+> 모든 사용자가 프록시 IP 하나로 세어져 인증 한도(분당 30·10회)를 함께 씁니다. 배포 후 `X-Forwarded-For`의 마지막 값이 실제 클라이언트 IP인지
+> 확인하고 켜세요([배포 체크리스트](#배포-체크리스트)).
+
+### 3. Vercel 프로젝트·`VITE_API_BASE_URL`
+
+1. Vercel에서 저장소를 가져오고 **Root Directory를 `web`** 으로 지정합니다. 빌드 설정은 `web/vercel.json`이 정합니다
+   (`npm ci` → `npm run build` → `dist`, SPA 라우팅, 보안 헤더, `/assets` 장기 캐시).
+2. 환경변수(Production·Preview): `VITE_API_BASE_URL=https://<서비스>.onrender.com`(필수 — 없으면 Vercel 빌드가 실패),
+   `VITE_GOOGLE_CLIENT_ID`, `VITE_KAKAO_CLIENT_ID`, `VITE_NAVER_CLIENT_ID`. 값은 빌드에 박히므로(CSP `connect-src` 포함) 바꾸면 재배포합니다.
+3. Production Branch를 `main`으로 둡니다. 자세한 내용은 [`web/README.md`](web/README.md)의 "Vercel 배포".
+
+### 4. CORS에 Vercel 도메인 추가
+
+Render의 `CORS_ALLOWED_ORIGINS`에 Vercel 운영 도메인(예: `https://wellness-game.vercel.app`, 커스텀 도메인이면 그 주소도)을 쉼표로 넣고 재배포합니다.
+경로·끝 슬래시 없이 오리진만 씁니다. Preview 배포 주소는 매번 바뀌므로 넣지 않습니다.
+
+### 5. 소셜 로그인 콘솔에 리다이렉트 URI 등록
+
+- **웹(카카오·네이버·구글):** 각 콘솔에 `https://<Vercel 운영 도메인>/`(끝 슬래시 포함)를 Redirect URI로, 구글은 Authorized JavaScript origin에도 도메인을 등록합니다.
+  카카오는 플랫폼 › Web 사이트 도메인, 네이버는 서비스 URL도 함께 바꿉니다.
+- **앱(네이티브):** 앱은 SDK 토큰을 백엔드로 보내므로 리다이렉트 URI 변경은 필요 없고, 운영 서버 주소로 빌드하고 서버 환경변수
+  (`OAUTH_*_NATIVE_*`, `OAUTH_GOOGLE_IOS_CLIENT_ID`, `OAUTH_APPLE_BUNDLE_ID`)가 맞는지 확인합니다.
+- 앱 심사용 개인정보 처리방침 URL: `https://<Vercel 운영 도메인>/privacy`. 제출 전 `web/src/legal/legal.ts`의 연락 이메일(`privacy@example.com`)과 시행일을 실제 값으로 바꿉니다.
+
+### 6. 스모크 테스트 체크리스트
+
+- [ ] `GET https://<서비스>.onrender.com/healthz` → `200 {"status":"UP"}`, Render 로그에 Flyway 마이그레이션 성공
+- [ ] Vercel 사이트가 열리고 응답 헤더에 `content-security-policy: frame-ancestors 'none'`, `x-content-type-options: nosniff`가 있음
+- [ ] `/privacy`, `/terms`를 직접 열거나 새로고침해도 페이지가 보이고(404 아님), 한/EN 전환 동작
+- [ ] 웹 소셜 로그인(카카오·네이버·구글) → 콜백 후 대시보드 표시, 브라우저 콘솔에 CORS·CSP 오류 없음
+- [ ] iOS(·Android) 앱 운영 빌드로 각 소셜 로그인과 Apple 로그인(nonce 포함) 성공, 건강 데이터 동기화 후 웹에서 같은 계정 기록 조회
+- [ ] 1시간 뒤(또는 토큰 만료 후) 앱·웹이 리프레시로 자동 갱신되고 로그아웃이 동작
+- [ ] Supabase Table Editor에서 `user_character`·`health_activity_log`에 행이 생김
+
 ## CI (GitHub Actions)
 
-`.github/workflows/`의 워크플로는 해당 디렉터리(또는 워크플로 파일 자체)가 바뀐 `dev`·`main` 대상 PR과 `dev`·`main` push에서만 돈다. 모두 `contents: read` 최소 권한이며, 같은 PR/브랜치에서 새 실행이 시작되면 이전 실행은 취소된다(Pages 배포 제외). `workflow_dispatch`로 수동 실행도 가능하다.
+`.github/workflows/`의 워크플로는 해당 디렉터리(또는 워크플로 파일 자체)가 바뀐 `dev`·`main` 대상 PR과 `dev`·`main` push에서만 돈다. 모두 `contents: read` 최소 권한이며, 같은 PR/브랜치에서 새 실행이 시작되면 이전 실행은 취소된다. `workflow_dispatch`로 수동 실행도 가능하다.
 
 | 워크플로 | 트리거 경로 | 하는 일 |
 |---|---|---|
 | `backend-ci.yml` | `backend/**` | JDK 21(Temurin). `test` 잡: 단위 테스트(H2) + 빌드. `mysql-test` 잡: Testcontainers MySQL 8.4 통합 테스트(`CI=true`라 Docker가 없으면 건너뛰지 않고 실패). 실패 시 테스트 리포트 artifact 업로드 |
 | `android-ci.yml` | `android/**` | JDK 21 + Android SDK. 단위 테스트·debug 빌드·lint, 자리표시 HTTPS 주소로 release 빌드. lint·테스트 리포트 artifact 업로드 |
 | `ios-ci.yml` | `ios/**` | macOS 러너, 최신 안정 Xcode. 사용 가능한 iPhone 시뮬레이터를 `simctl`로 골라 `WellnessGameTests` 스킴 테스트, Watch 앱(`-sdk watchsimulator`) 빌드, Watch를 임베드한 iOS 앱을 generic 시뮬레이터 목적지로 빌드(서명 없음, watchOS 런타임 불필요) |
-| `web-pages.yml` | `web/**` (`dev` push) | 웹 테스트·빌드 후 GitHub Pages 배포 |
+| `web-ci.yml` | `web/**` | Node 22. `npm ci` → 테스트 → 자리표시 API 주소로 프로덕션 빌드. 배포는 Vercel이 직접 한다([운영 배포](#운영-배포)) |
 
 로컬에서 같은 검사를 돌리는 명령:
 
