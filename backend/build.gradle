@@ -24,15 +24,15 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.security:spring-security-crypto'
     implementation 'org.flywaydb:flyway-core'
-    implementation 'org.flywaydb:flyway-mysql'
+    implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
-    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'org.postgresql:postgresql'
     testRuntimeOnly 'com.h2database:h2'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.testcontainers:junit-jupiter'
-    testImplementation 'org.testcontainers:mysql'
+    testImplementation 'org.testcontainers:postgresql'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -42,21 +42,21 @@ tasks.named('bootRun') {
     systemProperty 'spring.profiles.active', System.getenv('SPRING_PROFILES_ACTIVE') ?: 'local'
 }
 
-// 기본 테스트는 인메모리 H2 로 돈다. MySQL 컨테이너가 필요한 테스트(@Tag("mysql"))는 mysqlTest 로 따로 실행한다.
+// 기본 테스트는 인메모리 H2(PostgreSQL 호환 모드)로 돈다. 실제 PostgreSQL 이 필요한 테스트(@Tag("postgres"))는 postgresTest 로 따로 실행한다.
 tasks.named('test') {
     useJUnitPlatform {
-        excludeTags 'mysql'
+        excludeTags 'postgres'
     }
 }
 
-// Docker 가 필요하다(Testcontainers, MySQL 8.4). Docker 가 없으면 테스트가 건너뛰어진다.
-tasks.register('mysqlTest', Test) {
-    description = 'Runs MySQL Testcontainers integration tests (@Tag("mysql")).'
+// Docker 가 필요하다(Testcontainers, PostgreSQL 17). Docker 가 없으면 로컬에서는 건너뛰고 CI 에서는 실패한다.
+tasks.register('postgresTest', Test) {
+    description = 'Runs PostgreSQL Testcontainers integration tests (@Tag("postgres")).'
     group = 'verification'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform {
-        includeTags 'mysql'
+        includeTags 'postgres'
     }
     shouldRunAfter tasks.named('test')
 }

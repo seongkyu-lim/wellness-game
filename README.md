@@ -18,7 +18,7 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
   - 오늘 활동, 획득 XP, 레벨, 다음 레벨 XP, 스탯 표시
 - Spring Boot API
   - `POST /api/health-activities/sync`
-  - MySQL 활동 로그와 캐릭터 저장
+  - PostgreSQL 활동 로그와 캐릭터 저장
   - 걸음·운동·수면 XP 계산
   - 여러 단계 레벨업 및 잔여 XP 이월
   - 활동별 스탯 증가
@@ -35,7 +35,7 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 
 ```text
 .
-├── backend/                     Spring Boot + MySQL API
+├── backend/                     Spring Boot + PostgreSQL API
 ├── ios/
 │   ├── WellnessGame.xcodeproj   Xcode 프로젝트
 │   └── WellnessGame/            SwiftUI·HealthKit 소스
@@ -43,7 +43,7 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 ├── docs/
 │   ├── DESIGN.md                디자인 가이드 (토큰·컴포넌트·새싹이·모션)
 │   └── design/                  디자인 시안 원본
-└── docker-compose.yml           MySQL + API
+└── docker-compose.yml           PostgreSQL + API
 ```
 
 웹과 iOS의 화면은 [디자인 가이드](docs/DESIGN.md)의 토큰과 규칙을 함께 따릅니다.
@@ -53,7 +53,7 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 요구 사항:
 
 - 로컬 Gradle 실행 시 Java 21 이상(`JAVA_HOME`을 JDK 21 이상으로 지정)
-- MySQL 8.4 LTS 또는 Docker
+- PostgreSQL 15 이상(운영은 Supabase PostgreSQL) 또는 Docker
 
 > Gradle은 프로젝트에 포함된 Wrapper(`./gradlew`)를 사용하므로 별도 설치가 필요 없습니다.
 > 예: `export JAVA_HOME=$(/usr/libexec/java_home -v 21)` (macOS)
@@ -67,34 +67,63 @@ AUTH_JWT_SECRET=$(openssl rand -base64 48) docker compose up --build
 > 키를 실행마다 새로 만들면 이전에 발급한 토큰이 모두 무효가 됩니다. 계속 쓰려면 같은 값을 `.env`에 저장해 두세요.
 
 - API: `http://localhost:8080`
-- MySQL host port: `13306`
+- PostgreSQL(17) host port: `15432`
 - DB/user/password: `wellness_game` / `wellness` / `wellness`
 
 로컬 Gradle 실행:
 
 ```bash
-docker compose up -d mysql
+docker compose up -d postgres
 cd backend
-DATABASE_URL='jdbc:mysql://localhost:13306/wellness_game?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC' \
+DATABASE_URL='jdbc:postgresql://localhost:15432/wellness_game' \
 DATABASE_USERNAME=wellness \
 DATABASE_PASSWORD=wellness \
 ./gradlew bootRun
 ```
 
+### DB 연결 (PostgreSQL / Supabase)
+
+백엔드는 PostgreSQL만 지원합니다(#87). 연결은 환경변수로 줍니다.
+
+| 환경변수 | 기본값 | 설명 |
+|---|---|---|
+| `DATABASE_URL` | `jdbc:postgresql://localhost:5432/wellness_game` | JDBC URL |
+| `DATABASE_USERNAME` | `wellness` | DB 계정 |
+| `DATABASE_PASSWORD` | `wellness` | DB 비밀번호 |
+| `DB_POOL_MAX` | `5` | Hikari 최대 연결 수. 무료 DB 플랜의 연결 한도를 넘지 않게 작게 둡니다(요청 하나는 연결을 하나만 씁니다) |
+
+Supabase는 SSL이 필요합니다. 대시보드의 **Connect**에서 호스트·계정을 확인해 JDBC 형식으로 바꿉니다.
+
+```bash
+# 권장: 세션 풀러(Supavisor session mode, 포트 5432). Render처럼 IPv4만 되는 환경에서도 붙습니다.
+DATABASE_URL='jdbc:postgresql://<pooler-host>:5432/postgres?sslmode=require'
+DATABASE_USERNAME='postgres.<project-ref>'
+DATABASE_PASSWORD='<DB 비밀번호>'
+
+# 트랜잭션 풀러(포트 6543)를 쓸 때는 서버 측 prepared statement를 끄는 prepareThreshold=0 이 필요합니다.
+DATABASE_URL='jdbc:postgresql://<pooler-host>:6543/postgres?sslmode=require&prepareThreshold=0'
+```
+
+- 이 앱은 오래 사는 연결 풀(Hikari)을 쓰므로 세션 풀러나 직접 연결(`db.<project-ref>.supabase.co:5432`, IPv6)이 맞습니다.
+  트랜잭션 풀러는 세션 상태를 유지하지 않아 `prepareThreshold=0` 없이는 `prepared statement "S_1" already exists` 같은 오류가 납니다.
+- 첫 기동 때 Flyway가 빈 `public` 스키마에 V1부터 테이블을 만듭니다. 테이블은 있는데 Flyway 이력이 없으면 기준선을 잡지 않고 기동에 실패합니다.
+
 테스트:
 
 ```bash
 cd backend
-./gradlew test        # 인메모리 H2(MySQL 호환 모드)
-./gradlew mysqlTest   # MySQL 8.4 컨테이너(Testcontainers), Docker 필요
+./gradlew test           # 인메모리 H2(PostgreSQL 호환 모드)
+./gradlew postgresTest   # PostgreSQL 17 컨테이너(Testcontainers), Docker 필요
 ```
 
-- `test`는 MySQL 호환 모드의 인메모리 H2에 운영과 같은 Flyway 마이그레이션을 적용해 돕니다.
-- `mysqlTest`는 `@Tag("mysql")` 테스트만 실행합니다. 실제 MySQL에서만 확인할 수 있는 Flyway 스키마·`ddl-auto=validate`,
-  기존 DB baseline, 동시 동기화(신규 사용자 경합, 일일·운동 XP 상한), 작은 연결 풀에서의 동시 요청을 검증합니다.
+- `test`는 PostgreSQL 호환 모드(`MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH`)의 인메모리 H2에
+  운영과 같은 Flyway 마이그레이션을 적용해 돕니다. 타입 매핑(UUID → `uuid`, Instant → `timestamp with time zone`)도 운영 기본값 그대로입니다.
+- `postgresTest`는 `@Tag("postgres")` 테스트만 실행합니다. 실제 PostgreSQL에서만 확인할 수 있는 Flyway 스키마·`ddl-auto=validate`,
+  마이그레이션과 Hibernate 기본 매핑의 일치, 동시 동기화(신규 사용자 경합, 일일·운동 XP 상한), 작은 연결 풀에서의 동시 요청,
+  수면 키 마이그레이션, 리프레시 토큰 동시 회전을 테스트마다 새 데이터베이스에서 검증합니다.
   Docker가 없으면 로컬에서는 건너뛰어지고(skipped), `CI` 환경변수가 설정돼 있으면 조용히 넘어가지 않도록 실패합니다.
-- 테스트(H2)는 Instant를 `preferred_instant_jdbc_type: TIMESTAMP`(JVM 시간대 기준)로 매핑해 운영 기본값(`TIMESTAMP_UTC`)과 다릅니다. 시간대 관련 회귀는 `mysqlTest`로 확인하세요.
-- 후속: 백엔드 CI 워크플로에 `./gradlew test mysqlTest`를 추가해야 합니다(아직 없음).
+  Docker 대신 이미 떠 있는 서버를 쓰려면 `POSTGRES_TEST_JDBC_URL`(예: `jdbc:postgresql://127.0.0.1:5432/postgres`)과
+  `POSTGRES_TEST_USERNAME`·`POSTGRES_TEST_PASSWORD`를 지정합니다(데이터베이스 생성·삭제 권한 필요).
 
 ### DB 스키마 (Flyway)
 
@@ -105,16 +134,11 @@ cd backend
 |---|---|
 | `V1__baseline.sql` | 기준 스키마(`user_character`, `health_activity_log`, `user_credential`와 유일 제약·인덱스) |
 | `V2__sleep_key_normalization` (Java) | 구 형식 수면 로그 키 정리와 legacy 수면 XP 합치기(멱등, 행 삭제 없음) |
+| `V3__refresh_tokens.sql` | 회전 리프레시 토큰(`refresh_token`)과 사용자별 액세스 토큰 무효화 기준(`user_auth_state`) |
 
-- **빈 DB:** V1부터 순서대로 실행합니다.
-- **Flyway 도입 전(`ddl-auto: update`)에 만들어진 기존 DB:** 첫 기동 때 `flyway_schema_history`가 없고 테이블이 있으므로
-  `baseline-on-migrate`로 버전 1 기준선을 기록해 V1을 건너뛰고, V2부터 적용합니다. 이후에는 새 버전만 실행됩니다.
-- **Flyway 도입 후 첫 운영 배포 전 확인:** baseline은 기존 테이블이 V1과 같다고 가정하고 V1을 건너뜁니다. 예전
-  `ddl-auto: update`는 컬럼을 추가만 하고 타입은 고치지 않으므로, 운영 DB가 V1과 다를 수 있습니다(예: 오래전에 만들어진
-  `health_activity_log.type`이 `enum(...)`이 아니라 `varchar(255)`). 배포 전에 운영 DB에서
-  `SHOW CREATE TABLE user_character;`, `SHOW CREATE TABLE health_activity_log;`, `SHOW CREATE TABLE user_credential;`을
-  실행해 `V1__baseline.sql`과 컬럼 타입·NULL 허용·유일 제약·인덱스를 비교하세요. 다르면 운영 DB를 V1에 맞추는 정렬 SQL을
-  먼저(백업 후) 적용한 뒤 배포합니다. 그대로 배포하면 `ddl-auto: validate`가 기동을 막거나, 통과하더라도 V1과 다른 상태로 남습니다.
+- 빈 DB에 V1부터 순서대로 실행합니다. #87에서 운영 적용 전에 V1~V3를 PostgreSQL 문법으로 다시 썼습니다(MySQL 데이터 이전·baseline 없음).
+- 컬럼 타입은 Hibernate의 PostgreSQL 기본 매핑과 같습니다: UUID → `uuid`, Instant → `timestamp(6) with time zone`,
+  BigDecimal → `numeric(38,2)`, 문자열 enum → `varchar(255)` + check 제약. H2 PostgreSQL 모드에서도 실행되도록 공통 문법만 씁니다.
 - 스키마를 바꿀 때는 기존 파일을 고치지 말고 `V4__설명.sql`처럼 새 버전을 추가하세요. 적용된 마이그레이션을 고치면 체크섬 검증에 실패합니다.
 
 ### 소셜 로그인 서버 환경변수
@@ -476,7 +500,7 @@ Render의 `CORS_ALLOWED_ORIGINS`에 Vercel 운영 도메인(예: `https://wellne
 
 | 워크플로 | 트리거 경로 | 하는 일 |
 |---|---|---|
-| `backend-ci.yml` | `backend/**` | JDK 21(Temurin). `test` 잡: 단위 테스트(H2) + 빌드. `mysql-test` 잡: Testcontainers MySQL 8.4 통합 테스트(`CI=true`라 Docker가 없으면 건너뛰지 않고 실패). 실패 시 테스트 리포트 artifact 업로드 |
+| `backend-ci.yml` | `backend/**` | JDK 21(Temurin). `test` 잡: 단위 테스트(H2) + 빌드. `postgres-test` 잡: Testcontainers PostgreSQL 17 통합 테스트(`CI=true`라 Docker가 없으면 건너뛰지 않고 실패). 실패 시 테스트 리포트 artifact 업로드 |
 | `android-ci.yml` | `android/**` | JDK 21 + Android SDK. 단위 테스트·debug 빌드·lint, 자리표시 HTTPS 주소로 release 빌드. lint·테스트 리포트 artifact 업로드 |
 | `ios-ci.yml` | `ios/**` | macOS 러너, 최신 안정 Xcode. 사용 가능한 iPhone 시뮬레이터를 `simctl`로 골라 `WellnessGameTests` 스킴 테스트, Watch 앱(`-sdk watchsimulator`) 빌드, Watch를 임베드한 iOS 앱을 generic 시뮬레이터 목적지로 빌드(서명 없음, watchOS 런타임 불필요) |
 | `web-ci.yml` | `web/**` | Node 22. `npm ci` → 테스트 → 자리표시 API 주소로 프로덕션 빌드. 배포는 Vercel이 직접 한다([운영 배포](#운영-배포)) |
@@ -484,8 +508,8 @@ Render의 `CORS_ALLOWED_ORIGINS`에 Vercel 운영 도메인(예: `https://wellne
 로컬에서 같은 검사를 돌리는 명령:
 
 ```bash
-# 백엔드 (mysqlTest는 Docker 필요. 로컬에서 Docker가 없으면 건너뛴다)
-cd backend && ./gradlew test build -x test && ./gradlew mysqlTest
+# 백엔드 (postgresTest는 Docker 필요. 로컬에서 Docker가 없으면 건너뛴다)
+cd backend && ./gradlew test build -x test && ./gradlew postgresTest
 
 # Android (Android SDK 필요)
 cd android && ./gradlew testDebugUnitTest assembleDebug lint \

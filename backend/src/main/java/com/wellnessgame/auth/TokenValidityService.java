@@ -49,14 +49,11 @@ public class TokenValidityService {
     @Transactional
     public void revokeIssuedTokens(String userId) {
         Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
-        UserAuthState state = repository.findById(userId).orElse(null);
-        if (state == null) {
-            state = repository.save(new UserAuthState(userId, now));
-        } else {
-            state.advanceTo(now);
-        }
+        // 원자적 upsert: 같은 사용자의 첫 revoke 가 동시에 와도 PK 위반 없이 둘 다 성공한다.
+        repository.insertIfAbsent(userId, now);
+        repository.advanceTo(userId, now);
         // 지우지 않고 새 값을 넣는다: 커밋 전에 다른 요청이 DB 의 이전 값을 읽어 캐시하는 일을 막는다.
-        Instant validAfter = state.getTokensValidAfter();
+        Instant validAfter = repository.findById(userId).map(UserAuthState::getTokensValidAfter).orElse(now);
         long expiresAt = clock.millis() + CACHE_TTL.toMillis();
         cache.compute(userId, (key, existing) -> new CachedState(validAfter, expiresAt));
     }

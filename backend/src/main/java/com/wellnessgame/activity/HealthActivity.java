@@ -35,6 +35,7 @@ public class HealthActivity {
     @Column(name = "activity_date", nullable = false, updatable = false)
     private LocalDate activityDate;
 
+    // 값 추가 시 새 마이그레이션으로 check 제약(ck_health_activity_type) 갱신(ActivityType 주석 참고)
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, updatable = false)
     private ActivityType type;
