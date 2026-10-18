@@ -110,6 +110,68 @@ const ko = {
   'landing.privacyBody':
     'Apple 건강 전체가 아니라 XP 계산에 필요한 값(걸음 수, 운동·수면 시간, 거리, 칼로리)만 보내고, 웹에서는 로그인한 본인 데이터만 볼 수 있어요.',
   'landing.footer': '웹은 조회 전용이에요. 기록은 iPhone 앱이 Apple 건강에서 자동으로 모아요.',
+
+  'footer.label': '사이트 정보',
+  'footer.privacy': '개인정보 처리방침',
+  'footer.terms': '이용약관',
+
+  'legal.home': '홈으로',
+  'legal.effectiveDate': '시행일: {date}',
+  'legal.privacy.title': '개인정보 처리방침',
+  'legal.privacy.intro':
+    'Wellness Game(이하 "서비스")은 걷기·운동·수면 기록을 캐릭터 성장 게임으로 보여 주기 위해 꼭 필요한 정보만 수집합니다. 이 방침은 iPhone·Android 앱과 웹 대시보드에 함께 적용됩니다.',
+  'legal.privacy.collectTitle': '1. 수집하는 정보',
+  'legal.privacy.collectBody':
+    '- 계정 정보: 로그인 방식별 계정 식별자(소셜 로그인 제공자가 주는 고유 ID 또는 가입한 아이디)와 표시 이름. 아이디로 가입한 경우 비밀번호는 복원할 수 없는 해시로만 저장합니다.\n- 건강 기록: 사용자가 허락한 경우 Apple 건강(HealthKit) 또는 Health Connect에서 읽은 걸음 수, 운동 기록(종류·시간·거리·칼로리), 수면 기록(시간·수면 점수). 경험치 계산에 필요한 요약값만 보내며 원본 샘플 전체나 심박수 같은 다른 건강 데이터는 수집하지 않습니다.\n- 기기 언어: 화면과 서버 안내 문구를 같은 언어로 보여 주기 위해 기기·브라우저 언어 설정을 사용합니다.',
+  'legal.privacy.purposeTitle': '2. 이용 목적',
+  'legal.privacy.purposeBody':
+    '- 건강 기록을 경험치·레벨·스탯으로 바꿔 캐릭터를 성장시킵니다.\n- 앱과 웹 대시보드에서 내 캐릭터와 활동 기록을 보여 줍니다.\n- 로그인 상태를 유지하고 계정을 보호합니다.',
+  'legal.privacy.healthTitle': '3. 건강 데이터 이용 제한',
+  'legal.privacy.healthBody':
+    'HealthKit과 Health Connect에서 받은 데이터는 위 목적(서비스 제공)에만 사용합니다. 광고·마케팅, 맞춤형 광고를 위한 분석, 데이터 판매나 중개에 사용하지 않으며 광고 플랫폼이나 데이터 브로커에게 넘기지 않습니다.',
+  'legal.privacy.sharingTitle': '4. 제3자 제공',
+  'legal.privacy.sharingBody':
+    '수집한 개인정보를 제3자에게 제공하지 않습니다. 다만 서비스 운영을 위해 서버와 데이터베이스는 클라우드 호스팅 업체에 보관하며, 이 업체들은 저장·처리만 맡고 다른 목적으로 이용하지 않습니다. 법령에 따라 제출 의무가 있는 경우는 예외입니다.',
+  'legal.privacy.loginTitle': '5. 소셜 로그인',
+  'legal.privacy.loginBody':
+    '구글·카카오·네이버·Apple 로그인을 지원합니다. 로그인하면 해당 제공자가 본인 확인 후 계정 식별자와 이름(제공된 경우)을 서비스에 전달합니다. 제공자가 발급한 토큰은 본인 확인에만 쓰고 저장하지 않습니다. 각 제공자의 개인정보 처리는 해당 제공자의 방침을 따릅니다.',
+  'legal.privacy.retentionTitle': '6. 보관 기간과 삭제',
+  'legal.privacy.retentionBody':
+    '정보는 계정을 유지하는 동안 보관하고, 계정 삭제를 요청하면 계정 정보와 건강 기록을 지체 없이 파기합니다. 로그인 유지용 토큰은 만료되거나 로그아웃하면 폐기됩니다.\n삭제를 원하면 {email}로 로그인 방식과 표시 이름을 알려 주세요. 앱의 건강 데이터 접근 권한은 iPhone 설정 또는 Health Connect에서 언제든 끌 수 있으며, 끄면 새 기록은 더 이상 수집되지 않습니다(이미 저장된 기록은 삭제 요청으로 지울 수 있습니다).',
+  'legal.privacy.rightsTitle': '7. 이용자의 권리',
+  'legal.privacy.rightsBody': '내 정보의 열람·정정·삭제·처리 정지를 {email}로 요청할 수 있습니다.',
+  'legal.privacy.contactTitle': '8. 문의',
+  'legal.privacy.contactBody': '개인정보 관련 문의: {email}',
+  'legal.privacy.changesTitle': '9. 방침의 변경',
+  'legal.privacy.changesBody': '이 방침을 바꾸면 시행일과 함께 이 페이지에 알립니다.',
+
+  'legal.terms.title': '이용약관',
+  'legal.terms.intro': '이 약관은 Wellness Game(이하 "서비스")의 앱과 웹 대시보드 이용에 적용됩니다.',
+  'legal.terms.serviceTitle': '1. 서비스 내용',
+  'legal.terms.serviceBody':
+    '서비스는 사용자가 허락한 건강 기록(걸음·운동·수면)을 경험치로 바꿔 캐릭터 성장 게임으로 보여 줍니다. 기록은 앱이 수집하며, 웹 대시보드는 조회 전용입니다.',
+  'legal.terms.accountTitle': '2. 계정',
+  'legal.terms.accountBody':
+    '구글·카카오·네이버·Apple 로그인 또는 아이디로 계정을 만들 수 있습니다. 계정과 기기의 관리 책임은 사용자에게 있으며, 다른 사람의 계정을 사용해서는 안 됩니다.',
+  'legal.terms.medicalTitle': '3. 의료 서비스가 아님',
+  'legal.terms.medicalBody':
+    '서비스는 게임과 동기 부여를 위한 것이며 진단·치료·의학적 조언을 제공하지 않습니다. 건강에 관한 결정은 의료 전문가와 상의하세요.',
+  'legal.terms.conductTitle': '4. 금지 행위',
+  'legal.terms.conductBody':
+    '- 다른 사람의 계정이나 정보를 도용하는 행위\n- 비정상적인 방법으로 기록을 조작하거나 서버에 과도한 요청을 보내는 행위\n- 서비스 운영을 방해하거나 보안을 우회하는 행위',
+  'legal.terms.changesTitle': '5. 서비스 변경·중단',
+  'legal.terms.changesBody':
+    '서비스 내용은 바뀌거나 중단될 수 있으며, 중요한 변경은 가능한 한 미리 알립니다. 서비스는 무료로 제공됩니다.',
+  'legal.terms.liabilityTitle': '6. 책임의 제한',
+  'legal.terms.liabilityBody':
+    '관련 법령이 허용하는 범위에서, 기기·건강 앱의 기록 누락이나 통신 장애로 생긴 경험치·기록 차이에 대해 책임을 지지 않습니다.',
+  'legal.terms.withdrawTitle': '7. 탈퇴',
+  'legal.terms.withdrawBody':
+    '언제든 {email}로 탈퇴(계정 삭제)를 요청할 수 있으며, 개인정보는 개인정보 처리방침에 따라 파기됩니다.',
+  'legal.terms.privacyTitle': '8. 개인정보',
+  'legal.terms.privacyBody': '개인정보 처리는 별도의 개인정보 처리방침을 따릅니다.',
+  'legal.terms.contactTitle': '9. 문의와 약관 변경',
+  'legal.terms.contactBody': '문의는 {email}로 보내 주세요. 약관을 바꾸면 시행일과 함께 이 페이지에 알립니다.',
 } as const
 
 export type MessageKey = keyof typeof ko
@@ -224,6 +286,68 @@ const en: Record<MessageKey, string> = {
   'landing.privacyBody':
     'Only the values needed for XP (step counts, workout and sleep times, distance, calories) are sent, not your full Health history, and the web shows only your own data after you sign in.',
   'landing.footer': 'The web is view-only. The iPhone app collects your records from Apple Health automatically.',
+
+  'footer.label': 'Site information',
+  'footer.privacy': 'Privacy Policy',
+  'footer.terms': 'Terms of Service',
+
+  'legal.home': 'Home',
+  'legal.effectiveDate': 'Effective date: {date}',
+  'legal.privacy.title': 'Privacy Policy',
+  'legal.privacy.intro':
+    'Wellness Game (the "Service") collects only what it needs to turn your walking, workout, and sleep records into a character growth game. This policy covers the iPhone and Android apps and the web dashboard.',
+  'legal.privacy.collectTitle': '1. Information we collect',
+  'legal.privacy.collectBody':
+    "- Account information: an account identifier for your sign-in method (the unique ID from your social sign-in provider, or the username you registered) and a display name. If you sign up with a username, your password is stored only as an irreversible hash.\n- Health records: with your permission, step counts, workouts (type, duration, distance, calories), and sleep (duration, sleep score) read from Apple Health (HealthKit) or Health Connect. Only the summary values needed to calculate XP are sent; we don't collect full raw samples or other health data such as heart rate.\n- Device language: your device or browser language setting, so screens and server messages appear in the same language.",
+  'legal.privacy.purposeTitle': '2. How we use it',
+  'legal.privacy.purposeBody':
+    '- Turn your health records into XP, levels, and stats that grow your character.\n- Show your character and activity in the app and on the web dashboard.\n- Keep you signed in and protect your account.',
+  'legal.privacy.healthTitle': '3. Limits on health data',
+  'legal.privacy.healthBody':
+    "Data from HealthKit and Health Connect is used only for the purposes above (providing the Service). It is never used for advertising or marketing, analysis for targeted ads, or sold or brokered, and it is never shared with advertising platforms or data brokers.",
+  'legal.privacy.sharingTitle': '4. Sharing with third parties',
+  'legal.privacy.sharingBody':
+    "We don't share your personal information with third parties. To run the Service, our servers and database are hosted by cloud hosting providers, who only store and process the data and don't use it for any other purpose. The exception is when disclosure is required by law.",
+  'legal.privacy.loginTitle': '5. Social sign-in',
+  'legal.privacy.loginBody':
+    "We support Google, Kakao, Naver, and Apple sign-in. When you sign in, the provider verifies you and sends us your account identifier and name (if provided). Tokens issued by the provider are used only to verify you and are not stored. Each provider handles your data under its own policy.",
+  'legal.privacy.retentionTitle': '6. Retention and deletion',
+  'legal.privacy.retentionBody':
+    "We keep your information while your account exists. When you request account deletion, we promptly delete your account information and health records. Sign-in tokens are discarded when they expire or when you sign out.\nTo request deletion, email {email} with your sign-in method and display name. You can turn off the app's health data access at any time in iPhone Settings or Health Connect; new records then stop being collected (records already stored can be removed by a deletion request).",
+  'legal.privacy.rightsTitle': '7. Your rights',
+  'legal.privacy.rightsBody': 'You can ask to access, correct, delete, or stop the processing of your information by emailing {email}.',
+  'legal.privacy.contactTitle': '8. Contact',
+  'legal.privacy.contactBody': 'Privacy questions: {email}',
+  'legal.privacy.changesTitle': '9. Changes to this policy',
+  'legal.privacy.changesBody': 'If we change this policy, we will post the update on this page with its effective date.',
+
+  'legal.terms.title': 'Terms of Service',
+  'legal.terms.intro': 'These terms apply to your use of the Wellness Game (the "Service") apps and web dashboard.',
+  'legal.terms.serviceTitle': '1. The Service',
+  'legal.terms.serviceBody':
+    'The Service turns the health records you allow (steps, workouts, sleep) into XP and shows them as a character growth game. Records are collected by the app; the web dashboard is view-only.',
+  'legal.terms.accountTitle': '2. Accounts',
+  'legal.terms.accountBody':
+    "You can create an account with Google, Kakao, Naver, or Apple sign-in, or with a username. You are responsible for your account and devices, and you must not use someone else's account.",
+  'legal.terms.medicalTitle': '3. Not a medical service',
+  'legal.terms.medicalBody':
+    'The Service is for fun and motivation. It does not provide diagnosis, treatment, or medical advice. Talk to a healthcare professional about health decisions.',
+  'legal.terms.conductTitle': '4. Prohibited conduct',
+  'legal.terms.conductBody':
+    "- Using another person's account or information\n- Manipulating records by abnormal means or sending excessive requests to the servers\n- Disrupting the Service or circumventing its security",
+  'legal.terms.changesTitle': '5. Changes and suspension',
+  'legal.terms.changesBody':
+    'The Service may change or be discontinued. We will try to give advance notice of important changes. The Service is provided free of charge.',
+  'legal.terms.liabilityTitle': '6. Limitation of liability',
+  'legal.terms.liabilityBody':
+    'To the extent permitted by law, we are not responsible for XP or record differences caused by missing data in your device or health app, or by network failures.',
+  'legal.terms.withdrawTitle': '7. Leaving the Service',
+  'legal.terms.withdrawBody':
+    'You can ask to leave (delete your account) at any time by emailing {email}. Your personal information is then deleted as described in the Privacy Policy.',
+  'legal.terms.privacyTitle': '8. Privacy',
+  'legal.terms.privacyBody': 'Your personal information is handled under our separate Privacy Policy.',
+  'legal.terms.contactTitle': '9. Contact and changes',
+  'legal.terms.contactBody': 'Send questions to {email}. If we change these terms, we will post the update on this page with its effective date.',
 }
 
 export const DICTIONARIES: Record<Language, Record<MessageKey, string>> = { ko, en }

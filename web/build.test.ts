@@ -5,8 +5,10 @@ import { describe, expect, it, vi } from 'vitest'
 // 실제 `vite build`(프로덕션 모드)를 메모리에서 돌려(write: false) 산출물 index.html을 검사한다.
 const ROOT = decodeURIComponent(new URL('.', import.meta.url).pathname)
 
-async function buildIndexHtml(apiBaseUrl: string): Promise<string> {
+async function buildIndexHtml(apiBaseUrl: string, { vercel = false } = {}): Promise<string> {
   vi.stubEnv('VITE_API_BASE_URL', apiBaseUrl)
+  // CI·로컬 환경변수에 영향받지 않도록 VERCEL을 항상 명시한다.
+  vi.stubEnv('VERCEL', vercel ? '1' : '')
   const result = (await build({
     root: ROOT,
     mode: 'production',
@@ -44,5 +46,15 @@ describe('빌드 산출물 index.html', () => {
     const csp = cspOf(await buildIndexHtml(''))
     expect(csp).toContain("connect-src 'self';")
     expect(csp).not.toContain('localhost')
+  }, 30_000)
+
+  it('Vercel 빌드(VERCEL=1)에서 API 주소가 비어 있으면 빌드가 실패한다', async () => {
+    await expect(buildIndexHtml('', { vercel: true })).rejects.toThrow(/VITE_API_BASE_URL/)
+  }, 30_000)
+
+  it('Vercel 빌드라도 API 주소가 있으면 통과한다', async () => {
+    expect(cspOf(await buildIndexHtml('https://api.example.com', { vercel: true }))).toContain(
+      "connect-src 'self' https://api.example.com;",
+    )
   }, 30_000)
 })
