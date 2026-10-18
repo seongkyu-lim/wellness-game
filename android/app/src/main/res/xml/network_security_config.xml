@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- release: 평문(HTTP) 통신 금지. debug 빌드는 src/debug의 같은 이름 파일이 대신한다. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

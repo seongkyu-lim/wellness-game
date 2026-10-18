@@ -1,0 +1,153 @@
+package com.example.wellnessgame.sync
+
+import android.app.Application
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.work.ListenableWorker.Result
+import androidx.work.testing.TestListenableWorkerBuilder
+import com.example.wellnessgame.data.health.DailyHealthSnapshot
+import com.example.wellnessgame.data.health.HealthDataException
+import com.example.wellnessgame.data.network.ApiException
+import com.example.wellnessgame.data.network.CharacterState
+import com.example.wellnessgame.data.network.CharacterStats
+import com.example.wellnessgame.data.network.HealthActivitySyncResponse
+import com.example.wellnessgame.testing.FakeDashboardRepository
+import com.example.wellnessgame.auth.SessionManager
+import com.example.wellnessgame.auth.StoredSession
+import com.example.wellnessgame.testing.CHARACTER_JSON
+import com.example.wellnessgame.testing.FakeHealthProvider
+import com.example.wellnessgame.testing.FakeSettings
+import com.example.wellnessgame.testing.FakeTokenStore
+import com.example.wellnessgame.testing.apiClient
+import com.example.wellnessgame.testing.jsonResponse
+import kotlinx.coroutines.runBlocking
+import okhttp3.mockwebserver.MockWebServer
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
+import org.junit.Assert.assertEquals
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import java.io.IOException
+import java.time.LocalDate
+
+/** 실제 WellnessApp(Keystore·WorkManager 초기화) 대신 가짜 동기화를 넘기는 Application. */
+class TestSyncApp : Application(), BackgroundSyncProvider {
+    var signedIn = true
+    lateinit var repository: FakeDashboardRepository
+
+    /** 값이 있으면 가짜 대신 이 동기화(실제 ApiClient·SessionManager 배선)를 쓴다. */
+    var realSync: BackgroundSync? = null
+    override fun backgroundSync() = realSync ?: BackgroundSync({}, { signedIn }, repository)
+}
+
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [35], application = TestSyncApp::class)
+class SyncWorkerTest {
+    private val snapshot = DailyHealthSnapshot(LocalDate.of(2026, 10, 11), 100, emptyList(), null)
+    private val ok = SyncResult(
+        snapshot,
+        HealthActivitySyncResponse("u-1", "2026-10-11", 0, false, CharacterState(1, 0, 0, 100, CharacterStats(0, 0, 0, 0, 0))),
+    )
+    private lateinit var app: TestSyncApp
+
+    @Before
+    fun setUp() {
+        app = ApplicationProvider.getApplicationContext<Context>() as TestSyncApp
+        app.signedIn = true
+        app.realSync = null
+        app.repository = FakeDashboardRepository(snapshot = snapshot, syncResult = { ok })
+    }
+
+    private fun runWorker(): Result = runBlocking {
+        TestListenableWorkerBuilder<SyncWorker>(app).build().doWork()
+    }
+
+    @Test
+    fun syncs_whenSignedInWithPermission() {
+        assertEquals(Result.success(), runWorker())
+        assertEquals(1, app.repository.syncCount)
+    }
+
+    @Test
+    fun skips_whenSignedOut_orPermissionMissing() {
+        app.signedIn = false
+        assertEquals(Result.success(), runWorker())
+        app.signedIn = true
+        app.repository.access = HealthAccess.PERMISSION_REQUIRED
+        assertEquals(Result.success(), runWorker())
+        assertEquals(0, app.repository.syncCount)
+    }
+
+    @Test
+    fun neverSendsMockDataInTheBackground() {
+        app.repository.mock = true
+        assertEquals(Result.success(), runWorker())
+        assertEquals(0, app.repository.syncCount)
+    }
+
+    @Test
+    fun retries_onlyTransientFailures() {
+        val cases = listOf(
+            ApiException.Network(IOException("offline")) to Result.retry(),
+            ApiException.RateLimited(30, null) to Result.retry(),
+            ApiException.Server(503, null) to Result.retry(),
+            ApiException.Server(400, "bad") to Result.success(),
+            ApiException.Unauthorized(null) to Result.success(),
+            ApiException.InvalidResponse() to Result.success(),
+            HealthDataException(HealthDataException.Reason.PERMISSION_DENIED) to Result.success(),
+        )
+        cases.forEach { (error, expected) ->
+            app.repository.syncResult = { throw error }
+            assertEquals(error.toString(), expected, runWorker())
+        }
+    }
+
+    @Test
+    fun backgroundSync_refreshesExpiredAccessToken_throughTheSameSessionPath() {
+        val server = MockWebServer().apply { start() }
+        try {
+            val now = Instant.parse("2026-10-11T03:00:00Z")
+            val clock = Clock.fixed(now, ZoneOffset.UTC)
+            val store = FakeTokenStore(
+                StoredSession("u-1", null, "google", "old", now.epochSecond + 3600, "r-1", now.epochSecond + 86_400),
+            )
+            val session = SessionManager(store, clock)
+            runBlocking { session.restore() }
+            val repository = DefaultDashboardRepository(
+                api = server.apiClient(session),
+                session = session,
+                healthConnect = FakeHealthProvider(snapshot),
+                mock = FakeHealthProvider(snapshot),
+                settings = FakeSettings(),
+                clock = clock,
+            )
+            app.realSync = BackgroundSync({}, { session.state.value.isSignedIn }, repository)
+            server.enqueue(jsonResponse("""{"message":"expired"}""", 401))
+            server.enqueue(
+                jsonResponse(
+                    """{"userId":"u-1","accessToken":"new","expiresIn":3600,"refreshToken":"r-2","refreshExpiresIn":86400}""",
+                ),
+            )
+            server.enqueue(
+                jsonResponse(
+                    """{"userId":"u-1","date":"2026-10-11","gainedXp":0,"levelUp":false,"character":$CHARACTER_JSON}""",
+                ),
+            )
+
+            assertEquals(Result.success(), runWorker())
+
+            assertEquals("Bearer old", server.takeRequest(5, java.util.concurrent.TimeUnit.SECONDS)!!.getHeader("Authorization"))
+            assertEquals("/api/auth/refresh", server.takeRequest(5, java.util.concurrent.TimeUnit.SECONDS)!!.path)
+            val retry = server.takeRequest(5, java.util.concurrent.TimeUnit.SECONDS)!!
+            assertEquals("/api/health-activities/sync", retry.path)
+            assertEquals("Bearer new", retry.getHeader("Authorization"))
+            assertEquals("r-2", store.stored?.refreshToken)
+        } finally {
+            server.shutdown()
+        }
+    }
+}

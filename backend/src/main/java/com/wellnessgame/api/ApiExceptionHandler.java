@@ -1,19 +1,83 @@
 package com.wellnessgame.api;
 
+import com.wellnessgame.auth.ForbiddenException;
+import com.wellnessgame.auth.UnauthorizedException;
+import com.wellnessgame.error.BadRequestException;
+import com.wellnessgame.error.ServiceUnavailableException;
+import com.wellnessgame.error.TooManyRequestsException;
+import com.wellnessgame.i18n.Messages;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.TypeMismatchException;
+import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageConversionException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
 import java.util.Map;
 
+/**
+ * API 오류 응답. 사용자에게 보여 줄 의도로 던진 예외({@link BadRequestException}, {@link ServiceUnavailableException},
+ * {@link UnauthorizedException}, {@link ForbiddenException}, {@link TooManyRequestsException})만 메시지를 그대로 내보낸다.
+ * 그 밖의 예외는 라이브러리 내부 문구가 새지 않도록 일반 문구({@code error.generic})로 응답하고 상세는 서버 로그에만 남긴다.
+ */
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
+    @ExceptionHandler(UnauthorizedException.class)
+    ResponseEntity<Map<String, Object>> handleUnauthorized(UnauthorizedException exception) {
+        ResponseEntity<Map<String, Object>> response = userFacing(HttpStatus.UNAUTHORIZED, exception);
+        return ResponseEntity.status(response.getStatusCode())
+                .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+                .body(response.getBody());
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    ResponseEntity<Map<String, Object>> handleForbidden(ForbiddenException exception) {
+        return userFacing(HttpStatus.FORBIDDEN, exception);
+    }
+
+    /** 레이트 리밋 초과(#48): 429 + {@code Retry-After}(초). */
+    @ExceptionHandler(TooManyRequestsException.class)
+    ResponseEntity<Map<String, Object>> handleTooManyRequests(TooManyRequestsException exception) {
+        ResponseEntity<Map<String, Object>> response = userFacing(HttpStatus.TOO_MANY_REQUESTS, exception);
+        return ResponseEntity.status(response.getStatusCode())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(exception.retryAfterSeconds()))
+                .body(response.getBody());
+    }
+
+    @ExceptionHandler(BadRequestException.class)
+    ResponseEntity<Map<String, Object>> handleBadRequest(BadRequestException exception) {
+        return userFacing(HttpStatus.BAD_REQUEST, exception);
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    ResponseEntity<Map<String, Object>> handleServiceUnavailable(ServiceUnavailableException exception) {
+        return userFacing(HttpStatus.SERVICE_UNAVAILABLE, exception);
+    }
+
+    /** 사용자용으로 만들지 않은 IllegalArgumentException: 상태 코드(400)는 유지하고 문구만 일반화한다. */
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException exception) {
-        return error(HttpStatus.BAD_REQUEST, exception.getMessage());
+        return generic(HttpStatus.BAD_REQUEST, exception);
+    }
+
+    /** 사용자용으로 만들지 않은 IllegalStateException: 상태 코드(503)는 유지하고 문구만 일반화한다. */
+    @ExceptionHandler(IllegalStateException.class)
+    ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException exception) {
+        return generic(HttpStatus.SERVICE_UNAVAILABLE, exception);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -21,8 +85,84 @@ public class ApiExceptionHandler {
         String message = exception.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .orElse("요청 값이 올바르지 않습니다.");
+                .orElse(Messages.get("validation.invalid-request"));
+        logFor(HttpStatus.BAD_REQUEST, exception.getClass().getSimpleName() + ": " + message, exception);
         return error(HttpStatus.BAD_REQUEST, message);
+    }
+
+    /** 본문 JSON 파싱 실패·형식 불일치: 400 + 일반 문구. 파서 상세(필드 경로, 입력 조각)는 로그에만 남긴다. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException exception) {
+        return badRequest("error.unreadable-body", exception);
+    }
+
+    /** 경로 변수·쿼리 파라미터 타입 변환 실패(예: 숫자 자리에 문자열, 잘못된 날짜): 400 + 일반 문구. */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException exception) {
+        return badRequest("error.invalid-parameter", exception);
+    }
+
+    /** 필수 쿼리 파라미터·헤더 누락: 400 + 일반 문구. */
+    @ExceptionHandler({MissingServletRequestParameterException.class, MissingRequestHeaderException.class})
+    ResponseEntity<Map<String, Object>> handleMissingParameter(Exception exception) {
+        return badRequest("error.missing-parameter", exception);
+    }
+
+    /**
+     * 그 밖의 런타임 예외는 500 + 일반 문구. 단, 스프링 MVC 가 자체 상태 코드로 처리하는 예외
+     * (위에서 따로 다루지 않은 {@code ResponseStatusException}, {@code @ResponseStatus} 예외 등)는 다시 던져 기본 처리에 맡긴다.
+     */
+    @ExceptionHandler(RuntimeException.class)
+    ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException exception) {
+        if (isHandledByFramework(exception)) {
+            throw exception;
+        }
+        return generic(HttpStatus.INTERNAL_SERVER_ERROR, exception);
+    }
+
+    private static boolean isHandledByFramework(RuntimeException exception) {
+        return exception instanceof ErrorResponse
+                || exception instanceof HttpMessageConversionException
+                || exception instanceof TypeMismatchException
+                || AnnotatedElementUtils.hasAnnotation(exception.getClass(), ResponseStatus.class);
+    }
+
+    /**
+     * 스프링 기본 400 예외: 키에 해당하는 일반 문구로 응답한다.
+     * 이 예외들의 메시지에는 요청 본문 조각(건강 데이터·토큰)이 섞일 수 있어 로그에는 클래스명만 남긴다.
+     */
+    private ResponseEntity<Map<String, Object>> badRequest(String messageCode, Exception exception) {
+        return localized(HttpStatus.BAD_REQUEST, messageCode, exception.getClass().getSimpleName(), exception);
+    }
+
+    /** 사용자용 예외: 메시지를 그대로 응답한다. */
+    private ResponseEntity<Map<String, Object>> userFacing(HttpStatus status, RuntimeException exception) {
+        logFor(status, describe(exception), exception);
+        return error(status, exception.getMessage());
+    }
+
+    /** 사용자용이 아닌 예외: 상태 코드는 유지하고 일반 문구로 응답한다. 상세는 로그에만 남긴다. */
+    private ResponseEntity<Map<String, Object>> generic(HttpStatus status, Exception exception) {
+        return localized(status, "error.generic", describe(exception), exception);
+    }
+
+    private ResponseEntity<Map<String, Object>> localized(
+            HttpStatus status, String messageCode, String logSummary, Exception exception) {
+        logFor(status, logSummary, exception);
+        return error(status, Messages.get(messageCode));
+    }
+
+    /** 4xx 는 클라이언트 문제라 스택 없이 한 줄(warn), 5xx 는 스택과 함께 error 로 남긴다. */
+    private static void logFor(HttpStatus status, String summary, Exception exception) {
+        if (status.is5xxServerError()) {
+            log.error("{} 응답: {}", status.value(), summary, exception);
+        } else {
+            log.warn("{} 응답: {}", status.value(), summary);
+        }
+    }
+
+    private static String describe(Exception exception) {
+        return exception.getClass().getSimpleName() + ": " + exception.getMessage();
     }
 
     private ResponseEntity<Map<String, Object>> error(HttpStatus status, String message) {
@@ -34,4 +174,3 @@ public class ApiExceptionHandler {
         ));
     }
 }
-

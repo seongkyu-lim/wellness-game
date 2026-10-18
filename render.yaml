@@ -1,0 +1,77 @@
+# Render Blueprint — 백엔드 API (Spring Boot, Docker). 순서·주의사항은 README "운영 배포" 참고.
+# sync: false 항목은 Blueprint 를 처음 만들 때 Render 대시보드가 값을 묻는다(이후 Blueprint 동기화는 값을 건드리지 않음).
+# 비밀값은 이 파일에 적지 않는다.
+services:
+  - type: web
+    name: wellness-game-api
+    runtime: docker
+    # rootDir 를 지정하면 Dockerfile 경로·빌드 컨텍스트는 이 디렉터리 기준이다(backend/Dockerfile, 컨텍스트 backend/).
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # 운영 배포 브랜치. main 에 머지되면 자동 배포된다.
+    branch: main
+    autoDeploy: true
+    # 한국과 가까운 리전. Supabase 도 같은 Singapore(ap-southeast-1)에 만들면 DB 왕복 지연이 가장 작다. 생성 후 바꿀 수 없다.
+    region: singapore
+    # starter: 512MB RAM·0.5 CPU, 항상 켜져 있음(유료).
+    # free: 15분 동안 요청이 없으면 잠들고 다음 요청 때 콜드 스타트(JVM 기동 수십 초)가 걸린다. 앱의 백그라운드 동기화가
+    #   타임아웃될 수 있고 매일 04:00 리프레시 토큰 정리 작업(@Scheduled)도 잠든 동안에는 돌지 않는다. 출시 전 테스트용으로만 쓴다.
+    # 출시 전에는 free 로 시작하고, 앱 심사 제출 전에 starter 로 올린다.
+    plan: free
+    # 인증·레이트 리밋 대상이 아닌 가벼운 헬스체크(HealthCheckController). DB 는 확인하지 않는다.
+    healthCheckPath: /healthz
+    envVars:
+      # --- DB (Supabase PostgreSQL) ---
+      # JDBC 형식: jdbc:postgresql://<host>:<port>/postgres?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
+      # DB_POOL_MAX: application.yml 기본값(5)을 쓴다. Supabase 연결 한도에 맞춰 바꿀 때만 추가한다.
+
+      # --- 인증 ---
+      # 256비트 무작위 base64 값을 Render 가 처음 한 번 생성한다(32바이트 이상 요구 충족). 바꾸면 모든 토큰이 무효가 된다.
+      - key: AUTH_JWT_SECRET
+        generateValue: true
+      # 출시 전이라 구버전 클라이언트가 없으므로 최종값으로 시작한다(README "운영 배포").
+      # AUTH_JWT_TTL: application.yml 기본값(1h)을 그대로 쓴다. 설정 출처를 하나로 두려고 여기서 지정하지 않는다.
+      # 아래 두 값은 application.yml 기본값과 다른 운영값이라 명시한다.
+      - key: OAUTH_APPLE_REQUIRE_NONCE
+        value: "true"
+      # 비우면 iss·aud 없는 #55 이전 형식 토큰을 받지 않는다.
+      - key: AUTH_JWT_LEGACY_CUTOFF
+        value: ""
+      # APP_TIMEZONE: application.yml 기본값(Asia/Seoul)을 쓴다.
+      # Vercel 운영 도메인(쉼표로 여러 개). 예: https://wellness-game.vercel.app
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      # Render 프록시 뒤라 X-Forwarded-For 동작을 확인한 뒤에만 true 로 바꾼다(README 레이트 리밋 배포 체크리스트).
+      # - key: APP_RATE_LIMIT_TRUST_FORWARDED_HEADER
+      #   value: "true"
+
+      # --- 소셜 로그인 (README "소셜 로그인 서버 환경변수") — 비워 둔 공급자의 엔드포인트는 503 ---
+      - key: OAUTH_GOOGLE_CLIENT_ID
+        sync: false
+      - key: OAUTH_GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: OAUTH_GOOGLE_IOS_CLIENT_ID
+        sync: false
+      - key: OAUTH_KAKAO_CLIENT_ID
+        sync: false
+      - key: OAUTH_KAKAO_CLIENT_SECRET
+        sync: false
+      - key: OAUTH_KAKAO_NATIVE_APP_ID
+        sync: false
+      - key: OAUTH_NAVER_CLIENT_ID
+        sync: false
+      - key: OAUTH_NAVER_CLIENT_SECRET
+        sync: false
+      - key: OAUTH_APPLE_BUNDLE_ID
+        sync: false
+
+      # JVM 기본값(Dockerfile: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError)을 바꿀 때만 설정한다.
+      # - key: JAVA_TOOL_OPTIONS
+      #   value: -XX:MaxRAMPercentage=65 -XX:+ExitOnOutOfMemoryError

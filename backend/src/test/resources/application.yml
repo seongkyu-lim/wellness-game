@@ -1,10 +1,25 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:wellness;MODE=MySQL;DB_CLOSE_DELAY=-1
+    # PostgreSQL 호환 모드. 운영과 같은 Flyway 마이그레이션(db/migration)을 그대로 실행한다.
+    url: jdbc:h2:mem:wellness;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
     username: sa
     password:
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      # 스키마는 운영과 같은 Flyway 마이그레이션(db/migration)으로 만든다. 타입 매핑(uuid, timestamptz)도 운영 기본값 그대로다.
+      ddl-auto: validate
     open-in-view: false
+
+auth:
+  jwt:
+    # 테스트 전용 고정 키(32바이트 이상). 운영에서 사용 금지.
+    secret: test-only-jwt-secret-0123456789abcdef
+    ttl: 30d
+
+app:
+  # 여러 테스트가 같은 IP(127.0.0.1)·사용자로 인증·동기화를 반복하므로 기본은 끄고, RateLimitIntegrationTest 에서만 켠다.
+  rate-limit:
+    sync-per-minute: 0
+    auth-per-minute: 0
+    login-per-minute: 0

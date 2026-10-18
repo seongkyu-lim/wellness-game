@@ -1,0 +1,56 @@
+name: Android CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-ci.yml'
+  push:
+    branches: [dev, main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: android
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      # ubuntu 러너에 Android SDK가 설치돼 있고(ANDROID_HOME) 라이선스도 동의돼 있다.
+      # setup-android 는 sdkmanager 프리뷰 약관 단계에서 실패해 사용하지 않는다.
+      - name: Android SDK
+        run: echo "ANDROID_HOME=$ANDROID_HOME" && test -d "$ANDROID_HOME"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ !contains(fromJSON('["refs/heads/dev","refs/heads/main"]'), github.ref) }}
+      - name: Unit tests, debug·release build, lint
+        # 자리표시 https 주소. release는 https 주소가 없으면 빌드가 실패하고, debug는 이 값을 쓰지 않는다.
+        run: ./gradlew -PAPI_BASE_URL=https://api.wellnessgame.example testDebugUnitTest assembleDebug lint assembleRelease
+      - name: Upload lint and test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          path: |
+            android/app/build/reports/
+            android/app/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

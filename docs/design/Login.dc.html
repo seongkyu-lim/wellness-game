@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>로그인</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1F2340}a:hover{color:#4A5080}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-8px) rotate(2deg)}}
+@keyframes twinkle{0%,100%{transform:scale(.6) rotate(0deg);opacity:.5}50%{transform:scale(1.1) rotate(25deg);opacity:1}}
+.bob{animation:bob 2.4s ease-in-out infinite;transform-origin:50% 90%}
+.tw{animation:twinkle 1.8s ease-in-out infinite}
+.tw2{animation:twinkle 2.2s ease-in-out .7s infinite}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background-color: {{sky}}; background-image: radial-gradient(rgba(255,255,255,0.55) 1.6px, transparent 1.8px); background-size: 12px 12px; font-family: 'Jua', sans-serif; color: #1F2340; padding: 56px 22px 28px; display: flex; flex-direction: column; align-items: center">
+
+  <h1 style="margin: 0; font-family: 'Black Han Sans', sans-serif; font-weight: 400; font-size: 44px; line-height: 1; color: #1F2340; text-shadow: 4px 4px 0 #FFFFFF; transform: rotate(-3deg)">Wellness <span style="color: #3F8F3A">Game</span></h1>
+  <p style="margin: 14px 0 0; font-size: 16px; color: #2E3570; text-align: center; line-height: 1.4">걸음 · 운동 · 수면이 XP가 되어<br>새싹이가 자라요</p>
+
+  <div style="position: relative; width: 300px; height: 250px; margin-top: 8px">
+    <div style="position: absolute; right: 0; top: 18px; background-color: #FFFFFF; border: 3px solid #1F2340; border-radius: 18px; padding: 8px 14px; font-size: 16px">같이 걸으러 갈래?
+      <svg style="position: absolute; left: 18px; bottom: -17px" width="26" height="18" viewBox="0 0 26 18" aria-hidden="true"><path d="M2 0 L12 16 L22 0" fill="#FFFFFF" stroke="#1F2340" stroke-width="3" stroke-linejoin="round"></path><rect x="3" y="0" width="18" height="2" fill="#FFFFFF"></rect></svg>
+    </div>
+    <svg class="tw" style="position: absolute; left: 12px; top: 30px" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0 L14.5 9.5 L24 12 L14.5 14.5 L12 24 L9.5 14.5 L0 12 L9.5 9.5Z" fill="#FFE066" stroke="#1F2340" stroke-width="1.6" stroke-linejoin="round"></path></svg>
+    <svg class="tw2" style="position: absolute; left: 40px; top: 170px" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0 L14.5 9.5 L24 12 L14.5 14.5 L12 24 L9.5 14.5 L0 12 L9.5 9.5Z" fill="#FF9EC4" stroke="#1F2340" stroke-width="2" stroke-linejoin="round"></path></svg>
+    <div class="bob" style="position: absolute; left: 40px; top: 50px; width: 200px; height: 200px">
+      <svg width="200" height="200" viewBox="0 0 120 120" role="img" aria-label="손을 흔드는 새싹 단계의 새싹이">
+        <ellipse cx="60" cy="112" rx="30" ry="4" fill="#1F2340" opacity="0.18"></ellipse>
+        <g stroke="#1F2340" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+          <rect x="57" y="48" width="6" height="24" rx="3" fill="#5BB04F"></rect>
+          <path d="M58 58 Q44 58 40 46 Q54 42 58 58Z" fill="#8ED65A"></path>
+          <path d="M62 54 Q74 52 80 40 Q66 38 62 54Z" fill="#8ED65A"></path>
+          <path d="M82 84 Q92 78 94 68" fill="none" stroke-width="3.4"></path>
+          <circle cx="95" cy="65" r="4.5" fill="#F4A06C"></circle>
+          <path d="M38 76 H82 L77 104 Q76 109 71 109 H49 Q44 109 43 104 Z" fill="#F4A06C"></path>
+          <path d="M66 77.5 H80 L75.5 103 Q74.5 107 70 107 H63 Q68 94 66 77.5 Z" fill="#DC7A4C" stroke="none"></path>
+          <rect x="33" y="68" width="54" height="12" rx="5" fill="#F9BC8A"></rect>
+          <rect x="38" y="71" width="20" height="3" rx="1.5" fill="#FFE2C6" stroke="none"></rect>
+          <ellipse cx="51" cy="90" rx="4.2" ry="5.6" fill="#1F2340" stroke="none"></ellipse>
+          <path d="M64.5 91 Q69 85 73.5 91" fill="none" stroke-width="2.6"></path>
+          <circle cx="52.4" cy="87.8" r="1.7" fill="#FFFFFF" stroke="none"></circle>
+          <circle cx="49.8" cy="92.4" r="0.8" fill="#FFFFFF" stroke="none"></circle>
+          <ellipse cx="44" cy="97" rx="4" ry="2.2" fill="#FF8FB1" stroke="none"></ellipse>
+          <ellipse cx="76" cy="97" rx="4" ry="2.2" fill="#FF8FB1" stroke="none"></ellipse>
+          <path d="M55.5 95.5 Q60 103 64.5 95.5Z" fill="#E8577F" stroke-width="2.2"></path>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div style="width: 100%; display: flex; flex-direction: column; gap: 12px; margin-top: auto">
+    <button type="button" style="height: 54px; border: 3px solid #1F2340; border-radius: 16px; background-color: #14172B; color: #FFFFFF; font-size: 18px; box-shadow: 0 5px 0 #1F2340">Apple로 계속하기</button>
+    <button type="button" style="height: 54px; border: 3px solid #1F2340; border-radius: 16px; background-color: #FFFFFF; color: #1F2340; font-size: 18px; box-shadow: 0 5px 0 #1F2340">Google로 계속하기</button>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <button type="button" style="height: 54px; border: 3px solid #1F2340; border-radius: 16px; background-color: #FEE500; color: #1F2340; font-size: 17px; box-shadow: 0 5px 0 #1F2340">카카오</button>
+      <button type="button" style="height: 54px; border: 3px solid #1F2340; border-radius: 16px; background-color: #03C75A; color: #14172B; font-size: 17px; box-shadow: 0 5px 0 #1F2340">네이버</button>
+    </div>
+    <button type="button" style="height: 48px; border: none; background-color: transparent; color: #1F2340; font-size: 16px; text-decoration: underline; text-underline-offset: 4px">로그인 없이 게스트로 시작</button>
+    <p style="margin: 0; font-size: 13px; color: #2E3570; text-align: center">건강 데이터는 Apple 건강 권한을 허락한 뒤에만 읽어요</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"sky":{"editor":"color","default":"#BFE6FF"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { sky: this.props.sky ?? '#BFE6FF' };
+  }
+}
+</script>
+</body>
+</html>

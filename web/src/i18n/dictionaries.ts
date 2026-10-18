@@ -1,0 +1,365 @@
+export type Language = 'ko' | 'en'
+
+const ko = {
+  'app.name': 'Wellness Game',
+  'lang.toggle': '언어',
+  'lang.ko': '한국어',
+  'lang.en': 'English',
+
+  'error.sessionExpired': '로그인이 만료되었습니다. 다시 로그인해 주세요.',
+  'error.loginFailed': '로그인에 실패했습니다.',
+  'error.network': '서버에 연결할 수 없습니다. 백엔드가 실행 중인지 확인해 주세요.',
+  'error.request': '요청에 실패했습니다. ({status})',
+  'error.noToken': '서버가 인증 토큰을 반환하지 않았습니다.',
+  'error.stateMismatch': '로그인 상태 검증에 실패했습니다. 다시 시도해 주세요.',
+  'error.unsupportedProvider': '지원하지 않는 로그인 방식입니다.',
+
+  'account.label': '계정',
+  'account.title': '계정',
+  'account.signedIn': '{provider} 로그인',
+  'account.signInRequired': '로그인 필요',
+  'account.defaultName': '회원',
+  'account.signedInHint':
+    '{name}님, 이 계정의 캐릭터 기록을 조회하고 있어요. 기록은 iPhone 앱에서 같은 계정으로 로그인해 동기화하면 쌓입니다.',
+  'account.logout': '로그아웃',
+  'account.signInHint':
+    '내 캐릭터와 활동 기록을 보려면 iPhone 앱과 같은 계정으로 로그인해 주세요. 로그인한 본인의 데이터만 볼 수 있어요.',
+  'account.signInWith': '{provider}로 로그인',
+  'account.otherSignIn': '다른 방법으로 로그인',
+  'account.disabledHint':
+    '비활성화된 버튼은 provider 키가 설정되지 않은 것입니다. 설정 방법은 web/README.md를 참고하세요. (Apple 로그인은 Apple Developer 유료 계정과 HTTPS 도메인이 필요해 웹에서는 아직 지원하지 않아요.)',
+
+  'activity.label': '활동 기록',
+  'activity.title': '오늘의 퀘스트',
+  'activity.dateLabel': '조회 날짜',
+  'activity.refresh': '새로고침',
+  'activity.emptyTitle': '아직 동기화된 기록이 없어요',
+  'activity.emptyBody':
+    'iPhone 앱이 HealthKit 데이터를 자동으로 수집해요. 앱에서 동기화하면 이곳에 바로 표시됩니다.',
+  'activity.steps': '걸음 수',
+  'activity.noRecord': '기록 없음',
+  'activity.sleepDuration': '{hours}시간 {minutes}분',
+  'activity.minutes': '{n}분',
+  'activity.totalXp': '이 날짜에 얻은 XP',
+  'activity.stepsCount': '{n}걸음',
+  'activity.sleepTitle': '수면 {duration}',
+  'activity.sleepScore': '수면 점수 {score}',
+  'activity.noSleepScore': '수면 점수 없음',
+  'activity.healthSource': 'Apple 건강',
+  'workout.SWIMMING': '수영',
+  'workout.RUNNING': '달리기',
+  'workout.WALKING': '걷기',
+  'workout.CYCLING': '자전거',
+  'workout.STRENGTH_TRAINING': '근력 운동',
+  'workout.OTHER': '운동',
+
+  'character.label': '내 캐릭터',
+  'character.stageBadge': 'Lv.{level} · {stage} 단계',
+  'character.avatarLabel': '{stage} 단계 캐릭터',
+  'character.name': '새싹이',
+  'character.notSynced': '아직 동기화 전',
+  'character.bubbleEmpty': 'iPhone 앱에서 동기화하면 나도 깨어날게!',
+  'character.bubbleNext': 'Lv.{level}이 되면 {stage} 단계로 자랄 거야!',
+  'character.bubbleMax': '활짝 피었어! 늘 함께해 줘서 고마워!',
+  'character.xpLabel': '경험치',
+  'character.xpTotal': '누적 {xp} XP',
+  'character.xpBarLabel': '다음 레벨까지 경험치',
+  'character.nextStageLabel': '{stage}까지 Lv.{level}',
+  'character.finalStage': '최종 단계',
+  'character.statsLabel': '스탯',
+
+  'stage.seed': '씨앗',
+  'stage.sprout': '새싹',
+  'stage.sapling': '줄기',
+  'stage.young': '어린나무',
+  'stage.tree': '나무',
+  'stage.blossom': '개화',
+
+  'stat.str': '근력',
+  'stat.vit': '활력',
+  'stat.discipline': '절제',
+  'stat.recovery': '회복',
+  'landing.label': '서비스 소개',
+  'landing.eyebrow': 'Apple 건강 × 성장 게임',
+  'landing.title': '걷고, 자고, 움직이면\n새싹이가 자라요',
+  'landing.lead':
+    'iPhone의 걸음·운동·수면 기록이 자동으로 XP가 돼요. 따로 입력할 건 없어요. 평소처럼 지내면 화분 속 새싹이가 씨앗에서 꽃까지 자라나요.',
+  'landing.ctaLogin': '로그인하고 내 새싹이 보기',
+  'landing.ctaHow': '어떻게 자라나요?',
+  'landing.bubble': '오늘도 같이 걸을래?',
+  'landing.sceneLabel': '단계별로 자라는 새싹이 미리보기',
+  'landing.howTitle': '이렇게 자라요',
+  'landing.step1Title': 'Apple 건강 연결',
+  'landing.step1Body': 'iPhone 앱에서 건강 데이터 읽기를 한 번만 허락하면 준비 끝.',
+  'landing.step2Title': '자동으로 XP 적립',
+  'landing.step2Body': '걸음·운동·수면 기록이 서버로 동기화되어 XP와 스탯으로 바뀌어요.',
+  'landing.step3Title': '새싹이 성장',
+  'landing.step3Body': '레벨이 오를 때마다 새싹이가 다음 단계로 자라요.',
+  'landing.statsTitle': '활동마다 다른 스탯',
+  'landing.statSteps': '꾸준히 걸으면 {stat} 스탯이 올라요',
+  'landing.statWorkout': '운동하면 {stat1}·{stat2} 스탯이 올라요',
+  'landing.statSleep': '푹 자면 {stat} 스탯이 올라요',
+  'landing.activitySteps': '걸음',
+  'landing.activityWorkout': '운동',
+  'landing.activitySleep': '수면',
+  'landing.stagesTitle': '씨앗에서 꽃까지, 6단계',
+  'landing.stageLevel': 'Lv.{level}부터',
+  'landing.webTitle': '웹에서는 기록을 한눈에',
+  'landing.webBody': '앱과 같은 계정으로 로그인하면 캐릭터·스탯·오늘의 퀘스트를 웹에서도 볼 수 있어요.',
+  'landing.privacyTitle': '내 건강 데이터는 나만',
+  'landing.privacyBody':
+    'Apple 건강 전체가 아니라 XP 계산에 필요한 값(걸음 수, 운동·수면 시간, 거리, 칼로리)만 보내고, 웹에서는 로그인한 본인 데이터만 볼 수 있어요.',
+  'landing.footer': '웹은 조회 전용이에요. 기록은 iPhone 앱이 Apple 건강에서 자동으로 모아요.',
+
+  'footer.label': '사이트 정보',
+  'footer.privacy': '개인정보 처리방침',
+  'footer.terms': '이용약관',
+
+  'legal.home': '홈으로',
+  'legal.effectiveDate': '시행일: {date}',
+  'legal.privacy.title': '개인정보 처리방침',
+  'legal.privacy.intro':
+    'Wellness Game(이하 "서비스")은 걷기·운동·수면 기록을 캐릭터 성장 게임으로 보여 주기 위해 꼭 필요한 정보만 수집합니다. 이 방침은 iPhone·Apple Watch·Android 앱과 웹 대시보드에 함께 적용됩니다.',
+  'legal.privacy.collectTitle': '1. 서버에 저장하는 정보',
+  'legal.privacy.collectBody':
+    '- 계정: 로그인 방식별 계정 식별자(소셜 로그인 제공자가 주는 고유 ID 또는 가입한 아이디)와 표시 이름. 아이디로 가입한 경우 비밀번호는 복원할 수 없는 bcrypt 해시로만 저장합니다.\n- 건강 기록(사용자가 허락한 경우 Apple 건강(HealthKit) 또는 Health Connect에서 읽음): 걸음 수, 운동 종류·시작/종료 시각·운동 시간·칼로리·거리, 수면 시작/종료 시각·수면 시간·수면 점수.\n- 캐릭터: 건강 기록으로 계산한 레벨·경험치(XP)·스탯.\n- 로그인 유지 정보: 리프레시 토큰은 원문이 아닌 해시로만 저장하며, 만료되거나 폐기된 뒤 7일이 지나면 삭제합니다.\n- 기기 언어: 화면과 서버 안내 문구를 같은 언어로 보여 주기 위해 요청마다 기기·브라우저 언어 설정을 받습니다(저장하지 않음).',
+  'legal.privacy.notSentTitle': '2. 저장하지 않는 정보',
+  'legal.privacy.notSentBody':
+    '- 심박수: iPhone·Apple Watch 앱은 HealthKit 심박수 읽기 권한을 요청하지만, 심박수는 기기 안에서 Watch 운동 화면 표시에만 사용하며 서버로 전송하거나 저장하지 않습니다.\n- IP 주소: 남용 방지(요청 횟수 제한·로그인 잠금)를 위해 서버 메모리에서만 짧게 사용하고 데이터베이스나 파일에 저장하지 않습니다. 다만 호스팅 업체가 운영·보안을 위해 접속 기록을 남길 수 있습니다.\n- 1항에 적지 않은 건강 데이터는 서버로 보내지 않습니다.',
+  'legal.privacy.purposeTitle': '3. 이용 목적',
+  'legal.privacy.purposeBody':
+    '- 건강 기록을 경험치·레벨·스탯으로 바꿔 캐릭터를 성장시킵니다.\n- 앱과 웹 대시보드에서 내 캐릭터와 활동 기록을 보여 줍니다.\n- 로그인 상태를 유지하고 계정을 보호합니다.',
+  'legal.privacy.healthTitle': '4. 건강 데이터 이용 제한',
+  'legal.privacy.healthBody':
+    'HealthKit과 Health Connect에서 받은 데이터는 위 목적(서비스 제공)에만 사용합니다. 광고·마케팅, 맞춤형 광고를 위한 분석, 데이터 판매나 중개에 사용하지 않으며 광고 플랫폼이나 데이터 브로커에게 넘기지 않습니다.',
+  'legal.privacy.sharingTitle': '5. 제3자 제공',
+  'legal.privacy.sharingBody':
+    '수집한 개인정보를 제3자에게 제공하지 않습니다. 서비스 운영에 필요한 처리 위탁(6항)과 법령에 따라 제출 의무가 있는 경우만 예외입니다.',
+  'legal.privacy.transferTitle': '6. 처리 위탁과 국외 이전',
+  'legal.privacy.transferBody':
+    '서비스 운영을 위해 아래 업체에 처리를 맡기며, 이 과정에서 개인정보가 국외로 이전됩니다. 업체들은 맡긴 목적으로만 처리합니다.\n| 받는 곳 | 국가 | 목적 | 항목 |\n| Vercel | 미국 | 웹 대시보드 호스팅 | 웹 접속 정보(IP 주소 등 접속 기록) |\n| Render | 싱가포르 | API 서버 운영 | 1항의 정보(요청 처리 중), IP 주소 |\n| Supabase | 싱가포르 | 데이터베이스 보관 | 1항의 저장 정보 |\n| 소셜 로그인 제공자(구글·Apple / 카카오·네이버) | 미국 / 대한민국 | 본인 확인 | 로그인 시 제공자가 발급한 인가 코드·토큰 |\n이전은 서비스를 이용할 때 암호화된 네트워크로 이루어지며, 보관 기간은 8항과 같습니다.',
+  'legal.privacy.loginTitle': '7. 소셜 로그인',
+  'legal.privacy.loginBody':
+    '구글·카카오·네이버·Apple 로그인을 지원합니다. 로그인하면 해당 제공자가 본인 확인 후 계정 식별자와 이름(제공된 경우)을 서비스에 전달합니다. 제공자가 발급한 토큰은 본인 확인에만 쓰고 저장하지 않습니다. 각 제공자의 개인정보 처리는 해당 제공자의 방침을 따릅니다.',
+  'legal.privacy.retentionTitle': '8. 보관 기간과 삭제',
+  'legal.privacy.retentionBody':
+    '정보는 계정을 유지하는 동안 보관합니다. 앱 안의 계정 삭제 기능 또는 {email}로 보내는 이메일 요청(로그인 방식과 표시 이름을 알려 주세요)으로 계정과 모든 데이터를 삭제할 수 있으며, 요청을 받으면 계정 정보·건강 기록·캐릭터를 지체 없이 파기합니다.\n앱의 건강 데이터 접근 권한은 iPhone 설정 또는 Health Connect에서 언제든 끌 수 있으며, 끄면 새 기록은 더 이상 수집되지 않습니다(이미 저장된 기록은 계정 삭제로 지울 수 있습니다).',
+  'legal.privacy.rightsTitle': '9. 이용자의 권리',
+  'legal.privacy.rightsBody': '내 정보의 열람·정정·삭제·처리 정지를 {email}로 요청할 수 있습니다.',
+  'legal.privacy.contactTitle': '10. 문의',
+  'legal.privacy.contactBody': '개인정보 관련 문의: {email}',
+  'legal.privacy.changesTitle': '11. 방침의 변경',
+  'legal.privacy.changesBody': '이 방침을 바꾸면 시행일과 함께 이 페이지에 알립니다.',
+
+  'legal.terms.title': '이용약관',
+  'legal.terms.intro': '이 약관은 Wellness Game(이하 "서비스")의 앱과 웹 대시보드 이용에 적용됩니다.',
+  'legal.terms.serviceTitle': '1. 서비스 내용',
+  'legal.terms.serviceBody':
+    '서비스는 사용자가 허락한 건강 기록(걸음·운동·수면)을 경험치로 바꿔 캐릭터 성장 게임으로 보여 줍니다. 기록은 앱이 수집하며, 웹 대시보드는 조회 전용입니다.',
+  'legal.terms.accountTitle': '2. 계정',
+  'legal.terms.accountBody':
+    '구글·카카오·네이버·Apple 로그인 또는 아이디로 계정을 만들 수 있습니다. 계정과 기기의 관리 책임은 사용자에게 있으며, 다른 사람의 계정을 사용해서는 안 됩니다.',
+  'legal.terms.medicalTitle': '3. 의료 서비스가 아님',
+  'legal.terms.medicalBody':
+    '서비스는 게임과 동기 부여를 위한 것이며 진단·치료·의학적 조언을 제공하지 않습니다. 건강에 관한 결정은 의료 전문가와 상의하세요.',
+  'legal.terms.conductTitle': '4. 금지 행위',
+  'legal.terms.conductBody':
+    '- 다른 사람의 계정이나 정보를 도용하는 행위\n- 비정상적인 방법으로 기록을 조작하거나 서버에 과도한 요청을 보내는 행위\n- 서비스 운영을 방해하거나 보안을 우회하는 행위',
+  'legal.terms.changesTitle': '5. 서비스 변경·중단',
+  'legal.terms.changesBody':
+    '서비스 내용은 바뀌거나 중단될 수 있으며, 중요한 변경은 가능한 한 미리 알립니다. 서비스는 무료로 제공됩니다.',
+  'legal.terms.liabilityTitle': '6. 책임의 제한',
+  'legal.terms.liabilityBody':
+    '관련 법령이 허용하는 범위에서, 기기·건강 앱의 기록 누락이나 통신 장애로 생긴 경험치·기록 차이에 대해 책임을 지지 않습니다.',
+  'legal.terms.withdrawTitle': '7. 탈퇴',
+  'legal.terms.withdrawBody':
+    '언제든 앱 안의 계정 삭제 기능 또는 {email}로 보내는 이메일 요청으로 탈퇴(계정 삭제)할 수 있으며, 개인정보는 개인정보 처리방침에 따라 파기됩니다.',
+  'legal.terms.privacyTitle': '8. 개인정보',
+  'legal.terms.privacyBody': '개인정보 처리는 별도의 개인정보 처리방침을 따릅니다.',
+  'legal.terms.contactTitle': '9. 문의와 약관 변경',
+  'legal.terms.contactBody': '문의는 {email}로 보내 주세요. 약관을 바꾸면 시행일과 함께 이 페이지에 알립니다.',
+} as const
+
+export type MessageKey = keyof typeof ko
+
+const en: Record<MessageKey, string> = {
+  'app.name': 'Wellness Game',
+  'lang.toggle': 'Language',
+  'lang.ko': '한국어',
+  'lang.en': 'English',
+
+  'error.sessionExpired': 'Your session has expired. Please sign in again.',
+  'error.loginFailed': 'Sign-in failed.',
+  'error.network': "Can't reach the server. Make sure the backend is running.",
+  'error.request': 'Request failed ({status}).',
+  'error.noToken': "The server didn't return an auth token.",
+  'error.stateMismatch': "We couldn't verify your sign-in. Please try again.",
+  'error.unsupportedProvider': "That sign-in method isn't supported.",
+
+  'account.label': 'Account',
+  'account.title': 'Account',
+  'account.signedIn': 'Signed in with {provider}',
+  'account.signInRequired': 'Sign-in required',
+  'account.defaultName': 'there',
+  'account.signedInHint':
+    "Hi {name}, you're viewing this account's character. Records build up when you sign in with the same account in the iPhone app and sync.",
+  'account.logout': 'Sign out',
+  'account.signInHint':
+    'Sign in with the same account as the iPhone app to see your character and activity. You can only see your own data.',
+  'account.signInWith': 'Sign in with {provider}',
+  'account.otherSignIn': 'Other sign-in options',
+  'account.disabledHint':
+    "Disabled buttons mean the provider key isn't configured. See web/README.md for setup. (Sign in with Apple needs a paid Apple Developer account and an HTTPS domain, so it isn't available on the web yet.)",
+
+  'activity.label': 'Activity',
+  'activity.title': "Today's quests",
+  'activity.dateLabel': 'Date',
+  'activity.refresh': 'Refresh',
+  'activity.emptyTitle': 'Nothing synced yet',
+  'activity.emptyBody':
+    'The iPhone app collects your HealthKit data automatically. Sync in the app and it shows up here right away.',
+  'activity.steps': 'Steps',
+  'activity.noRecord': 'No data',
+  'activity.sleepDuration': '{hours}h {minutes}m',
+  'activity.minutes': '{n} min',
+  'activity.totalXp': 'XP earned on this day',
+  'activity.stepsCount': '{n} steps',
+  'activity.sleepTitle': 'Sleep {duration}',
+  'activity.sleepScore': 'Sleep score {score}',
+  'activity.noSleepScore': 'No sleep score',
+  'activity.healthSource': 'Apple Health',
+  'workout.SWIMMING': 'Swimming',
+  'workout.RUNNING': 'Running',
+  'workout.WALKING': 'Walking',
+  'workout.CYCLING': 'Cycling',
+  'workout.STRENGTH_TRAINING': 'Strength training',
+  'workout.OTHER': 'Workout',
+
+  'character.label': 'My character',
+  'character.stageBadge': 'Lv.{level} · {stage} stage',
+  'character.avatarLabel': '{stage} stage character',
+  'character.name': 'Sprouty',
+  'character.notSynced': 'Not synced yet',
+  'character.bubbleEmpty': "Sync in the iPhone app and I'll wake up!",
+  'character.bubbleNext': "Reach Lv.{level} and I'll grow into the {stage} stage!",
+  'character.bubbleMax': "I'm in full bloom! Thanks for always being with me!",
+  'character.xpLabel': 'Experience',
+  'character.xpTotal': '{xp} XP total',
+  'character.xpBarLabel': 'XP to next level',
+  'character.nextStageLabel': '{stage} at Lv.{level}',
+  'character.finalStage': 'Final stage',
+  'character.statsLabel': 'Stats',
+
+  'stage.seed': 'Seed',
+  'stage.sprout': 'Sprout',
+  'stage.sapling': 'Stem',
+  'stage.young': 'Sapling',
+  'stage.tree': 'Tree',
+  'stage.blossom': 'Blossom',
+
+  'stat.str': 'Strength',
+  'stat.vit': 'Vitality',
+  'stat.discipline': 'Discipline',
+  'stat.recovery': 'Recovery',
+  'landing.label': 'About the service',
+  'landing.eyebrow': 'Apple Health × growth game',
+  'landing.title': 'Walk, sleep, move —\nwatch Sprouty grow',
+  'landing.lead':
+    'Your iPhone steps, workouts, and sleep turn into XP automatically. Nothing to log by hand. Just live your day and Sprouty grows from a seed to a full bloom.',
+  'landing.ctaLogin': 'Sign in to see my Sprouty',
+  'landing.ctaHow': 'How does it grow?',
+  'landing.bubble': 'Wanna walk together today?',
+  'landing.sceneLabel': 'Preview of Sprouty growing through each stage',
+  'landing.howTitle': 'How it works',
+  'landing.step1Title': 'Connect Apple Health',
+  'landing.step1Body': 'Allow the iPhone app to read your health data once, and you\'re all set.',
+  'landing.step2Title': 'Earn XP automatically',
+  'landing.step2Body': 'Your steps, workouts, and sleep sync to the server and become XP and stats.',
+  'landing.step3Title': 'Sprouty grows',
+  'landing.step3Body': 'Every level up helps Sprouty grow into its next stage.',
+  'landing.statsTitle': 'Each activity builds a stat',
+  'landing.statSteps': 'Steady steps build {stat}',
+  'landing.statWorkout': 'Workouts build {stat1} and {stat2}',
+  'landing.statSleep': 'Good sleep restores {stat}',
+  'landing.activitySteps': 'Steps',
+  'landing.activityWorkout': 'Workouts',
+  'landing.activitySleep': 'Sleep',
+  'landing.stagesTitle': 'From seed to bloom, in 6 stages',
+  'landing.stageLevel': 'From Lv.{level}',
+  'landing.webTitle': 'Your records at a glance on the web',
+  'landing.webBody': 'Sign in with the same account as the app to see your character, stats, and today\'s quests here too.',
+  'landing.privacyTitle': 'Your health data stays yours',
+  'landing.privacyBody':
+    'Only the values needed for XP (step counts, workout and sleep times, distance, calories) are sent, not your full Health history, and the web shows only your own data after you sign in.',
+  'landing.footer': 'The web is view-only. The iPhone app collects your records from Apple Health automatically.',
+
+  'footer.label': 'Site information',
+  'footer.privacy': 'Privacy Policy',
+  'footer.terms': 'Terms of Service',
+
+  'legal.home': 'Home',
+  'legal.effectiveDate': 'Effective date: {date}',
+  'legal.privacy.title': 'Privacy Policy',
+  'legal.privacy.intro':
+    'Wellness Game (the "Service") collects only what it needs to turn your walking, workout, and sleep records into a character growth game. This policy covers the iPhone, Apple Watch, and Android apps and the web dashboard.',
+  'legal.privacy.collectTitle': '1. Information we store on our servers',
+  'legal.privacy.collectBody':
+    "- Account: an account identifier for your sign-in method (the unique ID from your social sign-in provider, or the username you registered) and a display name. If you sign up with a username, your password is stored only as an irreversible bcrypt hash.\n- Health records (read from Apple Health (HealthKit) or Health Connect with your permission): step counts; workout type, start/end time, duration, calories, and distance; sleep start/end time, duration, and sleep score.\n- Character: the level, XP, and stats calculated from your health records.\n- Sign-in data: refresh tokens are stored only as hashes, never in plain form, and are deleted 7 days after they expire or are revoked.\n- Device language: your device or browser language is sent with each request so screens and server messages appear in the same language (not stored).",
+  'legal.privacy.notSentTitle': "2. Information we don't store",
+  'legal.privacy.notSentBody':
+    "- Heart rate: the iPhone and Apple Watch apps request permission to read heart rate from HealthKit, but heart rate is used only on your device to display it on the Watch workout screen. It is never sent to or stored on our servers.\n- IP address: used briefly in server memory only to prevent abuse (rate limiting and sign-in lockout), and never written to a database or file. Our hosting providers may keep access logs for operations and security.\n- Health data not listed in section 1 is not sent to our servers.",
+  'legal.privacy.purposeTitle': '3. How we use it',
+  'legal.privacy.purposeBody':
+    '- Turn your health records into XP, levels, and stats that grow your character.\n- Show your character and activity in the app and on the web dashboard.\n- Keep you signed in and protect your account.',
+  'legal.privacy.healthTitle': '4. Limits on health data',
+  'legal.privacy.healthBody':
+    "Data from HealthKit and Health Connect is used only for the purposes above (providing the Service). It is never used for advertising or marketing, analysis for targeted ads, or sold or brokered, and it is never shared with advertising platforms or data brokers.",
+  'legal.privacy.sharingTitle': '5. Sharing with third parties',
+  'legal.privacy.sharingBody':
+    "We don't share your personal information with third parties. The only exceptions are the processors that run the Service (section 6) and disclosures required by law.",
+  'legal.privacy.transferTitle': '6. Processors and international transfers',
+  'legal.privacy.transferBody':
+    "We use the providers below to run the Service, which transfers personal information outside your country. They process it only for the purpose we give them.\n| Recipient | Country | Purpose | Data |\n| Vercel | United States | Web dashboard hosting | Web access data (access logs such as IP address) |\n| Render | Singapore | API server | Information in section 1 (while handling requests), IP address |\n| Supabase | Singapore | Database storage | Stored information in section 1 |\n| Social sign-in providers (Google, Apple / Kakao, Naver) | United States / South Korea | Identity verification | Authorization codes and tokens issued by the provider at sign-in |\nTransfers happen over encrypted connections when you use the Service, and data is kept for the period described in section 8.",
+  'legal.privacy.loginTitle': '7. Social sign-in',
+  'legal.privacy.loginBody':
+    "We support Google, Kakao, Naver, and Apple sign-in. When you sign in, the provider verifies you and sends us your account identifier and name (if provided). Tokens issued by the provider are used only to verify you and are not stored. Each provider handles your data under its own policy.",
+  'legal.privacy.retentionTitle': '8. Retention and deletion',
+  'legal.privacy.retentionBody':
+    "We keep your information while your account exists. You can delete your account and all of its data with the in-app account deletion feature or by emailing {email} (include your sign-in method and display name). We then promptly delete your account information, health records, and character.\nYou can turn off the app's health data access at any time in iPhone Settings or Health Connect; new records then stop being collected (records already stored are removed when you delete your account).",
+  'legal.privacy.rightsTitle': '9. Your rights',
+  'legal.privacy.rightsBody': 'You can ask to access, correct, delete, or stop the processing of your information by emailing {email}.',
+  'legal.privacy.contactTitle': '10. Contact',
+  'legal.privacy.contactBody': 'Privacy questions: {email}',
+  'legal.privacy.changesTitle': '11. Changes to this policy',
+  'legal.privacy.changesBody': 'If we change this policy, we will post the update on this page with its effective date.',
+
+  'legal.terms.title': 'Terms of Service',
+  'legal.terms.intro': 'These terms apply to your use of the Wellness Game (the "Service") apps and web dashboard.',
+  'legal.terms.serviceTitle': '1. The Service',
+  'legal.terms.serviceBody':
+    'The Service turns the health records you allow (steps, workouts, sleep) into XP and shows them as a character growth game. Records are collected by the app; the web dashboard is view-only.',
+  'legal.terms.accountTitle': '2. Accounts',
+  'legal.terms.accountBody':
+    "You can create an account with Google, Kakao, Naver, or Apple sign-in, or with a username. You are responsible for your account and devices, and you must not use someone else's account.",
+  'legal.terms.medicalTitle': '3. Not a medical service',
+  'legal.terms.medicalBody':
+    'The Service is for fun and motivation. It does not provide diagnosis, treatment, or medical advice. Talk to a healthcare professional about health decisions.',
+  'legal.terms.conductTitle': '4. Prohibited conduct',
+  'legal.terms.conductBody':
+    "- Using another person's account or information\n- Manipulating records by abnormal means or sending excessive requests to the servers\n- Disrupting the Service or circumventing its security",
+  'legal.terms.changesTitle': '5. Changes and suspension',
+  'legal.terms.changesBody':
+    'The Service may change or be discontinued. We will try to give advance notice of important changes. The Service is provided free of charge.',
+  'legal.terms.liabilityTitle': '6. Limitation of liability',
+  'legal.terms.liabilityBody':
+    'To the extent permitted by law, we are not responsible for XP or record differences caused by missing data in your device or health app, or by network failures.',
+  'legal.terms.withdrawTitle': '7. Leaving the Service',
+  'legal.terms.withdrawBody':
+    'You can leave (delete your account) at any time with the in-app account deletion feature or by emailing {email}. Your personal information is then deleted as described in the Privacy Policy.',
+  'legal.terms.privacyTitle': '8. Privacy',
+  'legal.terms.privacyBody': 'Your personal information is handled under our separate Privacy Policy.',
+  'legal.terms.contactTitle': '9. Contact and changes',
+  'legal.terms.contactBody': 'Send questions to {email}. If we change these terms, we will post the update on this page with its effective date.',
+}
+
+export const DICTIONARIES: Record<Language, Record<MessageKey, string>> = { ko, en }

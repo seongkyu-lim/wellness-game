@@ -1,0 +1,62 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.15'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.wellnessgame'
+version = '0.1.0'
+description = 'Health activity XP and character progression API'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.security:spring-security-crypto'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+    runtimeOnly 'org.postgresql:postgresql'
+    testRuntimeOnly 'com.h2database:h2'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// 로컬 실행(./gradlew bootRun)은 개발용 JWT 키가 든 local 프로필로 띄운다.
+// 배포 jar 는 프로필 없이 실행되므로 AUTH_JWT_SECRET 이 없으면 기동에 실패한다.
+tasks.named('bootRun') {
+    systemProperty 'spring.profiles.active', System.getenv('SPRING_PROFILES_ACTIVE') ?: 'local'
+}
+
+// 기본 테스트는 인메모리 H2(PostgreSQL 호환 모드)로 돈다. 실제 PostgreSQL 이 필요한 테스트(@Tag("postgres"))는 postgresTest 로 따로 실행한다.
+tasks.named('test') {
+    useJUnitPlatform {
+        excludeTags 'postgres'
+    }
+}
+
+// Docker 가 필요하다(Testcontainers, PostgreSQL 17). Docker 가 없으면 로컬에서는 건너뛰고 CI 에서는 실패한다.
+tasks.register('postgresTest', Test) {
+    description = 'Runs PostgreSQL Testcontainers integration tests (@Tag("postgres")).'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'postgres'
+    }
+    shouldRunAfter tasks.named('test')
+}

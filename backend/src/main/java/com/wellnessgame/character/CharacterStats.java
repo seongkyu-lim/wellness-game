@@ -33,6 +33,10 @@ public class CharacterStats {
         vit += amount;
     }
 
+    public void addIntelligence(int amount) {
+        intStat += amount;
+    }
+
     public void addDiscipline(int amount) {
         discipline += amount;
     }

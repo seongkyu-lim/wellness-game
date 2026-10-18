@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>Wellness Game</string>
+    <key>WKApplication</key>
+    <true/>
+    <key>WKCompanionAppBundleIdentifier</key>
+    <string>com.example.WellnessGame</string>
+    <key>WKRunsIndependentlyOfCompanionApp</key>
+    <false/>
+    <key>NSHealthShareUsageDescription</key>
+    <string>Watch에서 기록한 운동의 심박수, 활동 에너지, 거리를 운동 중에 보여 주기 위해 건강 데이터를 읽습니다.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>Watch에서 기록한 운동과 심박수, 활동 에너지, 거리를 건강 앱에 저장합니다. iPhone 앱이 이 운동을 XP로 반영합니다.</string>
+    <key>WKBackgroundModes</key>
+    <array>
+        <string>workout-processing</string>
+    </array>
+    <key>API_BASE_URL</key>
+    <string>$(API_BASE_URL)</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+</dict>
+</plist>

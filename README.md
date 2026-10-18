@@ -2,7 +2,7 @@
 
 Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송하고 XP·레벨·캐릭터 스탯으로 변환하는 iOS + Spring Boot MVP입니다.
 
-웹 프로토타입은 포함하지 않습니다. HealthKit은 서버나 브라우저에서 직접 읽을 수 없으므로 iOS 앱이 사용자의 명시적 권한을 받은 뒤 필요한 요약 데이터만 서버에 전송합니다.
+웹은 서버에 쌓인 결과를 보여 주는 조회 전용 대시보드입니다([`web/`](web/), Vercel 배포 — [운영 배포](#운영-배포)). HealthKit은 서버나 브라우저에서 직접 읽을 수 없으므로 iOS 앱이 사용자의 명시적 권한을 받은 뒤 필요한 요약 데이터만 서버에 전송합니다.
 
 ## 구현 범위
 
@@ -18,7 +18,7 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
   - 오늘 활동, 획득 XP, 레벨, 다음 레벨 XP, 스탯 표시
 - Spring Boot API
   - `POST /api/health-activities/sync`
-  - MySQL 활동 로그와 캐릭터 저장
+  - PostgreSQL 활동 로그와 캐릭터 저장
   - 걸음·운동·수면 XP 계산
   - 여러 단계 레벨업 및 잔여 XP 이월
   - 활동별 스탯 증가
@@ -35,50 +35,205 @@ Apple HealthKit의 실제 걸음 수, 운동, 수면 요약을 서버로 전송�
 
 ```text
 .
-├── backend/                     Spring Boot + MySQL API
+├── backend/                     Spring Boot + PostgreSQL API
 ├── ios/
 │   ├── WellnessGame.xcodeproj   Xcode 프로젝트
 │   └── WellnessGame/            SwiftUI·HealthKit 소스
-└── docker-compose.yml           MySQL + API
+├── web/                         React 조회 전용 대시보드 (Vercel 배포)
+├── docs/
+│   ├── DESIGN.md                디자인 가이드 (토큰·컴포넌트·새싹이·모션)
+│   └── design/                  디자인 시안 원본
+└── docker-compose.yml           PostgreSQL + API
 ```
+
+웹과 iOS의 화면은 [디자인 가이드](docs/DESIGN.md)의 토큰과 규칙을 함께 따릅니다.
 
 ## 백엔드 실행
 
 요구 사항:
 
-- Java 17 이상
-- Maven 3.6.3 이상
-- MySQL 8.4 LTS 또는 Docker
+- 로컬 Gradle 실행 시 Java 21 이상(`JAVA_HOME`을 JDK 21 이상으로 지정)
+- PostgreSQL 15 이상(운영은 Supabase PostgreSQL) 또는 Docker
 
-가장 간단한 실행 방법:
+> Gradle은 프로젝트에 포함된 Wrapper(`./gradlew`)를 사용하므로 별도 설치가 필요 없습니다.
+> 예: `export JAVA_HOME=$(/usr/libexec/java_home -v 21)` (macOS)
+
+가장 간단한 실행 방법(JWT 서명 키 `AUTH_JWT_SECRET`이 필수입니다):
 
 ```bash
-docker compose up --build
+AUTH_JWT_SECRET=$(openssl rand -base64 48) docker compose up --build
 ```
+
+> 키를 실행마다 새로 만들면 이전에 발급한 토큰이 모두 무효가 됩니다. 계속 쓰려면 같은 값을 `.env`에 저장해 두세요.
 
 - API: `http://localhost:8080`
-- MySQL host port: `13306`
+- PostgreSQL(17) host port: `15432`
 - DB/user/password: `wellness_game` / `wellness` / `wellness`
 
-로컬 Maven 실행:
+로컬 Gradle 실행:
 
 ```bash
-docker compose up -d mysql
+docker compose up -d postgres
 cd backend
-DATABASE_URL='jdbc:mysql://localhost:13306/wellness_game?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC' \
+DATABASE_URL='jdbc:postgresql://localhost:15432/wellness_game' \
 DATABASE_USERNAME=wellness \
 DATABASE_PASSWORD=wellness \
-mvn spring-boot:run
+./gradlew bootRun
 ```
+
+### DB 연결 (PostgreSQL / Supabase)
+
+백엔드는 PostgreSQL만 지원합니다(#87). 연결은 환경변수로 줍니다.
+
+| 환경변수 | 기본값 | 설명 |
+|---|---|---|
+| `DATABASE_URL` | `jdbc:postgresql://localhost:5432/wellness_game` | JDBC URL |
+| `DATABASE_USERNAME` | `wellness` | DB 계정 |
+| `DATABASE_PASSWORD` | `wellness` | DB 비밀번호 |
+| `DB_POOL_MAX` | `5` | Hikari 최대 연결 수. 무료 DB 플랜의 연결 한도를 넘지 않게 작게 둡니다(요청 하나는 연결을 하나만 씁니다) |
+
+Supabase는 SSL이 필요합니다. 대시보드의 **Connect**에서 호스트·계정을 확인해 JDBC 형식으로 바꿉니다.
+
+```bash
+# 권장: 세션 풀러(Supavisor session mode, 포트 5432). Render처럼 IPv4만 되는 환경에서도 붙습니다.
+DATABASE_URL='jdbc:postgresql://<pooler-host>:5432/postgres?sslmode=require'
+DATABASE_USERNAME='postgres.<project-ref>'
+DATABASE_PASSWORD='<DB 비밀번호>'
+
+# 트랜잭션 풀러(포트 6543)를 쓸 때는 서버 측 prepared statement를 끄는 prepareThreshold=0 이 필요합니다.
+DATABASE_URL='jdbc:postgresql://<pooler-host>:6543/postgres?sslmode=require&prepareThreshold=0'
+```
+
+- 이 앱은 오래 사는 연결 풀(Hikari)을 쓰므로 세션 풀러나 직접 연결(`db.<project-ref>.supabase.co:5432`, IPv6)이 맞습니다.
+  트랜잭션 풀러는 세션 상태를 유지하지 않아 `prepareThreshold=0` 없이는 `prepared statement "S_1" already exists` 같은 오류가 납니다.
+- 첫 기동 때 Flyway가 빈 `public` 스키마에 V1부터 테이블을 만듭니다. 테이블은 있는데 Flyway 이력이 없으면 기준선을 잡지 않고 기동에 실패합니다.
 
 테스트:
 
 ```bash
 cd backend
-mvn test
+./gradlew test           # 인메모리 H2(PostgreSQL 호환 모드)
+./gradlew postgresTest   # PostgreSQL 17 컨테이너(Testcontainers), Docker 필요
 ```
 
-테스트는 MySQL 호환 모드의 인메모리 H2를 사용합니다.
+- `test`는 PostgreSQL 호환 모드(`MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH`)의 인메모리 H2에
+  운영과 같은 Flyway 마이그레이션을 적용해 돕니다. 타입 매핑(UUID → `uuid`, Instant → `timestamp with time zone`)도 운영 기본값 그대로입니다.
+- `postgresTest`는 `@Tag("postgres")` 테스트만 실행합니다. 실제 PostgreSQL에서만 확인할 수 있는 Flyway 스키마·`ddl-auto=validate`,
+  마이그레이션과 Hibernate 기본 매핑의 일치, 동시 동기화(신규 사용자 경합, 일일·운동 XP 상한), 작은 연결 풀에서의 동시 요청,
+  수면 키 마이그레이션, 리프레시 토큰 동시 회전을 테스트마다 새 데이터베이스에서 검증합니다.
+  Docker가 없으면 로컬에서는 건너뛰어지고(skipped), `CI` 환경변수가 설정돼 있으면 조용히 넘어가지 않도록 실패합니다.
+  Docker 대신 이미 떠 있는 서버를 쓰려면 `POSTGRES_TEST_JDBC_URL`(예: `jdbc:postgresql://127.0.0.1:5432/postgres`)과
+  `POSTGRES_TEST_USERNAME`·`POSTGRES_TEST_PASSWORD`를 지정합니다(데이터베이스 생성·삭제 권한 필요).
+
+### DB 스키마 (Flyway)
+
+스키마는 Flyway가 `backend/src/main/resources/db/migration`의 마이그레이션으로 관리하고, Hibernate는 `ddl-auto: validate`로
+엔티티와 스키마가 같은지만 확인합니다(다르면 기동 실패).
+
+| 버전 | 내용 |
+|---|---|
+| `V1__baseline.sql` | 기준 스키마(`user_character`, `health_activity_log`, `user_credential`와 유일 제약·인덱스) |
+| `V2__sleep_key_normalization` (Java) | 구 형식 수면 로그 키 정리와 legacy 수면 XP 합치기(멱등, 행 삭제 없음) |
+| `V3__refresh_tokens.sql` | 회전 리프레시 토큰(`refresh_token`)과 사용자별 액세스 토큰 무효화 기준(`user_auth_state`) |
+
+- 빈 DB에 V1부터 순서대로 실행합니다. #87에서 운영 적용 전에 V1~V3를 PostgreSQL 문법으로 다시 썼습니다(MySQL 데이터 이전·baseline 없음).
+- 컬럼 타입은 Hibernate의 PostgreSQL 기본 매핑과 같습니다: UUID → `uuid`, Instant → `timestamp(6) with time zone`,
+  BigDecimal → `numeric(38,2)`, 문자열 enum → `varchar(255)` + check 제약. H2 PostgreSQL 모드에서도 실행되도록 공통 문법만 씁니다.
+- 스키마를 바꿀 때는 기존 파일을 고치지 말고 `V4__설명.sql`처럼 새 버전을 추가하세요. 적용된 마이그레이션을 고치면 체크섬 검증에 실패합니다.
+
+### 소셜 로그인 서버 환경변수
+
+iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서버 토큰(`{userId, displayName, accessToken, tokenType, expiresIn, refreshToken, refreshExpiresIn}`, [인증 세션](#인증-세션-auth-v2-55-64-76) 참고)으로 교환합니다. 값이 비어 있는 공급자의 엔드포인트는 `503`을 반환하고, 어떤 설정이 빠졌는지는 서버 로그에만 남습니다.
+
+| 환경변수 | 쓰는 엔드포인트 | 값 |
+|---|---|---|
+| `OAUTH_GOOGLE_IOS_CLIENT_ID` | `POST /api/auth/google/native` | iOS OAuth 클라이언트 ID(ID 토큰의 `aud`·`azp`) |
+| `OAUTH_GOOGLE_CLIENT_ID`, `OAUTH_GOOGLE_CLIENT_SECRET` | `POST /api/auth/google`(웹), google/native 허용 `aud`·`azp` | 웹 OAuth 클라이언트 |
+| `OAUTH_KAKAO_NATIVE_APP_ID` | `POST /api/auth/kakao/native` | Kakao Developers의 **숫자 앱 ID**(`access_token_info`의 `app_id`) |
+| `OAUTH_KAKAO_CLIENT_ID`, `OAUTH_KAKAO_CLIENT_SECRET` | `POST /api/auth/kakao`(웹) | REST API 키와 client secret |
+| `OAUTH_NAVER_CLIENT_ID`, `OAUTH_NAVER_CLIENT_SECRET` | `POST /api/auth/naver`(웹), `POST /api/auth/naver/native` | 네이버 애플리케이션의 클라이언트 아이디·시크릿(iOS 앱과 같은 애플리케이션) |
+| `OAUTH_APPLE_BUNDLE_ID` | `POST /api/auth/apple/native` | 앱 Bundle Identifier(identity token의 `aud`) |
+| `OAUTH_APPLE_REQUIRE_NONCE` | `POST /api/auth/apple/native` | 기본 `false`. `true`면 `nonce` 없는 요청을 401로 거부(nonce를 보내는 앱 배포 후 켬) |
+
+> **카카오 키 주의:** iOS Build Settings의 `KAKAO_NATIVE_APP_KEY`(네이티브 앱 **키**, 문자열)와 서버의 `OAUTH_KAKAO_NATIVE_APP_ID`(앱 **ID**, 숫자)는 서로 다른 값입니다. 앱 ID는 Kakao Developers → 내 애플리케이션 → 앱 설정 → 요약 정보의 "앱 ID"입니다. 서버는 iOS가 보낸 액세스 토큰의 `app_id`가 이 값과 같은지 확인해 다른 앱에서 발급된 토큰을 거부합니다.
+
+- 네이버 네이티브 교환은 `{"accessToken", "refreshToken"}`을 받습니다. 네이버에는 토큰의 발급 앱을 확인하는 API가 없어서, 서버가 `refreshToken`을 자기 client ID·secret으로 갱신해 이 앱에 발급된 토큰인지 확인하고, 새로 받은 access token으로만 프로필을 조회합니다.
+- Apple 교환은 `{"identityToken", "fullName"(선택), "nonce"(선택)}`을 받고 Apple JWKS로 서명·`iss`·`aud`·`exp`를 검증합니다. `fullName`은 100자를 넘으면 잘라서 씁니다. `nonce`는 앱이 Apple 요청(`ASAuthorizationAppleIDRequest.nonce`)에 **SHA-256 hex**로 넣은 값의 **원문**이며, 서버는 identity token의 `nonce` 클레임이 SHA-256(원문)의 소문자 hex와 같은지 확인합니다(다르면 401, 재전송 방어 #64).
+- Google 네이티브 교환은 tokeninfo 호출 없이 Google JWKS(`https://www.googleapis.com/oauth2/v3/certs`)로 서버에서 직접 검증합니다(#55). RS256만, `kid`로 키 선택, `iss`(`accounts.google.com`/`https://accounts.google.com`)·`aud`(허용 클라이언트 ID)·`exp`·`azp`(있으면 허용 목록)를 봅니다. Apple과 같은 JWKS 캐시(1시간, 모르는 `kid`는 1분 간격으로만 재조회, 조회 실패 시 30초 재시도 억제·기존 키를 마지막 조회 후 최대 24시간(`jwks-stale-max`)까지 사용, 넘으면 503)를 씁니다.
+- 로그인 방식별로 별도 계정입니다(`kakao:`, `naver:`, `google:`, `apple:`, `password:` 접두사). 같은 사람이 여러 방식으로 가입해도 계정을 합치지 않습니다.
+
+### 인증 세션 (Auth v2, #55, #64, #76)
+
+액세스 토큰은 짧게(기본 1시간), 리프레시 토큰은 길게(기본 30일, 한 로그인당 최대 90일) 발급하고, 리프레시 토큰은 쓸 때마다 회전합니다.
+
+| 엔드포인트 | 인증 | 요청 | 응답 |
+|---|---|---|---|
+| `POST /api/auth/signup`·`login`·`{provider}`·`{provider}/native` | 없음 | (기존과 같음) | `200` 기존 필드 + `refreshToken`, `refreshExpiresIn`(초) |
+| `POST /api/auth/refresh` | 없음 | `{"refreshToken"}` | `200 {userId, accessToken, tokenType, expiresIn, refreshToken, refreshExpiresIn}` / 없음·만료·폐기·재사용 `401` / 빈 값 `400` |
+| `POST /api/auth/logout` | 없음(토큰 소유가 권한) | `{"refreshToken"}`(필수) | `204`. 그 토큰의 family(이 기기 세션)를 폐기. 없거나 이미 폐기된 토큰도 `204`, 빈 값 `400`. Bearer는 보지 않음 |
+| `POST /api/auth/logout-all` | Bearer(전체 권한) | 없음 | `204`. 사용자의 모든 리프레시 토큰 폐기 + 이미 발급된 액세스 토큰 무효화 |
+| `POST /api/auth/watch-token` | Bearer(전체 권한) | 없음 | `200 {accessToken, tokenType, expiresIn}`(`scope: "read"`, 7일) |
+
+- **리프레시 토큰:** 32바이트 무작위 값의 base64url(43자)입니다. 서버 DB(`refresh_token`, Flyway V3)에는 SHA-256 hex만 저장합니다. 로그인마다 새 *family*가 생기고, `/refresh`가 성공하면 기존 토큰을 폐기(`revoked_at`, `replaced_by`)하고 같은 family로 새 토큰과 새 액세스 토큰을 줍니다. 새 토큰 만료는 `min(지금 + 30일, family 생성 + 90일)`이라 회전을 계속해도 한 로그인은 90일(`auth.refresh.absolute-ttl`)을 넘지 못합니다(`refreshExpiresIn`이 30일보다 짧아질 수 있음).
+- **회전 유예 구간:** 회전된 지 30초(`auth.refresh.reuse-grace`) 안의 토큰이 다시 오면(응답 유실 후 재시도, 같은 토큰의 동시 요청) 같은 family에 *형제 토큰*을 하나 더 발급해 `200`으로 응답합니다. 먼저 발급된 후계 토큰도 그대로 유효합니다. 같은 토큰의 동시 회전은 행 잠금으로 직렬화됩니다. 그래도 클라이언트는 refresh를 한 번에 하나만 보내는 것이 좋습니다.
+- **재사용 감지:** 유예 구간이 지난 *회전된* 토큰이 다시 오면 탈취로 보고 그 family 전체를 폐기하고, 그 사용자에게 이미 발급된 액세스 토큰도 무효로 만든 뒤 `401`입니다(다른 기기는 자기 리프레시로 다시 받으면 됨). 로그아웃으로 폐기된 토큰은 그냥 `401`입니다.
+- **액세스 토큰 무효화 기준:** 사용자별 `tokens_valid_after`(`user_auth_state`, V3)보다 이전에 발급된(`iat`) 액세스 토큰은 scope와 무관하게(기존 형식 토큰 포함) `401`입니다. `logout-all`과 재사용 감지 때 갱신합니다. `iat`이 초 단위라 같은 초에 발급된 토큰은 통과합니다. 서버는 사용자별 값을 30초 메모리 캐시하므로, 인스턴스가 여러 대면 다른 인스턴스는 최대 30초 늦게 반영합니다.
+- `/refresh`·`/logout`은 공개 경로라 `/api/auth/**` IP 레이트 리밋이 적용됩니다. `logout`은 액세스 토큰이 만료된 뒤에도 할 수 있고, 토큰이 유효한지 드러내지 않도록 항상 `204`입니다. `logout-all`·`watch-token`은 Bearer가 필요합니다. 이 기기 로그아웃 뒤에도 이미 발급된 액세스 토큰은 만료(최대 1시간)까지 유효합니다.
+- **Watch 조회 토큰(#76):** JWT에 `scope: "read"`가 실린 토큰(기본 7일, `AUTH_WATCH_TOKEN_TTL`)은 `GET /api/characters/me`, `GET /api/characters/{userId}`, `GET /api/health-activities`만 쓸 수 있고, 그 밖의 요청(동기화, `watch-token` 재발급, `logout-all` 등)은 `403`입니다. `scope`가 없는 기존 토큰은 전체 권한입니다. 리프레시 토큰은 주지 않으므로 iPhone이 앱을 열 때마다 다시 받아 Watch에 전달합니다(iPhone 앱을 7일 넘게 열지 않으면 Watch가 끊김). `logout-all` 하면 Watch 토큰도 무효가 됩니다.
+- 만료 행과 폐기된 지 7일(`auth.refresh.revoked-retention`)이 지난 행은 매일 04:00(`app.timezone`) 정리 작업이 지웁니다.
+- **배포 순서(구버전 앱 호환):**
+  1. 서버를 배포할 때 `AUTH_JWT_TTL=30d`(기존 값)로 둡니다. 리프레시를 모르는 구버전 앱은 응답의 새 필드를 무시하고 기존처럼 30일 토큰을 씁니다.
+  2. 리프레시를 지원하는 iOS·웹·Android를 배포하고 대부분의 사용자가 업데이트할 때까지 기다립니다(스토어 보급률 확인).
+  3. `AUTH_JWT_TTL=1h`로 낮춥니다. 이때 남은 구버전 앱 사용자는 1시간 토큰이 만료되면 다시 로그인해야 합니다. 이미 발급된 30일 토큰은 자기 `exp`까지 유효합니다(즉시 끊으려면 `logout-all`/무효화 기준을 씁니다).
+  4. nonce를 보내는 iOS 앱이 충분히 퍼진 뒤(2단계와 같은 판단) `OAUTH_APPLE_REQUIRE_NONCE=true`로 바꿉니다. 그 전에 켜면 구버전 앱의 Apple 로그인이 401로 실패합니다.
+- **소셜 공급자 토큰 폐기(#64):** 서버는 카카오·네이버·구글·애플 공급자 토큰을 저장하지 않고 검증에만 쓰고 버립니다(네이버 검증용으로 갱신해 받은 access token도 저장하지 않음). 그래서 로그아웃 때 서버가 폐기할 공급자 토큰이 없고, 공급자 세션 정리는 클라이언트 SDK 로그아웃(`UserApi.logout`, `NidOAuth.logout` 등)으로 충분합니다. 앱 연결 끊기(탈퇴)까지 하려면 SDK의 unlink/연결 해제를 클라이언트에서 호출합니다.
+- **네이버 client secret 노출 위험(#64):** 네이버 iOS SDK는 앱 바이너리에 client secret을 넣는 구조라 secret은 사실상 공개 값입니다. 서버의 "refresh token 갱신으로 앱 소유 확인"은 secret을 아는 다른 앱이 같은 방식으로 토큰을 만들어 오면 무력해집니다(토큰 대체 공격 방어가 약해짐). 대안은 **서버측 코드 교환 전환**입니다. 앱은 SDK 대신(또는 SDK의 인가 코드 흐름으로) 네이버 인가 코드만 받아 `POST /api/auth/naver`(웹과 같은 코드 교환)로 보내고, client secret은 서버에만 둡니다. 이 경우 앱에서 secret을 제거하고 네이버 개발자 센터에서 secret을 재발급해야 합니다. 현재는 문서화만 하고 구조는 유지합니다.
+
+### 레이트 리밋·로그인 잠금·JWT 설정 (#48, #55)
+
+| 설정 키 (환경변수) | 기본값 | 설명 |
+|---|---|---|
+| `app.rate-limit.sync-per-minute` (`APP_RATE_LIMIT_SYNC_PER_MINUTE`) | `30` | `POST /api/health-activities/sync`, 인증 주체(userId)별 분당 한도 |
+| `app.rate-limit.auth-per-minute` (`APP_RATE_LIMIT_AUTH_PER_MINUTE`) | `30` | `/api/auth/**` 전체(소셜 로그인·`/api/auth/{provider}` 포함), 클라이언트 IP별 분당 한도 |
+| `app.rate-limit.login-per-minute` (`APP_RATE_LIMIT_LOGIN_PER_MINUTE`) | `10` | `/api/auth/login`·`/api/auth/signup`, IP별 분당 한도(위 한도와 함께 적용) |
+| `app.rate-limit.trust-forwarded-header` (`APP_RATE_LIMIT_TRUST_FORWARDED_HEADER`) | `false` | `true`면 `X-Forwarded-For`의 **마지막 줄의 마지막 값**을 클라이언트 IP로 사용. 신뢰하는 리버스 프록시 한 단 뒤에서만 켤 것 |
+| `app.rate-limit.max-keys` (`APP_RATE_LIMIT_MAX_KEYS`) | `100000` | 레이트 리밋 카운터·로그인 실패 기록이 각각 메모리에 두는 최대 키 수. 넘으면 만료 키를 먼저 지우고, 그래도 가득 차면 가장 오래된 항목을 내보냄 |
+| `app.auth.max-failed-logins` (`APP_AUTH_MAX_FAILED_LOGINS`) | `5` | 같은 (아이디, IP) 연속 로그인 실패 허용 횟수 |
+| `app.auth.max-failed-logins-per-username` (`APP_AUTH_MAX_FAILED_LOGINS_PER_USERNAME`) | `50` | IP와 무관한 아이디 전체 실패 허용 횟수(분산 공격 방어) |
+| `app.auth.lockout-minutes` (`APP_AUTH_LOCKOUT_MINUTES`) | `15` | 잠금 시간이자 실패 기록 유지 시간(마지막 실패 기준, 분) |
+| `auth.jwt.ttl` (`AUTH_JWT_TTL`) | `1h` | 액세스 토큰 유효 기간(응답 `expiresIn`). 첫 배포 땐 `30d`로 두고 클라이언트 보급 후 낮춤(배포 순서 참고) |
+| `auth.jwt.watch-ttl` (`AUTH_WATCH_TOKEN_TTL`) | `7d` | Watch 조회 토큰 유효 기간 |
+| `auth.refresh.ttl` (`AUTH_REFRESH_TTL`) | `30d` | 리프레시 토큰 유효 기간(응답 `refreshExpiresIn`), 회전마다 새로 시작 |
+| `auth.refresh.absolute-ttl` (`AUTH_REFRESH_ABSOLUTE_TTL`) | `90d` | 한 로그인(family)의 절대 수명. 회전해도 넘지 못함 |
+| `auth.refresh.reuse-grace` (`AUTH_REFRESH_REUSE_GRACE`) | `30s` | 회전된 토큰이 다시 와도 재사용으로 보지 않는 유예 구간 |
+| `oauth.apple.jwks-stale-max`, `oauth.google-native.jwks-stale-max` | `24h` | JWKS 조회 실패 시 마지막으로 받은 키를 쓰는 최대 기간. 넘으면 503 |
+| `auth.refresh.revoked-retention` (`AUTH_REFRESH_REVOKED_RETENTION`) | `7d` | 폐기된 리프레시 행을 재사용 감지용으로 남겨 두는 기간 |
+| `auth.refresh.cleanup-cron` (`AUTH_REFRESH_CLEANUP_CRON`) | `0 0 4 * * *` | 만료·폐기 행 정리 작업 시각(`app.timezone` 기준) |
+| `auth.jwt.issuer` (`AUTH_JWT_ISSUER`) | `wellness-game` | 발급 토큰 `iss`, 검증 시 일치 필요 |
+| `auth.jwt.audience` (`AUTH_JWT_AUDIENCE`) | `wellness-game-api` | 발급 토큰 `aud`, 검증 시 포함 필요 |
+| `auth.jwt.legacy-cutoff` (`AUTH_JWT_LEGACY_CUTOFF`) | `2026-10-06T00:00:00Z` | `iss`·`aud`가 둘 다 없는 이전 형식 토큰은 `iat`이 이 시각 **이전**일 때만 허용. 비우면 이전 형식 토큰을 받지 않음 |
+
+- 레이트 리밋 한도를 `0` 이하로 두면 해당 제한이 꺼지고, 잠금 한도를 `0` 이하로 두면 그 단계의 잠금이 꺼집니다.
+- 한도를 넘으면 `429 Too Many Requests`, `Retry-After`(초) 헤더, 기존 오류 body(`timestamp`·`status`·`error`·`message`)로 응답합니다. CORS 응답에도 `Retry-After`를 노출합니다.
+- 1분 **고정 윈도우**라서 경계 직전·직후에 몰리면 순간적으로 한도의 최대 2배까지 통과할 수 있습니다.
+- 클라이언트 IP는 IPv4는 주소 그대로, IPv6는 **/64 접두사** 단위로 셉니다(주소를 바꿔 가며 한도를 피하는 것 방지). `X-Forwarded-For` 값이 64자를 넘거나 IP 리터럴이 아니면 연결 주소로 셉니다.
+- 로그인 잠금은 (아이디, IP) 단위라서 다른 사람이 자기 IP에서 틀려도 피해자의 다른 IP 로그인은 막히지 않습니다. 대신 여러 IP로 나눠 시도하면 아이디 전체 한도(50회)에 걸려 그 아이디가 15분 잠깁니다. 시도는 비밀번호 비교 **전에** 먼저 세므로 동시 요청이 몰려도 한도보다 많이 비교하지 않습니다. 성공하면 그 (아이디, IP)의 실패 횟수를 지우고, 아이디 전체 기록에서는 이번 시도만 되돌립니다.
+- 잠긴 동안에는 올바른 비밀번호도 기존 실패와 같은 `400 "아이디 또는 비밀번호가 올바르지 않습니다."`로 거부합니다. 없는 아이디도 같은 횟수 뒤 같은 방식으로 반응하고 bcrypt 비교를 한 번 거쳐 응답 시간으로 아이디 존재가 드러나지 않습니다. 가입의 "이미 사용 중인 아이디" 응답은 클라이언트 UX를 위해 유지하되 IP 레이트 리밋으로 열거 속도를 제한합니다.
+- `AUTH_JWT_SECRET`은 32바이트 이상이어야 하고, 서로 다른 문자가 8종류 미만인 단순한 값(같은 문자 반복 등)이면 기동에 실패합니다. `openssl rand -base64 48` 같은 무작위 값을 쓰세요.
+- **이전 형식 토큰 제거 계획:** #55 이전 서버가 발급한 토큰에는 `iss`·`aud`가 없습니다. 이 변경을 `legacy-cutoff`(기본 `2026-10-06T00:00:00Z`) 전에 배포하면 그 전에 발급된 토큰은 자기 `exp`(당시 기본 TTL 30일)가 끝날 때까지 계속 쓰이고, cutoff 이후 시각이 찍힌 이전 형식 토큰은 위조로 보고 거부합니다. 배포가 cutoff보다 늦어지면 실제 배포 시각으로 `AUTH_JWT_LEGACY_CUTOFF`를 맞추세요. 마지막 이전 토큰은 cutoff + TTL(기본 2026-11-05) 이후 자연 소멸하므로, 그 뒤 릴리스에서 이 설정과 이전 형식 처리 코드를 제거합니다. `iss`나 `aud` 중 하나만 있는 토큰은 항상 거부합니다.
+
+> **단일 인스턴스 한계:** 레이트 리밋 카운터와 로그인 실패·잠금 상태는 서버 메모리에만 있습니다. 재시작하면 초기화되고, 인스턴스를 여러 대 띄우면 인스턴스마다 따로 세므로 실제 한도가 대수만큼 늘어납니다. 수평 확장 시에는 Redis 등 공용 저장소 기반으로 바꿔야 합니다. 만료된 키는 주기적으로 정리하고 키 수 상한(`max-keys`)으로 메모리를 제한합니다.
+
+#### 배포 체크리스트
+
+- [ ] **리버스 프록시·로드 밸런서 뒤**에 배포한다면 `APP_RATE_LIMIT_TRUST_FORWARDED_HEADER=true`로 설정합니다. 끄면 서버가 보는 연결 주소가 모두 프록시 IP라서 **모든 사용자가 IP 하나를 공유**해 인증 한도(분당 30·10회)와 (아이디, IP) 잠금이 사실상 전체 사용자에게 함께 걸립니다.
+- [ ] 켜기 전에 프록시가 **항상** `X-Forwarded-For`에 클라이언트 주소를 덧붙이는지(클라이언트가 보낸 값을 그대로 넘기기만 하지 않는지) 확인합니다. 서버는 마지막 줄의 마지막 값만 믿으므로 프록시가 덧붙이지 않으면 클라이언트가 IP를 위조할 수 있습니다. 프록시가 여러 단(CDN + LB 등)이면 마지막 값이 앞단 프록시 주소가 되므로 프록시 구성을 바꾸거나 이 구현을 확장해야 합니다.
+- [ ] 프록시를 거치지 않고 직접 노출한다면 기본값(`false`)을 유지합니다. 켜면 누구나 헤더로 IP를 바꿔 한도를 피할 수 있습니다.
+- [ ] 모바일 통신사 CGNAT·회사·학교 NAT에서는 많은 사용자가 같은 공인 IP를 쓸 수 있습니다. 같은 IP에서 정상 로그인이 몰려 `429`가 보이면 `APP_RATE_LIMIT_AUTH_PER_MINUTE`·`APP_RATE_LIMIT_LOGIN_PER_MINUTE`를 올립니다.
+- [ ] 인스턴스를 2대 이상 띄우면 한도가 대수만큼 느슨해지므로 Redis 기반 구현을 먼저 검토합니다.
+- [ ] `AUTH_JWT_LEGACY_CUTOFF`가 실제 배포 시각 이후인지 확인합니다(그래야 기존 사용자가 로그아웃되지 않습니다).
+- [ ] Auth v2 첫 배포는 `AUTH_JWT_TTL=30d`로 하고, 새 클라이언트 보급 후 `1h`로 낮춥니다([인증 세션](#인증-세션-auth-v2-55-64-76)의 배포 순서).
+- [ ] nonce를 보내는 iOS 앱이 충분히 퍼진 뒤 `OAUTH_APPLE_REQUIRE_NONCE=true`로 바꿉니다.
 
 ## API
 
@@ -169,7 +324,7 @@ mvn test
 - Apple은 이름과 이메일을 최초 승인 시에만 제공할 수 있으므로 앱은 처음 받은 표시 이름을 기기에 저장합니다.
 - Google 로그인은 GoogleSignIn iOS SDK 9.2 이상, Kakao 로그인은 Kakao iOS SDK 2.28 이상을 Swift Package Manager로 사용합니다.
 - Naver 로그인은 네이버 아이디로 로그인 iOS SDK 5.1 이상을 Swift Package Manager로 사용합니다.
-- 현재 MVP 서버는 앱이 보낸 사용자 식별자를 신뢰합니다. 운영 서비스에서는 각 공급자의 ID 토큰을 서버에서 검증하고 자체 세션을 발급해야 합니다.
+- 서버는 각 공급자의 토큰을 직접 검증하고 자체 세션(1시간 액세스 토큰 + 30일 회전 리프레시 토큰)을 발급합니다([인증 세션](#인증-세션-auth-v2-55-64-76)).
 
 ### Google 로그인 설정
 
@@ -234,6 +389,24 @@ mvn test
 
 운영 배포에서는 HTTPS만 사용해야 합니다.
 
+## Android 앱 실행
+
+`android/`는 네이티브 Kotlin + Jetpack Compose 앱이다(minSdk 28, target/compileSdk 35, 패키지 `com.example.wellnessgame`). 서버 계약은 iOS와 같다.
+
+```bash
+cd android
+export JAVA_HOME=<JDK 17+>   # JDK 21 확인
+./gradlew testDebugUnitTest assembleDebug lint
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+- **서버 주소:** debug는 `http://10.0.2.2:8080`(에뮬레이터에서 호스트 PC의 localhost). 평문 HTTP는 debug 전용 network security config로만 허용한다. release는 `-PAPI_BASE_URL=https://...`가 필수이며, 값이 없거나 https가 아니면 빌드가 실패한다.
+- **소셜 로그인 키(gradle property, 커밋 금지):** `GOOGLE_SERVER_CLIENT_ID`(서버가 aud로 검증하는 웹 OAuth 클라이언트 ID), `KAKAO_NATIVE_APP_KEY`, `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET`/`NAVER_CLIENT_NAME`. `~/.gradle/gradle.properties`나 `-P`로 넣고, 비어 있으면 해당 버튼이 비활성화된다. 네이버 client secret은 APK에 포함되어 추출될 수 있으므로 비밀로 취급하지 않으며, 서버는 앱이 보낸 refresh token을 서버의 client ID·secret으로 갱신해 성공할 때만 이 앱이 발급받은 토큰으로 인정한다(그래서 Android도 서버와 같은 네이버 애플리케이션을 써야 한다). Google은 Google Cloud에 Android OAuth 클라이언트(패키지명 + 서명 SHA-1)도 등록해야 하고, 카카오·네이버 콘솔에도 패키지명·키 해시를 등록해야 한다.
+- **로그인 노출 순서:** iOS `LoginProviderPolicy`와 같다(기기 지역 KR: 카카오·네이버·구글 / 그 외: 구글, 나머지는 "다른 방법으로 로그인"). Apple 로그인은 Android에서 제공하지 않는다.
+- **건강 데이터:** Health Connect(걸음·운동·수면·활동 칼로리·거리 읽기). Android 13 이하는 Health Connect 앱 설치가 필요하다. 로그인 후 앱 진입·새로고침 때 동기화하고, WorkManager가 1시간마다(네트워크 연결 시) 동기화한다(백그라운드 읽기 권한을 지원하는 기기만).
+- **Mock 데이터:** debug 빌드 홈 하단의 "Use mock data" 토글. 로그인 전에는 기기 안에서 미리보기만 하고 서버로 보내지 않는다.
+- **토큰 저장:** Android Keystore(AES-256-GCM)로 암호화해 DataStore에 저장하며 백업에서 제외한다. 로그아웃·401 때 삭제한다.
+
 ## HealthKit 제한과 개인정보
 
 - HealthKit 데이터는 민감정보입니다. 이 MVP는 XP 계산에 필요한 요약 데이터만 서버에 보냅니다.
@@ -248,11 +421,115 @@ mvn test
 
 화면의 `Mock 데이터 사용`을 켜면 HealthKit 대신 테스트용 걸음·수영·수면 데이터가 로드됩니다. 실제 HealthKit 연동이 기본이며 Mock은 개발 fallback입니다.
 
+## 운영 배포
+
+웹은 **Vercel**, 백엔드는 **Render**(Docker, `render.yaml` Blueprint), DB는 **Supabase PostgreSQL**입니다.
+아래 순서대로 진행합니다. (개인정보 처리방침·이용약관 페이지 문구는 일반적인 서비스 고지를 바탕으로 쓴 초안이며 **법률 자문이 아닙니다.**
+출시 전 실제 운영 방식에 맞는지 검토하고, 필요하면 전문가 확인을 받으세요.)
+
+### 1. Supabase 프로젝트·연결 문자열
+
+1. Supabase에서 프로젝트를 만듭니다. 리전은 Render와 같은 **Singapore(ap-southeast-1)** 를 권장합니다.
+2. **Project Settings › Database › Connection string**에서 접속 정보를 확인합니다. Render는 항상 켜진 단일 컨테이너라
+   **Session pooler**(포트 5432) 또는 Direct connection을 씁니다. Direct는 IPv6 전용일 수 있으니 Render에서 연결되지 않으면 Session pooler를 씁니다.
+   Transaction pooler(6543)는 서버측 prepared statement와 맞지 않으므로 쓰지 않습니다.
+3. JDBC 형식으로 바꿔 둡니다: `DATABASE_URL=jdbc:postgresql://<host>:5432/postgres?sslmode=require`,
+   `DATABASE_USERNAME`(pooler면 `postgres.<project-ref>`), `DATABASE_PASSWORD`.
+4. 스키마는 백엔드 첫 기동 때 Flyway가 만듭니다. 별도로 테이블을 만들지 않습니다.
+
+### 2. Render 서비스·환경변수
+
+1. Render 대시보드 **New › Blueprint**에서 이 저장소를 고르면 루트의 `render.yaml`로 `wellness-game-api` 웹 서비스가 만들어집니다
+   (Docker, `rootDir: backend`, `main` 브랜치 자동 배포, region `singapore`, plan `free` — 앱 심사 제출 전 `starter`로 변경).
+2. `sync: false` 항목은 생성 화면에서 값을 입력합니다: `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`,
+   `CORS_ALLOWED_ORIGINS`(3단계 후 채워도 됨), 소셜 로그인 키([소셜 로그인 서버 환경변수](#소셜-로그인-서버-환경변수) 표).
+   `AUTH_JWT_SECRET`은 Render가 256비트 무작위 값을 생성합니다(바꾸면 모든 로그인 세션이 끊김).
+3. `render.yaml`이 지정하는 운영값: `OAUTH_APPLE_REQUIRE_NONCE=true`, `AUTH_JWT_LEGACY_CUTOFF=`(빈 값). `AUTH_JWT_TTL=1h`, `APP_TIMEZONE=Asia/Seoul`, `DB_POOL_MAX=5`는 `application.yml` 기본값을 그대로 씁니다.
+4. 포트는 Render가 주는 `PORT`를 `server.port: ${PORT:8080}`이 따릅니다. 헬스체크는 `GET /healthz`(`{"status":"UP"}`,
+   인증·레이트 리밋 대상 아님, DB 미확인)입니다. 배포 후 `https://<서비스>.onrender.com/healthz`로 확인합니다.
+5. JVM 옵션은 Dockerfile 기본값 `JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"`입니다.
+   512MB 플랜에서 메모리 초과로 재시작되면 Render 환경변수 `JAVA_TOOL_OPTIONS`로 `-XX:MaxRAMPercentage=65` 등으로 낮춥니다(설정하면 기본값 전체를 대체).
+
+> **출시 전이라 TTL·nonce를 최종값으로 시작합니다.** [인증 세션의 배포 순서](#인증-세션-auth-v2-55-64-76)(처음엔 `AUTH_JWT_TTL=30d`,
+> nonce 강제는 나중에)는 리프레시·nonce를 모르는 **구버전 앱 사용자를 위한 것**입니다. 첫 운영 배포에는 그런 클라이언트가 없으므로
+> 액세스 토큰 1시간·Apple nonce 강제로 바로 시작하고, `iss`·`aud` 없는 이전 형식 토큰도 받을 이유가 없어 `AUTH_JWT_LEGACY_CUTOFF`를 비웁니다.
+> 나중에 올리면 이미 배포된 앱과의 호환 때문에 다시 낮추기 어렵습니다.
+
+> **Render 무료 플랜 주의:** free 인스턴스는 15분 동안 요청이 없으면 잠들고, 다음 요청 때 JVM 기동(수십 초)을 기다려야 합니다.
+> 앱 백그라운드 동기화가 타임아웃되거나 첫 화면이 오래 걸리고, 잠든 동안에는 리프레시 토큰 정리 작업(매일 04:00)도 돌지 않습니다.
+> 운영은 starter 이상을 쓰고, free는 출시 전 테스트에만 씁니다.
+
+> **레이트 리밋과 프록시:** Render는 프록시 뒤에서 요청을 전달합니다. `APP_RATE_LIMIT_TRUST_FORWARDED_HEADER`가 기본값(`false`)이면
+> 모든 사용자가 프록시 IP 하나로 세어져 인증 한도(분당 30·10회)를 함께 씁니다. 배포 후 `X-Forwarded-For`의 마지막 값이 실제 클라이언트 IP인지
+> 확인하고 켜세요([배포 체크리스트](#배포-체크리스트)).
+
+### 3. Vercel 프로젝트·`VITE_API_BASE_URL`
+
+1. Vercel에서 저장소를 가져오고 **Root Directory를 `web`** 으로 지정합니다. 빌드 설정은 `web/vercel.json`이 정합니다
+   (`npm ci` → `npm run build` → `dist`, SPA 라우팅, 보안 헤더, `/assets` 장기 캐시).
+2. 환경변수(Production·Preview): `VITE_API_BASE_URL=https://<서비스>.onrender.com`(필수 — 없으면 Vercel 빌드가 실패),
+   `VITE_GOOGLE_CLIENT_ID`, `VITE_KAKAO_CLIENT_ID`, `VITE_NAVER_CLIENT_ID`. 값은 빌드에 박히므로(CSP `connect-src` 포함) 바꾸면 재배포합니다.
+3. Production Branch를 `main`으로 둡니다. 자세한 내용은 [`web/README.md`](web/README.md)의 "Vercel 배포".
+
+### 4. CORS에 Vercel 도메인 추가
+
+Render의 `CORS_ALLOWED_ORIGINS`에 Vercel 운영 도메인(예: `https://wellness-game.vercel.app`, 커스텀 도메인이면 그 주소도)을 쉼표로 넣고 재배포합니다.
+경로·끝 슬래시 없이 오리진만 씁니다. Preview 배포 주소는 매번 바뀌므로 넣지 않습니다.
+
+### 5. 소셜 로그인 콘솔에 리다이렉트 URI 등록
+
+- **웹(카카오·네이버·구글):** 각 콘솔에 `https://<Vercel 운영 도메인>/`(끝 슬래시 포함)를 Redirect URI로, 구글은 Authorized JavaScript origin에도 도메인을 등록합니다.
+  카카오는 플랫폼 › Web 사이트 도메인, 네이버는 서비스 URL도 함께 바꿉니다.
+- **앱(네이티브):** 앱은 SDK 토큰을 백엔드로 보내므로 리다이렉트 URI 변경은 필요 없고, 운영 서버 주소로 빌드하고 서버 환경변수
+  (`OAUTH_*_NATIVE_*`, `OAUTH_GOOGLE_IOS_CLIENT_ID`, `OAUTH_APPLE_BUNDLE_ID`)가 맞는지 확인합니다.
+- 앱 심사용 개인정보 처리방침 URL: `https://<Vercel 운영 도메인>/privacy`. 연락 이메일과 시행일은 Vercel 환경변수 `VITE_PRIVACY_CONTACT_EMAIL`, `VITE_PRIVACY_EFFECTIVE_DATE`로 넣습니다(자리표시자가 남으면 Vercel 빌드가 실패).
+
+### 6. 스모크 테스트 체크리스트
+
+- [ ] `GET https://<서비스>.onrender.com/healthz` → `200 {"status":"UP"}`, Render 로그에 Flyway 마이그레이션 성공
+- [ ] Vercel 사이트가 열리고 응답 헤더에 `content-security-policy: frame-ancestors 'none'`, `x-content-type-options: nosniff`가 있음
+- [ ] `/privacy`, `/terms`를 직접 열거나 새로고침해도 페이지가 보이고(404 아님), 한/EN 전환 동작
+- [ ] 웹 소셜 로그인(카카오·네이버·구글) → 콜백 후 대시보드 표시, 브라우저 콘솔에 CORS·CSP 오류 없음
+- [ ] iOS(·Android) 앱 운영 빌드로 각 소셜 로그인과 Apple 로그인(nonce 포함) 성공, 건강 데이터 동기화 후 웹에서 같은 계정 기록 조회
+- [ ] 1시간 뒤(또는 토큰 만료 후) 앱·웹이 리프레시로 자동 갱신되고 로그아웃이 동작
+- [ ] Supabase Table Editor에서 `user_character`·`health_activity_log`에 행이 생김
+
+## CI (GitHub Actions)
+
+`.github/workflows/`의 워크플로는 해당 디렉터리(또는 워크플로 파일 자체)가 바뀐 `dev`·`main` 대상 PR과 `dev`·`main` push에서만 돈다. 모두 `contents: read` 최소 권한이며, 같은 PR/브랜치에서 새 실행이 시작되면 이전 실행은 취소된다. `workflow_dispatch`로 수동 실행도 가능하다.
+
+| 워크플로 | 트리거 경로 | 하는 일 |
+|---|---|---|
+| `backend-ci.yml` | `backend/**` | JDK 21(Temurin). `test` 잡: 단위 테스트(H2) + 빌드. `postgres-test` 잡: Testcontainers PostgreSQL 17 통합 테스트(`CI=true`라 Docker가 없으면 건너뛰지 않고 실패). 실패 시 테스트 리포트 artifact 업로드 |
+| `android-ci.yml` | `android/**` | JDK 21 + Android SDK. 단위 테스트·debug 빌드·lint, 자리표시 HTTPS 주소로 release 빌드. lint·테스트 리포트 artifact 업로드 |
+| `ios-ci.yml` | `ios/**` | macOS 러너, 최신 안정 Xcode. 사용 가능한 iPhone 시뮬레이터를 `simctl`로 골라 `WellnessGameTests` 스킴 테스트, Watch 앱(`-sdk watchsimulator`) 빌드, Watch를 임베드한 iOS 앱을 generic 시뮬레이터 목적지로 빌드(서명 없음, watchOS 런타임 불필요) |
+| `web-ci.yml` | `web/**` | Node 22. `npm ci` → 테스트 → 자리표시 API 주소로 프로덕션 빌드. 배포는 Vercel이 직접 한다([운영 배포](#운영-배포)) |
+
+로컬에서 같은 검사를 돌리는 명령:
+
+```bash
+# 백엔드 (postgresTest는 Docker 필요. 로컬에서 Docker가 없으면 건너뛴다)
+cd backend && ./gradlew test build -x test && ./gradlew postgresTest
+
+# Android (Android SDK 필요)
+cd android && ./gradlew testDebugUnitTest assembleDebug lint \
+  && ./gradlew -PAPI_BASE_URL=https://api.wellnessgame.example assembleRelease
+
+# iOS (시뮬레이터 이름은 `xcrun simctl list devices available`로 확인)
+cd ios
+xcodebuild test -project WellnessGame.xcodeproj -scheme WellnessGameTests \
+  -destination 'platform=iOS Simulator,name=<iPhone 이름>' CODE_SIGNING_ALLOWED=NO
+xcodebuild build -project WellnessGame.xcodeproj -scheme WellnessGameWatch -sdk watchsimulator CODE_SIGNING_ALLOWED=NO
+xcodebuild build -project WellnessGame.xcodeproj -scheme WellnessGame \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+
+# 웹
+cd web && npm ci && npm test && npm run build
+```
+
 ## MVP 이후 TODO
 
-- Apple·Google·Kakao·Naver 토큰 서버 검증과 자체 세션 발급
 - 게스트 진행 상황을 소셜 계정으로 이전하는 계정 연결 기능
-- 운영 DB migration 도구(Flyway/Liquibase)
 - 서버 HTTPS 배포 및 iOS 환경별 API 설정
 - 백그라운드 동기화와 실패 요청 재시도 저장소
 - HealthKit anchored query 기반 증분 동기화

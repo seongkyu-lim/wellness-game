@@ -1,15 +1,117 @@
 spring:
   datasource:
-    url: ${DATABASE_URL:jdbc:mysql://localhost:3306/wellness_game?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    # 운영(Supabase)은 SSL 이 필요하다: jdbc:postgresql://<host>:5432/postgres?sslmode=require (README "DB 연결" 참고)
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/wellness_game}
     username: ${DATABASE_USERNAME:wellness}
     password: ${DATABASE_PASSWORD:wellness}
+    hikari:
+      # 무료 DB 플랜의 연결 수 한도를 넘지 않도록 작게 둔다. 요청 하나는 연결을 하나만 잡는다(HealthActivitySyncService).
+      maximum-pool-size: ${DB_POOL_MAX:5}
+  http:
+    client:
+      # 외부 인증 서버(Apple·Google JWKS, 카카오·네이버 API) 지연으로 요청 스레드가 고갈되지 않도록 제한
+      connect-timeout: 3s
+      read-timeout: 5s
+  flyway:
+    # 스키마는 Flyway(db/migration)가 관리한다(#66). 빈 DB 에 V1 부터 차례로 실행한다(PostgreSQL, #87).
+    # 테이블은 있는데 flyway_schema_history 가 없는 DB 는 기준선을 잡지 않고 기동에 실패한다(baseline-on-migrate 기본값 false).
+    enabled: true
   jpa:
     hibernate:
-      ddl-auto: update
+      # 엔티티와 스키마가 다르면 기동에 실패한다. 스키마 변경은 새 마이그레이션 파일로만 한다.
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
 
 server:
+  # Render 등 PaaS 는 PORT 환경변수로 포트를 준다. 로컬 기본은 8080.
   port: ${PORT:8080}
+  # 재배포 때 받는 SIGTERM 에서 처리 중인 요청을 마치고 종료한다(기본 대기 30초).
+  shutdown: graceful
+
+app:
+  timezone: ${APP_TIMEZONE:Asia/Seoul}
+  # 요청 빈도 제한(#48). 1분 고정 윈도우, 단일 인스턴스 인메모리. 0 이하면 해당 제한을 끈다.
+  rate-limit:
+    sync-per-minute: ${APP_RATE_LIMIT_SYNC_PER_MINUTE:30}     # POST /api/health-activities/sync, userId별
+    auth-per-minute: ${APP_RATE_LIMIT_AUTH_PER_MINUTE:30}     # /api/auth/** 전체(소셜 로그인 포함), IP별
+    login-per-minute: ${APP_RATE_LIMIT_LOGIN_PER_MINUTE:10}   # /api/auth/login·signup, IP별(위와 함께 적용)
+    # 신뢰하는 리버스 프록시 한 단 뒤에서만 true. X-Forwarded-For 의 마지막 주소를 클라이언트 IP 로 쓴다.
+    trust-forwarded-header: ${APP_RATE_LIMIT_TRUST_FORWARDED_HEADER:false}
+    # 레이트 리밋 카운터·로그인 실패 기록이 각각 메모리에 둘 최대 키 수. 넘으면 오래된 항목부터 내보낸다.
+    max-keys: ${APP_RATE_LIMIT_MAX_KEYS:100000}
+  # 아이디 로그인 잠금(#55). 연속 실패가 한도에 닿으면 잠금 시간 동안 거부한다. 0 이하면 끈다.
+  auth:
+    max-failed-logins: ${APP_AUTH_MAX_FAILED_LOGINS:5}                                # (아이디, IP)별
+    max-failed-logins-per-username: ${APP_AUTH_MAX_FAILED_LOGINS_PER_USERNAME:50}   # 아이디 전체(분산 공격)
+    lockout-minutes: ${APP_AUTH_LOCKOUT_MINUTES:15}
+
+auth:
+  jwt:
+    # HMAC-SHA256 서명 키. 32바이트 미만(또는 미설정)이거나 같은 문자 반복처럼 단순하면 기동에 실패한다.
+    # 로컬은 application-local.yml 참고.
+    secret: ${AUTH_JWT_SECRET:}
+    # 액세스 토큰 유효 기간(Auth v2). 만료되면 클라이언트가 /api/auth/refresh 로 새로 받는다.
+    ttl: ${AUTH_JWT_TTL:1h}
+    # Watch 전용 조회 토큰(scope=read, POST /api/auth/watch-token) 유효 기간(#76). iPhone 앱을 며칠 열지 않아도 Watch 가 끊기지 않게 길게 둔다.
+    watch-ttl: ${AUTH_WATCH_TOKEN_TTL:7d}
+    issuer: ${AUTH_JWT_ISSUER:wellness-game}
+    audience: ${AUTH_JWT_AUDIENCE:wellness-game-api}
+    # iss·aud 가 없는 #55 이전 형식 토큰은 iat 가 이 시각(ISO-8601) 이전일 때만 허용한다. 비우면 허용하지 않는다(README 참고).
+    legacy-cutoff: ${AUTH_JWT_LEGACY_CUTOFF:2026-10-06T00:00:00Z}
+  # 회전 리프레시 토큰(Auth v2). DB(refresh_token)에는 SHA-256 해시만 저장한다.
+  refresh:
+    ttl: ${AUTH_REFRESH_TTL:30d}
+    # 한 로그인(family)의 절대 수명. 회전해도 이 기간을 넘지 못한다.
+    absolute-ttl: ${AUTH_REFRESH_ABSOLUTE_TTL:90d}
+    # 회전된 지 이 시간 안의 토큰이 다시 오면(응답 유실·동시 요청) 재사용으로 보지 않고 형제 토큰을 준다.
+    reuse-grace: ${AUTH_REFRESH_REUSE_GRACE:30s}
+    # 폐기된 행을 재사용 감지용으로 남겨 두는 기간. 만료 행과 함께 정리 작업이 지운다.
+    revoked-retention: ${AUTH_REFRESH_REVOKED_RETENTION:7d}
+    # 정리 작업 시각(app.timezone 기준, 기본 매일 04:00)
+    cleanup-cron: ${AUTH_REFRESH_CLEANUP_CRON:0 0 4 * * *}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+oauth:
+  kakao:
+    client-id: ${OAUTH_KAKAO_CLIENT_ID:}
+    client-secret: ${OAUTH_KAKAO_CLIENT_SECRET:}
+    token-uri: https://kauth.kakao.com/oauth/token
+    profile-uri: https://kapi.kakao.com/v2/user/me
+    # iOS 카카오 로그인(POST /api/auth/kakao/native). 비어 있으면 해당 엔드포인트는 503.
+    # access_token_info 의 app_id 가 이 값(카카오 앱 ID, 숫자)과 같아야 한다.
+    native-app-id: ${OAUTH_KAKAO_NATIVE_APP_ID:}
+    access-token-info-uri: https://kapi.kakao.com/v1/user/access_token_info
+  naver:
+    client-id: ${OAUTH_NAVER_CLIENT_ID:}
+    client-secret: ${OAUTH_NAVER_CLIENT_SECRET:}
+    token-uri: https://nid.naver.com/oauth2.0/token
+    # iOS 네이버 로그인(POST /api/auth/naver/native)도 이 profile-uri 로 토큰을 검증한다.
+    # client-id 가 비어 있으면 해당 엔드포인트는 503. (네이버는 토큰의 발급 앱을 확인하는 API 가 없다)
+    profile-uri: https://openapi.naver.com/v1/nid/me
+  google:
+    client-id: ${OAUTH_GOOGLE_CLIENT_ID:}
+    client-secret: ${OAUTH_GOOGLE_CLIENT_SECRET:}
+    token-uri: https://oauth2.googleapis.com/token
+    profile-uri: https://openidconnect.googleapis.com/v1/userinfo
+  # iOS 구글 로그인 ID 토큰 검증(POST /api/auth/google/native). Google JWKS 로 서버에서 직접 검증한다(#55).
+  # aud·azp 는 아래 client-ids(iOS) 와 oauth.google.client-id(웹) 중 하나여야 한다.
+  google-native:
+    client-ids: ${OAUTH_GOOGLE_IOS_CLIENT_ID:}
+    jwks-uri: https://www.googleapis.com/oauth2/v3/certs
+    jwks-cache-ttl: 1h
+    # JWKS 조회가 계속 실패할 때 마지막으로 받은 키를 쓰는 최대 기간(마지막 조회 기준). 넘으면 503.
+    jwks-stale-max: 24h
+  # iOS Sign in with Apple identity token 검증(POST /api/auth/apple/native).
+  # aud 가 bundle-id 와 같아야 한다. 비어 있으면 해당 엔드포인트는 503.
+  apple:
+    bundle-id: ${OAUTH_APPLE_BUNDLE_ID:}
+    jwks-uri: https://appleid.apple.com/auth/keys
+    jwks-cache-ttl: 1h
+    jwks-stale-max: 24h
+    # true 면 nonce 없는 apple/native 요청을 401 로 거부한다(#64). nonce 를 보내는 앱 배포 후 켠다.
+    require-nonce: ${OAUTH_APPLE_REQUIRE_NONCE:false}
