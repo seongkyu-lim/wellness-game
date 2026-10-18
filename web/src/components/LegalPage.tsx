@@ -4,10 +4,24 @@ import { LEGAL_DOCUMENTS, LEGAL_EFFECTIVE_DATE, PRIVACY_CONTACT_EMAIL, pagePath,
 import { LanguageToggle } from './LanguageToggle'
 import { SiteFooter } from './SiteFooter'
 
-/** 사전 문구를 문단으로 그린다. 줄 단위로 나누고 '- '로 시작하는 줄이 이어지면 목록으로 묶는다. */
+function cells(row: string): string[] {
+  return row
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim())
+}
+
+/**
+ * 사전 문구를 블록으로 그린다. 줄 단위로 나눠
+ * - '- '로 시작하는 줄이 이어지면 목록,
+ * - '|'로 시작하는 줄이 이어지면 표(첫 줄이 머리글),
+ * - 그 밖의 줄은 문단으로 그린다.
+ */
 function renderBody(text: string): ReactNode[] {
   const blocks: ReactNode[] = []
   let items: string[] = []
+  let rows: string[][] = []
   const flush = () => {
     if (items.length > 0) {
       blocks.push(
@@ -19,10 +33,42 @@ function renderBody(text: string): ReactNode[] {
       )
       items = []
     }
+    if (rows.length > 0) {
+      const [head, ...body] = rows
+      blocks.push(
+        <div className="legal-table" key={blocks.length}>
+          <table>
+            <thead>
+              <tr>
+                {head.map((cell) => (
+                  <th key={cell} scope="col">
+                    {cell}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {body.map((row) => (
+                <tr key={row[0]}>
+                  {row.map((cell, i) => (
+                    <td key={i}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      )
+      rows = []
+    }
   }
   for (const line of text.split('\n')) {
     if (line.startsWith('- ')) {
+      if (rows.length > 0) flush()
       items.push(line.slice(2))
+    } else if (line.startsWith('|')) {
+      if (items.length > 0) flush()
+      rows.push(cells(line))
     } else {
       flush()
       blocks.push(<p key={blocks.length}>{line}</p>)

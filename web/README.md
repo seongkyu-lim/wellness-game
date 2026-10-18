@@ -160,10 +160,12 @@ object-src 'none'; base-uri 'self'; form-action 'self'
 PR·push에서 테스트·빌드 검증만 합니다.
 
 - Vercel 프로젝트의 **Root Directory를 `web`** 으로 지정합니다. 빌드 설정은 `vercel.json`(설치 `npm ci`, 빌드 `npm run build`, 출력 `dist`)에 있습니다.
-- 환경변수(Production·Preview 모두): `VITE_API_BASE_URL`(Render 백엔드 주소, 필수), `VITE_GOOGLE_CLIENT_ID`, `VITE_KAKAO_CLIENT_ID`,
+- 환경변수(Production·Preview 모두): `VITE_API_BASE_URL`(Render 백엔드 주소, 필수), `VITE_PRIVACY_CONTACT_EMAIL`·`VITE_PRIVACY_EFFECTIVE_DATE`(필수, 아래), `VITE_GOOGLE_CLIENT_ID`, `VITE_KAKAO_CLIENT_ID`,
   `VITE_NAVER_CLIENT_ID`. 모두 번들에 들어가는 공개 값입니다. Vercel 빌드(`VERCEL=1`)에서 `VITE_API_BASE_URL`이 비어 있으면
   `csp.ts`가 빌드를 실패시킵니다(API 호출이 막힌 사이트가 배포되는 것 방지). 값을 바꾸면 다시 배포해야 반영됩니다.
-- SPA 라우팅: `/assets/` 밖의 모든 경로를 `index.html`로 돌려줘 `/privacy`, `/terms`, 소셜 로그인 콜백(`/?code=...`)을 새로고침해도 열립니다.
+- SPA 라우팅: 앱 경로만 `index.html`로 응답합니다. `/`(소셜 로그인 콜백 `/?code=...` 포함)는 정적 `index.html`, `/privacy`·`/terms`는
+  리라이트로 새로고침해도 열리고, 그 밖의 없는 경로는 404입니다. 새 페이지를 추가하면 `vercel.json` 리라이트와 `src/legal/legal.ts`의
+  `APP_ROUTES`를 함께 고칩니다(`vercel.test.ts`가 일치를 검사). `public/robots.txt`는 전체 크롤링을 허용합니다.
 - 소셜 로그인 Redirect URI는 `https://<Vercel 도메인>/`입니다(base가 `/`). Preview 배포 주소는 매번 바뀌므로 provider 콘솔에는
   운영 도메인만 등록하고, Preview에서는 로그인이 실패할 수 있습니다.
 - 응답 헤더(`vercel.json`): `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
@@ -173,5 +175,13 @@ PR·push에서 테스트·빌드 검증만 합니다.
 ### 개인정보 처리방침·이용약관
 
 `/privacy`, `/terms`는 로그인 없이 볼 수 있는 페이지입니다(`src/components/LegalPage.tsx`, 문구는 `src/i18n/dictionaries.ts`의
-`legal.*`). 연락 이메일 `PRIVACY_CONTACT_EMAIL`과 시행일 `LEGAL_EFFECTIVE_DATE`는 `src/legal/legal.ts`의 상수이며, 운영 전에 실제 값으로 바꿉니다.
+`legal.*`, 줄 앞 `- `는 목록, `|`는 표). 연락 이메일과 시행일은 빌드 환경변수로 주입합니다.
+
+| 환경변수 | 내용 | 미설정 시 |
+|---|---|---|
+| `VITE_PRIVACY_CONTACT_EMAIL` | 개인정보 문의·삭제 요청 이메일 | `privacy@example.com` |
+| `VITE_PRIVACY_EFFECTIVE_DATE` | 시행일(`YYYY-MM-DD`) | `YYYY-MM-DD` |
+
+로컬·테스트 빌드는 자리표시자를 그대로 쓰지만, **Vercel 빌드(`VERCEL=1`)는 자리표시자·`example.com` 계열 주소·잘못된 날짜가 남아 있으면 실패**합니다
+(`legalEnv.ts`). Vercel 프로젝트 환경변수(Production·Preview)에 실제 값을 넣으세요. 방침 내용을 바꾸면 시행일도 갱신합니다.
 앱 심사(App Store·Google Play)에는 `https://<운영 도메인>/privacy`를 개인정보 처리방침 URL로 제출합니다.

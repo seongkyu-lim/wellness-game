@@ -899,3 +899,23 @@ a.btn {
   padding-left: 20px;
   margin: 6px 0;
 }
+
+.legal-table {
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.legal table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.legal th,
+.legal td {
+  border: 1.5px solid var(--ink);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.45;
+}

@@ -416,15 +416,15 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ### 2. Render 서비스·환경변수
 
 1. Render 대시보드 **New › Blueprint**에서 이 저장소를 고르면 루트의 `render.yaml`로 `wellness-game-api` 웹 서비스가 만들어집니다
-   (Docker, `rootDir: backend`, `main` 브랜치 자동 배포, region `singapore`, plan `starter`).
+   (Docker, `rootDir: backend`, `main` 브랜치 자동 배포, region `singapore`, plan `free` — 앱 심사 제출 전 `starter`로 변경).
 2. `sync: false` 항목은 생성 화면에서 값을 입력합니다: `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`,
    `CORS_ALLOWED_ORIGINS`(3단계 후 채워도 됨), 소셜 로그인 키([소셜 로그인 서버 환경변수](#소셜-로그인-서버-환경변수) 표).
    `AUTH_JWT_SECRET`은 Render가 256비트 무작위 값을 생성합니다(바꾸면 모든 로그인 세션이 끊김).
-3. 고정값: `AUTH_JWT_TTL=1h`, `OAUTH_APPLE_REQUIRE_NONCE=true`, `AUTH_JWT_LEGACY_CUTOFF=`(빈 값), `APP_TIMEZONE=Asia/Seoul`, `DB_POOL_MAX=5`.
+3. `render.yaml`이 지정하는 운영값: `OAUTH_APPLE_REQUIRE_NONCE=true`, `AUTH_JWT_LEGACY_CUTOFF=`(빈 값). `AUTH_JWT_TTL=1h`, `APP_TIMEZONE=Asia/Seoul`, `DB_POOL_MAX=5`는 `application.yml` 기본값을 그대로 씁니다.
 4. 포트는 Render가 주는 `PORT`를 `server.port: ${PORT:8080}`이 따릅니다. 헬스체크는 `GET /healthz`(`{"status":"UP"}`,
    인증·레이트 리밋 대상 아님, DB 미확인)입니다. 배포 후 `https://<서비스>.onrender.com/healthz`로 확인합니다.
 5. JVM 옵션은 Dockerfile 기본값 `JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"`입니다.
-   starter(512MB)에서 메모리 초과로 재시작되면 Render 환경변수 `JAVA_TOOL_OPTIONS`로 `-XX:MaxRAMPercentage=65` 등으로 낮춥니다(설정하면 기본값 전체를 대체).
+   512MB 플랜에서 메모리 초과로 재시작되면 Render 환경변수 `JAVA_TOOL_OPTIONS`로 `-XX:MaxRAMPercentage=65` 등으로 낮춥니다(설정하면 기본값 전체를 대체).
 
 > **출시 전이라 TTL·nonce를 최종값으로 시작합니다.** [인증 세션의 배포 순서](#인증-세션-auth-v2-55-64-76)(처음엔 `AUTH_JWT_TTL=30d`,
 > nonce 강제는 나중에)는 리프레시·nonce를 모르는 **구버전 앱 사용자를 위한 것**입니다. 첫 운영 배포에는 그런 클라이언트가 없으므로
@@ -458,7 +458,7 @@ Render의 `CORS_ALLOWED_ORIGINS`에 Vercel 운영 도메인(예: `https://wellne
   카카오는 플랫폼 › Web 사이트 도메인, 네이버는 서비스 URL도 함께 바꿉니다.
 - **앱(네이티브):** 앱은 SDK 토큰을 백엔드로 보내므로 리다이렉트 URI 변경은 필요 없고, 운영 서버 주소로 빌드하고 서버 환경변수
   (`OAUTH_*_NATIVE_*`, `OAUTH_GOOGLE_IOS_CLIENT_ID`, `OAUTH_APPLE_BUNDLE_ID`)가 맞는지 확인합니다.
-- 앱 심사용 개인정보 처리방침 URL: `https://<Vercel 운영 도메인>/privacy`. 제출 전 `web/src/legal/legal.ts`의 연락 이메일(`privacy@example.com`)과 시행일을 실제 값으로 바꿉니다.
+- 앱 심사용 개인정보 처리방침 URL: `https://<Vercel 운영 도메인>/privacy`. 연락 이메일과 시행일은 Vercel 환경변수 `VITE_PRIVACY_CONTACT_EMAIL`, `VITE_PRIVACY_EFFECTIVE_DATE`로 넣습니다(자리표시자가 남으면 Vercel 빌드가 실패).
 
 ### 6. 스모크 테스트 체크리스트
 

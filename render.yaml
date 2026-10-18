@@ -30,24 +30,21 @@ services:
         sync: false
       - key: DATABASE_PASSWORD
         sync: false
-      # Supabase 무료·소형 플랜의 연결 수 한도를 넘지 않게 작게 둔다.
-      - key: DB_POOL_MAX
-        value: "5"
+      # DB_POOL_MAX: application.yml 기본값(5)을 쓴다. Supabase 연결 한도에 맞춰 바꿀 때만 추가한다.
 
       # --- 인증 ---
       # 256비트 무작위 base64 값을 Render 가 처음 한 번 생성한다(32바이트 이상 요구 충족). 바꾸면 모든 토큰이 무효가 된다.
       - key: AUTH_JWT_SECRET
         generateValue: true
       # 출시 전이라 구버전 클라이언트가 없으므로 최종값으로 시작한다(README "운영 배포").
-      - key: AUTH_JWT_TTL
-        value: 1h
+      # AUTH_JWT_TTL: application.yml 기본값(1h)을 그대로 쓴다. 설정 출처를 하나로 두려고 여기서 지정하지 않는다.
+      # 아래 두 값은 application.yml 기본값과 다른 운영값이라 명시한다.
       - key: OAUTH_APPLE_REQUIRE_NONCE
         value: "true"
       # 비우면 iss·aud 없는 #55 이전 형식 토큰을 받지 않는다.
       - key: AUTH_JWT_LEGACY_CUTOFF
         value: ""
-      - key: APP_TIMEZONE
-        value: Asia/Seoul
+      # APP_TIMEZONE: application.yml 기본값(Asia/Seoul)을 쓴다.
       # Vercel 운영 도메인(쉼표로 여러 개). 예: https://wellness-game.vercel.app
       - key: CORS_ALLOWED_ORIGINS
         sync: false
