@@ -1,18 +1,21 @@
 spring:
   datasource:
-    url: ${DATABASE_URL:jdbc:mysql://localhost:3306/wellness_game?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    # 운영(Supabase)은 SSL 이 필요하다: jdbc:postgresql://<host>:5432/postgres?sslmode=require (README "DB 연결" 참고)
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/wellness_game}
     username: ${DATABASE_USERNAME:wellness}
     password: ${DATABASE_PASSWORD:wellness}
+    hikari:
+      # 무료 DB 플랜의 연결 수 한도를 넘지 않도록 작게 둔다. 요청 하나는 연결을 하나만 잡는다(HealthActivitySyncService).
+      maximum-pool-size: ${DB_POOL_MAX:5}
   http:
     client:
       # 외부 인증 서버(Apple·Google JWKS, 카카오·네이버 API) 지연으로 요청 스레드가 고갈되지 않도록 제한
       connect-timeout: 3s
       read-timeout: 5s
   flyway:
-    # 스키마는 Flyway(db/migration)가 관리한다(#66). Flyway 이전에 ddl-auto 로 만들어진 DB 는 첫 기동 때
-    # 버전 1(V1__baseline)로 기준선을 잡아 V1 을 건너뛰고 V2 부터 적용한다. 빈 DB 는 V1 부터 실행한다.
-    baseline-on-migrate: true
-    baseline-version: 1
+    # 스키마는 Flyway(db/migration)가 관리한다(#66). 빈 DB 에 V1 부터 차례로 실행한다(PostgreSQL, #87).
+    # 테이블은 있는데 flyway_schema_history 가 없는 DB 는 기준선을 잡지 않고 기동에 실패한다(baseline-on-migrate 기본값 false).
+    enabled: true
   jpa:
     hibernate:
       # 엔티티와 스키마가 다르면 기동에 실패한다. 스키마 변경은 새 마이그레이션 파일로만 한다.

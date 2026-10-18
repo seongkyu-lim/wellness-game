@@ -53,11 +53,11 @@ jobs:
             backend/build/test-results/
           retention-days: 7
 
-  mysql-test:
-    name: MySQL integration tests (Testcontainers)
+  postgres-test:
+    name: PostgreSQL integration tests (Testcontainers)
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    # Actions 는 CI=true 를 기본 설정하므로 Docker가 없으면 건너뛰지 않고 실패한다(MySqlIntegrationTest).
+    # Actions 는 CI=true 를 기본 설정하므로 Docker가 없으면 건너뛰지 않고 실패한다(PostgresTestServer).
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -71,13 +71,13 @@ jobs:
           cache-read-only: ${{ !contains(fromJSON('["refs/heads/dev","refs/heads/main"]'), github.ref) }}
       - name: Docker info
         run: docker version
-      - name: MySQL tests
-        run: ./gradlew mysqlTest
+      - name: PostgreSQL tests
+        run: ./gradlew postgresTest
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-mysql-test-reports
+          name: backend-postgres-test-reports
           path: |
             backend/build/reports/tests/
             backend/build/test-results/

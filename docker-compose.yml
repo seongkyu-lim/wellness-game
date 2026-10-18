@@ -1,29 +1,29 @@
 services:
-  mysql:
-    image: mysql:8.4.10
+  postgres:
+    image: postgres:17.6
     environment:
-      MYSQL_DATABASE: wellness_game
-      MYSQL_USER: wellness
-      MYSQL_PASSWORD: wellness
-      MYSQL_ROOT_PASSWORD: wellness-root
+      POSTGRES_DB: wellness_game
+      POSTGRES_USER: wellness
+      POSTGRES_PASSWORD: wellness
     ports:
-      - "13306:3306"
+      - "15432:5432"
     volumes:
-      - wellness-mysql:/var/lib/mysql
+      - wellness-postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u wellness -pwellness --silent"]
+      test: ["CMD-SHELL", "pg_isready -U wellness -d wellness_game"]
       interval: 5s
       timeout: 3s
       retries: 20
-      start_period: 20s
+      start_period: 10s
 
   backend:
     build:
       context: ./backend
     environment:
-      DATABASE_URL: jdbc:mysql://mysql:3306/wellness_game?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DATABASE_URL: jdbc:postgresql://postgres:5432/wellness_game
       DATABASE_USERNAME: wellness
       DATABASE_PASSWORD: wellness
+      DB_POOL_MAX: ${DB_POOL_MAX:-5}
       # 필수. 32바이트 이상 비밀키를 환경변수 또는 .env 로 주입 (예: openssl rand -base64 48)
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET 환경변수를 설정하세요 (32바이트 이상)}
       OAUTH_GOOGLE_IOS_CLIENT_ID: ${OAUTH_GOOGLE_IOS_CLIENT_ID:-}
@@ -38,8 +38,8 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
 
 volumes:
-  wellness-mysql:
+  wellness-postgres:
