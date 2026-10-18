@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * PostgreSQL 통합 테스트가 붙는 서버. 기본은 Testcontainers PostgreSQL 17 컨테이너이고, 환경변수
+ * PostgreSQL 통합 테스트가 붙는 서버. 기본은 Testcontainers PostgreSQL 17.6 컨테이너(운영 Supabase 와 같은 17.6 계열, docker-compose 와 같은 태그)이고, 환경변수
  * {@code POSTGRES_TEST_JDBC_URL}(예: {@code jdbc:postgresql://127.0.0.1:5432/postgres})이 있으면 컨테이너 대신 그 서버를 쓴다
  * (계정은 {@code POSTGRES_TEST_USERNAME}·{@code POSTGRES_TEST_PASSWORD}, 기본 postgres/빈 값). URL 의 데이터베이스는
  * 테스트 DB 를 만들고 지울 때 붙는 관리용 DB 로만 쓴다. 계정에는 데이터베이스 생성·삭제 권한이 있어야 한다.
@@ -61,7 +61,7 @@ public final class PostgresTestServer {
             }
             assumeTrue(false, "Docker 를 사용할 수 없어 PostgreSQL 통합 테스트를 건너뜀");
         }
-        container = new PostgreSQLContainer<>("postgres:17")
+        container = new PostgreSQLContainer<>("postgres:17.6")
                 .withDatabaseName("wellness_admin")
                 .withUsername("wellness")
                 .withPassword("wellness");
@@ -90,7 +90,10 @@ public final class PostgresTestServer {
     }
 
     public static void dropDatabase(String name) {
-        // 닫히지 않은 연결이 남아 있어도 지운다(PostgreSQL 13+).
+        // 닫히지 않은 연결이 남아 있어도 지운다(PostgreSQL 13+). WITH (FORCE) 는 다른 세션을 끊으므로
+        // 접속 계정이 그 DB 의 소유자(또는 슈퍼유저)여야 한다. POSTGRES_TEST_JDBC_URL 로 외부 서버를 쓸 때는
+        // 이 계정으로 createDatabase() 가 만든 DB 만 지우므로 소유자 조건은 맞지만, 다른 세션 종료 권한
+        // (pg_signal_backend 등)이 없는 관리형 서버에서는 실패할 수 있다.
         execute("drop database if exists " + name + " with (force)");
     }
 

@@ -14,6 +14,8 @@ import com.wellnessgame.auth.IssuedRefreshToken;
 import com.wellnessgame.auth.RefreshToken;
 import com.wellnessgame.auth.RefreshTokenRepository;
 import com.wellnessgame.auth.RefreshTokenService;
+import com.wellnessgame.auth.TokenValidityService;
+import com.wellnessgame.auth.UserAuthStateRepository;
 import com.wellnessgame.character.UserCharacter;
 import com.wellnessgame.character.UserCharacterRepository;
 import com.wellnessgame.support.ActivityPayloads;
@@ -84,6 +86,8 @@ class PostgresIntegrationTest {
     private UserCharacterRepository characterRepository;
     private RefreshTokenService refreshTokenService;
     private RefreshTokenRepository refreshTokenRepository;
+    private TokenValidityService tokenValidityService;
+    private UserAuthStateRepository userAuthStateRepository;
     private Flyway flyway;
     private DataSource dataSource;
 
@@ -111,6 +115,8 @@ class PostgresIntegrationTest {
         characterRepository = app.getBean(UserCharacterRepository.class);
         refreshTokenService = app.getBean(RefreshTokenService.class);
         refreshTokenRepository = app.getBean(RefreshTokenRepository.class);
+        tokenValidityService = app.getBean(TokenValidityService.class);
+        userAuthStateRepository = app.getBean(UserAuthStateRepository.class);
         flyway = app.getBean(Flyway.class);
         dataSource = app.getBean(DataSource.class);
         app.getBean(MutableClock.class).setInstant(Instant.parse("2026-06-17T23:00:00Z"));
@@ -306,6 +312,23 @@ class PostgresIntegrationTest {
         // 두 새 토큰 모두 계속 회전할 수 있다.
         assertThat(refreshTokenService.rotate(tokenA).userId()).isEqualTo(USER);
         assertThat(refreshTokenService.rotate(tokenB).userId()).isEqualTo(USER);
+    }
+
+    @Test
+    void concurrentFirstRevokesForSameUserAllSucceedWithSingleRow() throws Exception {
+        // 첫 revoke 가 동시에 와도 PK 위반(23505)으로 실패하거나 트랜잭션이 aborted 되지 않아야 한다(네이티브 upsert).
+        String user = "revoke-race-user";
+        List<Callable<Boolean>> tasks = new ArrayList<>();
+        for (int i = 0; i < POOL_SIZE * 2; i++) {
+            tasks.add(() -> {
+                tokenValidityService.revokeIssuedTokens(user);
+                return true;
+            });
+        }
+
+        assertThat(runConcurrently(tasks)).hasSize(POOL_SIZE * 2).containsOnly(true);
+        assertThat(userAuthStateRepository.findAll()).filteredOn(state -> state.getUserId().equals(user)).singleElement()
+                .satisfies(state -> assertThat(state.getTokensValidAfter()).isEqualTo(Instant.parse("2026-06-17T23:00:00Z")));
     }
 
     // ---- helpers ----

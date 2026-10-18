@@ -103,31 +103,51 @@ public class V2__sleep_key_normalization extends BaseJavaMigration {
             // 그 경우에만 유일 제약에 걸리므로 그룹 단위 savepoint 로 이 그룹만 되돌리고 전부 legacy 로 내린다.
             // PostgreSQL 은 문장 하나가 실패하면 트랜잭션 전체가 aborted 상태가 되어 savepoint 로 되돌리기 전에는
             // 어떤 문장도 받지 않는다. 그래서 충돌 처리(전부 legacy 로 내리기)도 반드시 savepoint 복구 뒤에 한다.
-            Savepoint savepoint = connection.getAutoCommit() ? null : connection.setSavepoint();
-            boolean promotedOne;
-            try {
-                promotedOne = migrateGroup(connection, group.getKey(), rows, false);
-                if (savepoint != null) {
-                    // 그룹마다 만든 savepoint(PostgreSQL 서브트랜잭션)가 쌓이지 않게 성공하면 바로 해제한다.
-                    connection.releaseSavepoint(savepoint);
-                }
-            } catch (SQLException e) {
-                if (!isIntegrityViolation(e)) {
-                    throw e;
-                }
-                // 확인 뒤 새 키가 생겼다: 이 그룹은 전부 legacy 로 내린다.
-                log.warn("수면 키 충돌, 구 형식 행을 모두 legacy 로 보존: key={}", group.getKey());
-                if (savepoint != null) {
-                    connection.rollback(savepoint);
-                }
-                promotedOne = migrateGroup(connection, group.getKey(), rows, true);
-            }
+            String sleepKey = group.getKey();
+            boolean promotedOne = withSavepoint(connection,
+                    () -> migrateGroup(connection, sleepKey, rows, false),
+                    () -> {
+                        // 확인 뒤 새 키가 생겼다: 이 그룹은 전부 legacy 로 내린다.
+                        log.warn("수면 키 충돌, 구 형식 행을 모두 legacy 로 보존: key={}", sleepKey);
+                        return migrateGroup(connection, sleepKey, rows, true);
+                    });
             promoted += promotedOne ? 1 : 0;
             archived += rows.size() - (promotedOne ? 1 : 0);
         }
         if (promoted + archived > 0) {
             log.info("구 형식 수면 로그 키 정리: 새 키로 전환 {}건, legacy 보존 {}건", promoted, archived);
         }
+    }
+
+    /** SQLException 을 던질 수 있는 작업. */
+    @FunctionalInterface
+    interface SqlWork<T> {
+        T run() throws SQLException;
+    }
+
+    /**
+     * savepoint 를 잡고 {@code work} 를 실행한다. 성공하면 savepoint 를 해제하고(PostgreSQL 서브트랜잭션이 쌓이지 않게),
+     * 무결성 제약 위반이면 savepoint 로 되돌린 뒤 {@code onIntegrityViolation} 을 실행한다. 그 외 오류는 그대로 던진다.
+     * 자동 커밋 연결이면 savepoint 없이 실행한다(실패한 문장만 되돌려진다).
+     */
+    static <T> T withSavepoint(Connection connection, SqlWork<T> work, SqlWork<T> onIntegrityViolation) throws SQLException {
+        Savepoint savepoint = connection.getAutoCommit() ? null : connection.setSavepoint();
+        T result;
+        try {
+            result = work.run();
+        } catch (SQLException e) {
+            if (!isIntegrityViolation(e)) {
+                throw e;
+            }
+            if (savepoint != null) {
+                connection.rollback(savepoint);
+            }
+            return onIntegrityViolation.run();
+        }
+        if (savepoint != null) {
+            connection.releaseSavepoint(savepoint);
+        }
+        return result;
     }
 
     /**
