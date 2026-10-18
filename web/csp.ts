@@ -26,7 +26,7 @@ export function resolveApiOrigin(apiBaseUrl: string | undefined, mode: string): 
  * - connect-src: fetch 대상인 API 오리진만. 소셜 로그인(카카오·네이버·구글)은 fetch가 아니라 최상위 페이지 이동
  *   (`window.location.href`)이라 connect-src 대상이 아니며, 코드 교환은 백엔드가 서버 쪽에서 한다. 그래서 넣지 않는다.
  * - img-src 'self' data:: 이미지 파일을 쓰지 않고 SVG는 인라인 요소다. favicon 등 같은 오리진과 data URI만 둔다.
- * - frame-ancestors는 meta로 지정할 수 없어 제외한다(README의 서버 헤더 안내 참고).
+ * - frame-ancestors는 meta로 지정할 수 없어 제외한다. Vercel 응답 헤더(vercel.json)가 따로 지정한다.
  */
 export function buildCsp(apiOrigin: string | null): string {
   const directives: Record<string, string[]> = {
@@ -45,6 +45,16 @@ export function buildCsp(apiOrigin: string | null): string {
     .join('; ')
 }
 
+type Env = Record<string, string | undefined>
+
+/**
+ * Vercel 빌드 환경은 VERCEL=1을 설정한다. 이 파일은 브라우저 번들에서도 import되고 @types/node를 쓰지 않으므로
+ * process는 globalThis로 읽는다.
+ */
+export function isVercelBuild(env: Env = (globalThis as { process?: { env: Env } }).process?.env ?? {}): boolean {
+  return env.VERCEL === '1'
+}
+
 /**
  * 빌드 결과(index.html)에만 CSP meta를 주입한다. 개발 서버는 Vite HMR·React Refresh가 인라인 스크립트와
  * 웹소켓을 쓰므로 적용하지 않는다(apply: 'build').
@@ -57,8 +67,13 @@ export function cspPlugin(): Plugin {
     configResolved(config) {
       const apiOrigin = resolveApiOrigin(config.env.VITE_API_BASE_URL as string | undefined, config.mode)
       if (!apiOrigin) {
-        // 실패 대신 경고: GitHub Pages 배포는 백엔드 배포 전까지 저장소 변수 VITE_API_BASE_URL이 비어 있는 상태로
-        // 랜딩·로그인 화면만 서비스한다(README 'GitHub Pages 배포'). 빌드를 막으면 그 배포가 끊긴다.
+        if (isVercelBuild()) {
+          // Vercel 배포에서 API 주소가 빠지면 API 호출이 모두 막힌 사이트가 배포되므로 빌드를 실패시킨다.
+          throw new Error(
+            '[wellness-csp] Vercel 빌드에는 VITE_API_BASE_URL(백엔드 주소)이 필요합니다. 프로젝트 환경변수(Production·Preview)에 설정하세요.',
+          )
+        }
+        // 그 밖의 프로덕션 빌드(로컬 확인 등)는 경고만 낸다.
         config.logger.warn(
           '[wellness-csp] VITE_API_BASE_URL이 비어 있어 프로덕션 CSP connect-src를 \'self\'로만 제한합니다. API 호출은 차단됩니다.',
         )

@@ -1,0 +1,48 @@
+name: Web CI
+
+# 운영 배포는 Vercel이 저장소를 직접 빌드한다(web/vercel.json). 이 워크플로는 테스트·빌드 검증만 한다.
+on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/web-ci.yml'
+  push:
+    branches: [dev, main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/web-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 같은 브랜치/PR의 이전 실행은 취소한다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: web
+
+jobs:
+  test:
+    name: Test + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Test
+        run: npm test
+      - name: Build
+        # 자리표시 API 주소로 프로덕션 빌드(타입 체크·CSP 주입)가 되는지만 확인한다. 실제 값은 Vercel 환경변수.
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: https://api.example.com

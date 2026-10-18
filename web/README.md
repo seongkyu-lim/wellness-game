@@ -108,7 +108,7 @@ npm test        # Vitest(jsdom) 단위·렌더링 테스트
 테스트는 `src/**/*.test.ts(x)`, `csp.test.ts`, `build.test.ts`(실제 프로덕션 빌드의 `index.html`에 CSP meta가 폰트·스크립트보다 앞에 오는지)에 있습니다. i18n(언어 감지·번역·`Intl` 포맷·배너 재번역),
 API 클라이언트 헤더·401 처리·토큰 갱신·로그아웃, 세션 로드·만료(`lib/auth.ts`), 탭 간 갱신 조율(`lib/session.test.ts`, 가짜
 BroadcastChannel), 로그인 버튼 배치, CSP 생성을 검사합니다.
-GitHub Pages 워크플로는 빌드 전에 `npm test`를 실행합니다.
+CI(`.github/workflows/web-ci.yml`)는 PR·push마다 `npm test`와 `npm run build`를 실행합니다.
 
 ## 보안: CSP와 토큰 저장
 
@@ -125,12 +125,13 @@ object-src 'none'; base-uri 'self'; form-action 'self'
 
 - `connect-src`는 빌드 시점의 `VITE_API_BASE_URL` 오리진으로 정해집니다. API 주소를 바꾸면 다시 빌드해야 합니다.
   프로덕션 빌드에서 값이 비어 있으면 localhost를 넣지 않고 `'self'`만 허용하며 경고를 출력합니다(API 호출 차단).
-  백엔드 배포 전 Pages 배포(저장소 변수 미설정)가 끊기지 않도록 빌드 실패 대신 경고로 둡니다.
+  Vercel 빌드(`VERCEL=1`)에서는 경고 대신 빌드를 실패시킵니다.
 - 소셜 로그인은 provider 페이지로의 최상위 이동이고 토큰 교환은 백엔드가 하므로 `connect-src`에 provider 도메인이 없습니다.
 - 외부 리소스(스크립트·이미지·폰트 CDN 등)를 추가하면 `csp.ts`의 지시문도 함께 고치세요.
-- **`frame-ancestors`(클릭재킹 방지)는 meta로 지정할 수 없습니다.** 웹을 직접 서빙하는 서버·CDN에서
-  `Content-Security-Policy: frame-ancestors 'none'` 응답 헤더(구형 브라우저용 `X-Frame-Options: DENY` 병행)를 설정하세요.
-  GitHub Pages는 응답 헤더를 바꿀 수 없으므로, 필요하면 Cloudflare 등 헤더를 설정할 수 있는 프록시·호스팅을 앞에 둡니다.
+- **`frame-ancestors`(클릭재킹 방지)는 meta로 지정할 수 없어** Vercel 응답 헤더(`vercel.json`)로
+  `Content-Security-Policy: frame-ancestors 'none'`(구형 브라우저용 `X-Frame-Options: DENY` 병행)을 보냅니다.
+  헤더 CSP와 meta CSP는 둘 다 적용(교집합)되는데, 헤더에는 `frame-ancestors`만 있어 meta 정책을 더 좁히거나 충돌하지 않습니다.
+  전체 정책을 헤더로 옮기지 않는 이유는 `connect-src`가 빌드 시점 `VITE_API_BASE_URL`에 따라 정해지기 때문입니다(빌드 산출물 하나에 정책이 같이 묶임).
 
 ### 웹 토큰 저장 위험과 완화
 
@@ -153,16 +154,34 @@ object-src 'none'; base-uri 'self'; form-action 'self'
 - 공용 PC에서는 사용 후 로그아웃하도록 안내합니다(로그아웃 시 저장된 세션 삭제).
 - 장기적으로는 HttpOnly·Secure·SameSite 쿠키 기반 세션(같은 사이트 배포 + CSRF 대책)으로 옮기는 것이 가장 안전합니다.
 
-## GitHub Pages 배포
+## Vercel 배포
 
-`dev` 브랜치에 `web/` 변경이 push되면 `.github/workflows/web-pages.yml`이 빌드해
-`https://seongkyu-lim.github.io/wellness-game/`에 배포합니다. Actions 탭에서 수동 실행(`workflow_dispatch`)도 가능합니다.
-`dev`에서 배포하므로 **Settings › Environments › github-pages › Deployment branches**에 `dev`가 허용돼 있어야 합니다.
+운영 웹은 Vercel이 저장소를 직접 빌드해 배포합니다(전체 순서는 루트 README의 "운영 배포"). GitHub Actions(`web-ci.yml`)는
+PR·push에서 테스트·빌드 검증만 합니다.
 
-- 하위 경로 배포라 빌드 시 `actions/configure-pages`가 알려주는 경로를 `--base`로 지정합니다. 소셜 로그인 Redirect URI도
-  `https://seongkyu-lim.github.io/wellness-game/`로 자동 계산되므로 각 provider 콘솔에 이 주소를 등록합니다.
-- 빌드 환경변수는 저장소 **Settings › Secrets and variables › Actions › Variables**에 설정합니다.
-  (`VITE_API_BASE_URL`, `VITE_GOOGLE_CLIENT_ID`, `VITE_KAKAO_CLIENT_ID`, `VITE_NAVER_CLIENT_ID`)
-  모두 브라우저에 노출되는 공개 값이므로 Secrets가 아닌 Variables를 사용합니다.
-- 백엔드를 배포하기 전에는 API 주소가 없어 로그인 화면까지만 동작합니다. 백엔드 배포 후
-  `VITE_API_BASE_URL`과 백엔드 `CORS_ALLOWED_ORIGINS`(`https://seongkyu-lim.github.io`)를 설정하세요.
+- Vercel 프로젝트의 **Root Directory를 `web`** 으로 지정합니다. 빌드 설정은 `vercel.json`(설치 `npm ci`, 빌드 `npm run build`, 출력 `dist`)에 있습니다.
+- 환경변수(Production·Preview 모두): `VITE_API_BASE_URL`(Render 백엔드 주소, 필수), `VITE_PRIVACY_CONTACT_EMAIL`·`VITE_PRIVACY_EFFECTIVE_DATE`(필수, 아래), `VITE_GOOGLE_CLIENT_ID`, `VITE_KAKAO_CLIENT_ID`,
+  `VITE_NAVER_CLIENT_ID`. 모두 번들에 들어가는 공개 값입니다. Vercel 빌드(`VERCEL=1`)에서 `VITE_API_BASE_URL`이 비어 있으면
+  `csp.ts`가 빌드를 실패시킵니다(API 호출이 막힌 사이트가 배포되는 것 방지). 값을 바꾸면 다시 배포해야 반영됩니다.
+- SPA 라우팅: 앱 경로만 `index.html`로 응답합니다. `/`(소셜 로그인 콜백 `/?code=...` 포함)는 정적 `index.html`, `/privacy`·`/terms`는
+  리라이트로 새로고침해도 열리고, 그 밖의 없는 경로는 404입니다. 새 페이지를 추가하면 `vercel.json` 리라이트와 `src/legal/legal.ts`의
+  `APP_ROUTES`를 함께 고칩니다(`vercel.test.ts`가 일치를 검사). `public/robots.txt`는 전체 크롤링을 허용합니다.
+- 소셜 로그인 Redirect URI는 `https://<Vercel 도메인>/`입니다(base가 `/`). Preview 배포 주소는 매번 바뀌므로 provider 콘솔에는
+  운영 도메인만 등록하고, Preview에서는 로그인이 실패할 수 있습니다.
+- 응답 헤더(`vercel.json`): `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`(카메라·마이크·위치 등 미사용 기능 차단),
+  `/assets/*`는 해시 파일명이라 1년 `immutable` 캐시. HSTS는 Vercel이 기본으로 붙입니다.
+
+### 개인정보 처리방침·이용약관
+
+`/privacy`, `/terms`는 로그인 없이 볼 수 있는 페이지입니다(`src/components/LegalPage.tsx`, 문구는 `src/i18n/dictionaries.ts`의
+`legal.*`, 줄 앞 `- `는 목록, `|`는 표). 연락 이메일과 시행일은 빌드 환경변수로 주입합니다.
+
+| 환경변수 | 내용 | 미설정 시 |
+|---|---|---|
+| `VITE_PRIVACY_CONTACT_EMAIL` | 개인정보 문의·삭제 요청 이메일 | `privacy@example.com` |
+| `VITE_PRIVACY_EFFECTIVE_DATE` | 시행일(`YYYY-MM-DD`) | `YYYY-MM-DD` |
+
+로컬·테스트 빌드는 자리표시자를 그대로 쓰지만, **Vercel 빌드(`VERCEL=1`)는 자리표시자·`example.com` 계열 주소·잘못된 날짜가 남아 있으면 실패**합니다
+(`legalEnv.ts`). Vercel 프로젝트 환경변수(Production·Preview)에 실제 값을 넣으세요. 방침 내용을 바꾸면 시행일도 갱신합니다.
+앱 심사(App Store·Google Play)에는 `https://<운영 도메인>/privacy`를 개인정보 처리방침 URL로 제출합니다.

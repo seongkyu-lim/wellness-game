@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCsp, resolveApiOrigin } from './csp'
+import { buildCsp, isVercelBuild, resolveApiOrigin } from './csp'
 
 function directives(policy: string): Map<string, string[]> {
   return new Map(
@@ -46,5 +46,13 @@ describe('buildCsp', () => {
 
   it('meta로 지정할 수 없는 frame-ancestors는 넣지 않는다', () => {
     expect(buildCsp(null)).not.toContain('frame-ancestors')
+  })
+})
+
+describe('isVercelBuild', () => {
+  it('VERCEL=1일 때만 Vercel 빌드로 본다', () => {
+    expect(isVercelBuild({ VERCEL: '1' })).toBe(true)
+    expect(isVercelBuild({ VERCEL: '' })).toBe(false)
+    expect(isVercelBuild({})).toBe(false)
   })
 })

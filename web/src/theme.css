@@ -860,3 +860,62 @@ a.btn {
   padding-bottom: 8px;
 }
 
+
+/* ---------- 사이트 푸터·법적 고지 페이지 ---------- */
+
+.site-footer {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.site-footer a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+
+.brand-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.legal h1 {
+  font-size: 26px;
+  margin: 0 0 4px;
+}
+
+.legal h2 {
+  font-size: 18px;
+  margin: 22px 0 6px;
+}
+
+.legal p,
+.legal li {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.legal ul {
+  padding-left: 20px;
+  margin: 6px 0;
+}
+
+.legal-table {
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.legal table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.legal th,
+.legal td {
+  border: 1.5px solid var(--ink);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.45;
+}

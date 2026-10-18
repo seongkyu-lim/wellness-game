@@ -26,7 +26,10 @@ spring:
         format_sql: true
 
 server:
+  # Render 등 PaaS 는 PORT 환경변수로 포트를 준다. 로컬 기본은 8080.
   port: ${PORT:8080}
+  # 재배포 때 받는 SIGTERM 에서 처리 중인 요청을 마치고 종료한다(기본 대기 30초).
+  shutdown: graceful
 
 app:
   timezone: ${APP_TIMEZONE:Asia/Seoul}

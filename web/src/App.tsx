@@ -9,6 +9,7 @@ import { TodayActivities } from './components/TodayActivities'
 import { toMessage, type Message } from './i18n/core'
 import { useI18n } from './i18n/I18nProvider'
 import { LanguageToggle } from './components/LanguageToggle'
+import { SiteFooter } from './components/SiteFooter'
 import {
   clearSession,
   completeLoginFromRedirect,
@@ -157,6 +158,8 @@ export default function App() {
       ) : completingLogin ? null : (
         <Landing account={<AccountSection session={null} onLogout={signOut} />} />
       )}
+
+      <SiteFooter />
     </main>
   )
 }
