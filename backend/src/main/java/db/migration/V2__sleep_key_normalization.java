@@ -5,7 +5,6 @@ import org.flywaydb.core.api.migration.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.ByteBuffer;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -102,10 +101,16 @@ public class V2__sleep_key_normalization extends BaseJavaMigration {
             // 이 마이그레이션은 기동 시(Flyway) 앱이 요청을 받기 전에 돈다. 그래도 롤링 배포 중이면 아직 떠 있는 구버전
             // 인스턴스가 같은 날 새 키 수면 로그를 쓸 수 있어, 존재 확인과 키 변경 사이에 새 키가 생기는 경합이 남는다.
             // 그 경우에만 유일 제약에 걸리므로 그룹 단위 savepoint 로 이 그룹만 되돌리고 전부 legacy 로 내린다.
+            // PostgreSQL 은 문장 하나가 실패하면 트랜잭션 전체가 aborted 상태가 되어 savepoint 로 되돌리기 전에는
+            // 어떤 문장도 받지 않는다. 그래서 충돌 처리(전부 legacy 로 내리기)도 반드시 savepoint 복구 뒤에 한다.
             Savepoint savepoint = connection.getAutoCommit() ? null : connection.setSavepoint();
             boolean promotedOne;
             try {
                 promotedOne = migrateGroup(connection, group.getKey(), rows, false);
+                if (savepoint != null) {
+                    // 그룹마다 만든 savepoint(PostgreSQL 서브트랜잭션)가 쌓이지 않게 성공하면 바로 해제한다.
+                    connection.releaseSavepoint(savepoint);
+                }
             } catch (SQLException e) {
                 if (!isIntegrityViolation(e)) {
                     throw e;
@@ -163,7 +168,7 @@ public class V2__sleep_key_normalization extends BaseJavaMigration {
             for (int i = 0; i < rows.size(); i++) {
                 SleepRow row = rows.get(i);
                 update.setString(1, promote && i == 0 ? sleepKey : row.legacyKey());
-                update.setBytes(2, toBytes(row.id()));
+                update.setObject(2, row.id());
                 update.executeUpdate();
             }
         }
@@ -206,7 +211,7 @@ public class V2__sleep_key_normalization extends BaseJavaMigration {
                     continue;
                 }
                 for (SleepRow row : group.getValue()) {
-                    clearLegacy.setBytes(1, toBytes(row.id()));
+                    clearLegacy.setObject(1, row.id());
                     clearLegacy.executeUpdate();
                 }
                 moved += group.getValue().size();
@@ -222,7 +227,7 @@ public class V2__sleep_key_normalization extends BaseJavaMigration {
         try (PreparedStatement query = connection.prepareStatement(sql); ResultSet rs = query.executeQuery()) {
             while (rs.next()) {
                 rows.add(new SleepRow(
-                        fromBytes(rs.getBytes("id")),
+                        rs.getObject("id", UUID.class),
                         rs.getString("user_id"),
                         rs.getObject("activity_date", LocalDate.class),
                         rs.getString("external_key"),
@@ -234,18 +239,8 @@ public class V2__sleep_key_normalization extends BaseJavaMigration {
         return rows;
     }
 
-    /** MySQL 은 SQLState 23000, H2 는 23505 등 23 계열로 유일 제약 위반을 알린다. */
+    /** PostgreSQL·H2 모두 SQLState 23505 등 23 계열(무결성 제약 위반)로 유일 제약 위반을 알린다. */
     private static boolean isIntegrityViolation(SQLException e) {
         return e.getSQLState() != null && e.getSQLState().startsWith("23");
-    }
-
-    /** Hibernate 가 UUID 를 binary(16) 에 저장하는 순서(상위 64비트 → 하위 64비트, 빅 엔디언). */
-    static byte[] toBytes(UUID id) {
-        return ByteBuffer.allocate(16).putLong(id.getMostSignificantBits()).putLong(id.getLeastSignificantBits()).array();
-    }
-
-    static UUID fromBytes(byte[] bytes) {
-        ByteBuffer buffer = ByteBuffer.wrap(bytes);
-        return new UUID(buffer.getLong(), buffer.getLong());
     }
 }

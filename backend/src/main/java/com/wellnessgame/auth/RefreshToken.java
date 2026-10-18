@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
@@ -16,9 +17,13 @@ import java.util.UUID;
  * 회전은 행 잠금({@link RefreshTokenRepository#findForUpdateByTokenHash})을 잡은 채 {@link #markRotated} 로 한다.
  */
 @Entity
-@Table(name = "refresh_token", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_refresh_token_hash", columnNames = "token_hash")
-})
+@Table(name = "refresh_token",
+        uniqueConstraints = @UniqueConstraint(name = "uk_refresh_token_hash", columnNames = "token_hash"),
+        indexes = {
+                @Index(name = "idx_refresh_token_family", columnList = "family_id"),
+                @Index(name = "idx_refresh_token_user", columnList = "user_id"),
+                @Index(name = "idx_refresh_token_expires", columnList = "expires_at")
+        })
 public class RefreshToken {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
