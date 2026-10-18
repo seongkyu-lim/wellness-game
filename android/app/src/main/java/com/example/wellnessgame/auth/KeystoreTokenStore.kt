@@ -13,6 +13,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.wellnessgame.data.network.ApiJson
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import java.security.UnrecoverableKeyException
 import javax.crypto.AEADBadTagException
@@ -32,9 +34,10 @@ private val Context.sessionDataStore: DataStore<Preferences> by preferencesDataS
 class KeystoreTokenStore(context: Context) : TokenStore {
     private val dataStore = context.applicationContext.sessionDataStore
 
-    override suspend fun load(): StoredSession? {
-        val blob = dataStore.data.first()[KEY_BLOB] ?: return null
-        return try {
+    // Keystore 암호화·DataStore 입출력은 메인 스레드를 막지 않도록 IO 디스패처에서 한다.
+    override suspend fun load(): StoredSession? = withContext(Dispatchers.IO) {
+        val blob = dataStore.data.first()[KEY_BLOB] ?: return@withContext null
+        try {
             ApiJson.decodeFromString(StoredSession.serializer(), decrypt(blob))
         } catch (e: CancellationException) {
             throw e
@@ -51,13 +54,15 @@ class KeystoreTokenStore(context: Context) : TokenStore {
         }
     }
 
-    override suspend fun save(session: StoredSession) {
+    override suspend fun save(session: StoredSession) = withContext(Dispatchers.IO) {
         val blob = encrypt(ApiJson.encodeToString(StoredSession.serializer(), session))
         dataStore.edit { it[KEY_BLOB] = blob }
+        Unit
     }
 
-    override suspend fun clear() {
+    override suspend fun clear() = withContext(Dispatchers.IO) {
         dataStore.edit { it.remove(KEY_BLOB) }
+        Unit
     }
 
     private fun encrypt(plain: String): String {

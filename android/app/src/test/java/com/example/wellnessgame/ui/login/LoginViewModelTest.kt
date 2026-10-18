@@ -55,12 +55,13 @@ class LoginViewModelTest {
     private val authBody = AUTH_BODY
 
     private fun TestScope.fixture(region: String? = "US"): Pair<LoginViewModel, SessionManager> {
-        val session = SessionManager(FakeTokenStore(), backgroundScope)
+        val session = SessionManager(FakeTokenStore())
         val api = server.apiClient(session) { "en" }
         val auth = AuthRepository(
             api,
             session,
             mapOf(LoginProvider.GOOGLE to google, LoginProvider.KAKAO to kakao, LoginProvider.NAVER to naver),
+            backgroundScope,
         )
         return LoginViewModel(auth, region) to session
     }
