@@ -15,7 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class ApiDocsTest {
     @Nested
-    @SpringBootTest
+    @SpringBootTest(properties = {"springdoc.api-docs.enabled=true", "springdoc.swagger-ui.enabled=true"})
     @AutoConfigureMockMvc
     class Enabled {
         @Autowired
@@ -26,7 +26,10 @@ class ApiDocsTest {
             mockMvc.perform(get("/v3/api-docs"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
-                    .andExpect(content().string(containsString("/api/auth/login")));
+                    .andExpect(content().string(containsString("/api/auth/login")))
+                    .andExpect(jsonPath("$.servers[0].url").value("/"))
+                    .andExpect(jsonPath("$.paths['/api/auth/login'].post.security").doesNotExist())
+                    .andExpect(jsonPath("$.paths['/api/characters/me'].get.security[0].bearerAuth").exists());
         }
 
         @Test
@@ -37,14 +40,14 @@ class ApiDocsTest {
     }
 
     @Nested
-    @SpringBootTest(properties = {"springdoc.api-docs.enabled=false", "springdoc.swagger-ui.enabled=false"})
+    @SpringBootTest
     @AutoConfigureMockMvc
-    class Disabled {
+    class DisabledByDefault {
         @Autowired
         private MockMvc mockMvc;
 
         @Test
-        void hidesApiDocsWhenDisabled() throws Exception {
+        void hidesApiDocsUnlessExplicitlyEnabled() throws Exception {
             mockMvc.perform(get("/v3/api-docs"))
                     .andExpect(status().isNotFound());
         }

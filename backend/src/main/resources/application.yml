@@ -25,12 +25,12 @@ spring:
       hibernate:
         format_sql: true
 
-# API 문서(#93): /swagger-ui/index.html, /v3/api-docs. 출시 전까지 운영에서도 켜 두고, 출시 시 APP_API_DOCS_ENABLED=false.
+# API 문서(#93): /swagger-ui/index.html, /v3/api-docs. 기본은 꺼짐(fail-closed). 로컬은 application-local.yml, 운영은 APP_API_DOCS_ENABLED=true 로 켠다.
 springdoc:
   api-docs:
-    enabled: ${APP_API_DOCS_ENABLED:true}
+    enabled: ${APP_API_DOCS_ENABLED:false}
   swagger-ui:
-    enabled: ${APP_API_DOCS_ENABLED:true}
+    enabled: ${APP_API_DOCS_ENABLED:false}
     persist-authorization: true
 
 server:

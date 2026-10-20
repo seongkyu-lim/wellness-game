@@ -149,21 +149,20 @@ class PostgresIntegrationTest {
     }
 
     @Test
-    void everyTableHasRowLevelSecurityEnabledAndAppStillReadsAsOwner() throws SQLException {
+    void everyTableHasRowLevelSecurityEnabled() throws SQLException {
         // #94 Supabase 데이터 API(anon 키) 노출 차단. 새 테이블을 추가하는 마이그레이션도 RLS 를 켜야 이 테스트가 통과한다.
         List<String> withoutRls = new ArrayList<>();
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement();
              ResultSet rows = statement.executeQuery(
                      "select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace "
-                             + "where n.nspname = current_schema() and c.relkind = 'r' and not c.relrowsecurity")) {
+                             + "where n.nspname = current_schema() and c.relkind in ('r', 'p') and not c.relrowsecurity")) {
             while (rows.next()) {
                 withoutRls.add(rows.getString(1));
             }
         }
         assertThat(withoutRls).isEmpty();
-        // 소유자로 접속한 앱은 RLS 와 무관하게 읽고 쓸 수 있다.
-        assertThat(characterRepository.count()).isGreaterThanOrEqualTo(0);
+        // 소유자 접근 유지는 여기서 검증되지 않는다(테스트 사용자가 superuser 라 RLS 를 원래 우회). 운영은 FORCE 미사용으로 소유자가 우회한다.
     }
 
     @Test
