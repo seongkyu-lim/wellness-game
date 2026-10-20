@@ -8,6 +8,7 @@ const ko = {
 
   'error.sessionExpired': '로그인이 만료되었습니다. 다시 로그인해 주세요.',
   'error.loginFailed': '로그인에 실패했습니다.',
+  'error.loginStartFailed': '로그인을 시작할 수 없습니다. 보안 연결(HTTPS) 주소에서 다시 시도해 주세요.',
   'error.network': '서버에 연결할 수 없습니다. 백엔드가 실행 중인지 확인해 주세요.',
   'error.request': '요청에 실패했습니다. ({status})',
   'error.noToken': '서버가 인증 토큰을 반환하지 않았습니다.',
@@ -190,6 +191,7 @@ const en: Record<MessageKey, string> = {
 
   'error.sessionExpired': 'Your session has expired. Please sign in again.',
   'error.loginFailed': 'Sign-in failed.',
+  'error.loginStartFailed': "Couldn't start sign-in. Please try again from a secure (HTTPS) address.",
   'error.network': "Can't reach the server. Make sure the backend is running.",
   'error.request': 'Request failed ({status}).',
   'error.noToken': "The server didn't return an auth token.",

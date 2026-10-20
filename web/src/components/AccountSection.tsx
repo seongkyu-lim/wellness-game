@@ -1,4 +1,7 @@
+import { useState } from 'react'
+import { toMessage, type Message } from '../i18n/core'
 import { useI18n } from '../i18n/I18nProvider'
+import { ErrorBanner } from './ErrorBanner'
 import { getLoginProviderLayout } from '../lib/loginProviders'
 import { isConfigured, startLogin, type Provider, type Session } from '../lib/auth'
 
@@ -23,12 +26,24 @@ interface Props {
 export function AccountSection({ session, onLogout }: Props) {
   const { t, lang } = useI18n()
   const layout = getLoginProviderLayout(lang)
+  // 로그인 시작(PKCE 준비) 중에는 버튼을 막아 중복 시작을 피한다. 성공하면 페이지를 떠나므로 되돌리지 않는다.
+  const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState<Message | null>(null)
+  const handleLogin = (provider: Provider) => {
+    setStarting(true)
+    setStartError(null)
+    startLogin(provider).catch((e: unknown) => {
+      // 예: 보안 연결이 아니라 crypto.subtle을 쓸 수 없는 경우
+      setStartError(toMessage(e, 'error.loginStartFailed'))
+      setStarting(false)
+    })
+  }
   const renderButton = (provider: Provider) => (
     <button
       key={provider}
       className={PROVIDER_CLASSES[provider]}
-      onClick={() => startLogin(provider)}
-      disabled={!isConfigured(provider)}
+      onClick={() => handleLogin(provider)}
+      disabled={starting || !isConfigured(provider)}
     >
       {t('account.signInWith', { provider: PROVIDER_LABELS[provider] })}
     </button>
@@ -59,6 +74,7 @@ export function AccountSection({ session, onLogout }: Props) {
           <p className="hint">
             {t('account.signInHint')}
           </p>
+          <ErrorBanner message={startError} />
           <div className="social-btns">
             {layout.primary.map(renderButton)}
           </div>
