@@ -18,17 +18,18 @@ public interface HealthActivityRepository extends JpaRepository<HealthActivity, 
     List<HealthActivity> findByUserIdAndActivityDate(String userId, LocalDate activityDate);
 
     /**
-     * 같은 사용자·유형의 기존 로그 중 [startedAt, endedAt) 구간과 겹치는 것이 있는지 확인한다.
+     * 같은 사용자·유형의 기존 로그 중 [startedAt, endedAt) 구간과 겹치는 것들.
      * 경계가 맞닿는 경우(한쪽 종료 == 다른쪽 시작)는 겹침으로 보지 않는다.
+     * 어떤 겹침을 막을지(5분 미만 운동 제외, 수면은 다른 날짜 로그만 등)는 서비스가 고른다.
      */
     @Query("""
-            select count(a) > 0 from HealthActivity a
+            select a from HealthActivity a
             where a.userId = :userId
               and a.type = :type
               and a.startedAt < :endedAt
               and a.endedAt > :startedAt
             """)
-    boolean existsOverlapping(
+    List<HealthActivity> findOverlapping(
             @Param("userId") String userId,
             @Param("type") ActivityType type,
             @Param("startedAt") Instant startedAt,

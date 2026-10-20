@@ -20,7 +20,8 @@ import java.util.Optional;
  * <ul>
  *   <li>{@link #validate}: 구조 오류(필수 필드 누락, 종료 < 시작, 활동 개수 초과, 동기화 날짜가 오늘 ±1일 밖).
  *       BadRequestException 을 던지며 요청 전체가 400 으로 거부된다.</li>
- *   <li>{@link #rejection}: 값 범위 위반(상한 초과, 분 값이 구간보다 김, 미래 시각, 날짜 창 이탈 등).
+ *   <li>{@link #rejection}: 값 범위 위반(상한 초과, 분 값이 구간보다 김, 미래 시각, 날짜 창 이탈,
+ *       미래 날짜 걸음 수, 깬 날짜가 요청 date ±1일 밖인 수면 등).
  *       사유(메시지 키 + 인자)를 반환하며 서비스는 해당 항목만 건너뛴다.</li>
  * </ul>
  * 날짜 계산은 주입된 Clock 의 시간대(app.timezone)를 따른다. 문구는 messages*.properties 의 sync.* 키를 쓴다.
@@ -29,8 +30,8 @@ import java.util.Optional;
 public class HealthActivitySyncValidator {
     public static final int MAX_ACTIVITIES_PER_REQUEST = 50;
     public static final int SYNC_DATE_TOLERANCE_DAYS = 1;
+    public static final int SLEEP_WAKE_DATE_TOLERANCE_DAYS = 1;
     public static final Duration FUTURE_TOLERANCE = Duration.ofMinutes(5);
-    public static final int MINUTE_ROUNDING_TOLERANCE = 1;
 
     public static final int MAX_STEPS = 100_000;
     public static final int MAX_SLEEP_MINUTES = 16 * 60;
@@ -97,11 +98,9 @@ public class HealthActivitySyncValidator {
             return Optional.of(timeReason);
         }
         return Optional.ofNullable(switch (activity.type()) {
-            case STEPS -> withinRange(activity.steps(), 0, MAX_STEPS)
-                    ? null
-                    : new LocalizedMessage("sync.reason.steps-range", MAX_STEPS);
+            case STEPS -> stepsReason(date, activity);
             case WORKOUT -> workoutReason(activity);
-            case SLEEP -> sleepReason(activity);
+            case SLEEP -> sleepReason(date, activity);
         });
     }
 
@@ -123,15 +122,27 @@ public class HealthActivitySyncValidator {
         return null;
     }
 
+    /**
+     * 걸음 수 범위와 날짜: 서버 기준 오늘보다 뒤 날짜(내일)의 걸음 수는 받지 않는다.
+     */
+    private LocalizedMessage stepsReason(LocalDate date, ActivityPayload activity) {
+        if (date.isAfter(LocalDate.now(clock))) {
+            return new LocalizedMessage("sync.reason.steps-future-date");
+        }
+        return withinRange(activity.steps(), 0, MAX_STEPS)
+                ? null
+                : new LocalizedMessage("sync.reason.steps-range", MAX_STEPS);
+    }
+
     private LocalizedMessage workoutReason(ActivityPayload activity) {
         if (!activity.startedAt().isBefore(activity.endedAt())) {
             return new LocalizedMessage("sync.reason.workout-end-not-after-start");
         }
         Duration span = Duration.between(activity.startedAt(), activity.endedAt());
-        long spanMinutes = span.toMinutes();
-        if (spanMinutes > MAX_WORKOUT_MINUTES) {
+        if (span.toMinutes() > MAX_WORKOUT_MINUTES) {
             return new LocalizedMessage("sync.reason.workout-too-long", MAX_WORKOUT_MINUTES / 60);
         }
+        long spanMinutes = spanMinutes(activity.startedAt(), activity.endedAt());
         int durationMinutes = activity.durationMinutes() == null
                 ? (int) spanMinutes
                 : activity.durationMinutes();
@@ -152,8 +163,18 @@ public class HealthActivitySyncValidator {
         return null;
     }
 
-    private LocalizedMessage sleepReason(ActivityPayload activity) {
-        long spanMinutes = Duration.between(activity.startedAt(), activity.endedAt()).toMinutes();
+    /**
+     * 수면의 깬 시각(endedAt)은 서버 현지 날짜 기준 요청 date ±{@value #SLEEP_WAKE_DATE_TOLERANCE_DAYS}일 안이어야 한다.
+     * 요청 date 는 기기 현지 날짜라 서버 시간대(KST)와 하루 어긋날 수 있다(예: 미국 서부 08:00 기상 = KST 다음 날 00:00).
+     * 같은 수면을 날짜만 바꿔 다시 받는 것은 서비스가 다른 날짜 수면 로그와의 겹침으로 막는다.
+     */
+    private LocalizedMessage sleepReason(LocalDate date, ActivityPayload activity) {
+        LocalDate wakeDate = LocalDate.ofInstant(activity.endedAt(), clock.getZone());
+        if (wakeDate.isBefore(date.minusDays(SLEEP_WAKE_DATE_TOLERANCE_DAYS))
+                || wakeDate.isAfter(date.plusDays(SLEEP_WAKE_DATE_TOLERANCE_DAYS))) {
+            return new LocalizedMessage("sync.reason.sleep-date-mismatch", wakeDate.toString());
+        }
+        long spanMinutes = spanMinutes(activity.startedAt(), activity.endedAt());
         LocalizedMessage minutesReason = minutesReason(activity.sleepMinutes(), MAX_SLEEP_MINUTES, spanMinutes,
                 "sync.reason.sleep-minutes-range", "sync.reason.sleep-minutes-exceed-span");
         if (minutesReason != null) {
@@ -166,13 +187,23 @@ public class HealthActivitySyncValidator {
     }
 
     /**
-     * 분 값의 범위(0~max)와 구간 길이(반올림 오차 1분 허용) 검증.
+     * 시작~종료 구간 길이(분). 초 단위 구간을 분으로 반올림(30초 이상 올림)한다.
+     * 클라이언트(iOS·Android)도 활동 시간·수면 시간을 같은 방식(half-up)으로 반올림해 보내며, 활동 시간은 구간 이하이므로
+     * 반올림한 값도 이 값 이하다. 따라서 별도 허용 오차 없이 {@code 분 ≤ spanMinutes} 로 검증한다.
+     * (예: 1초 구간은 0분이라 1분을 주장할 수 없다.)
+     */
+    public static long spanMinutes(Instant startedAt, Instant endedAt) {
+        return (Duration.between(startedAt, endedAt).toSeconds() + 30) / 60;
+    }
+
+    /**
+     * 분 값의 범위(0~max)와 구간 길이(반올림한 분, 허용 오차 없음) 검증.
      */
     private LocalizedMessage minutesReason(int minutes, int max, long spanMinutes, String rangeKey, String spanKey) {
         if (!withinRange(minutes, 0, max)) {
             return new LocalizedMessage(rangeKey, max);
         }
-        if (minutes > spanMinutes + MINUTE_ROUNDING_TOLERANCE) {
+        if (minutes > spanMinutes) {
             return new LocalizedMessage(spanKey);
         }
         return null;

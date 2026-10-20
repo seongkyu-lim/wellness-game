@@ -169,6 +169,7 @@ class HealthActivityControllerTest {
      */
     @Test
     void acceptsRealisticIosPayload() throws Exception {
+        // 테스트 Clock 은 UTC. 수면은 깬 날짜(endedAt)가 요청 date 와 같아야 반영된다(#107).
         postSync(syncBody("2026-06-17",
                 """
                 {"type": "STEPS", "steps": 8732}
@@ -189,8 +190,8 @@ class HealthActivityControllerTest {
                   "type": "SLEEP",
                   "sleepMinutes": 431,
                   "sleepScore": 90,
-                  "startedAt": "2026-06-16T14:10:00Z",
-                  "endedAt": "2026-06-16T21:45:00Z"
+                  "startedAt": "2026-06-16T23:10:00Z",
+                  "endedAt": "2026-06-17T06:45:00Z"
                 }
                 """))
                 .andExpect(status().isOk())
