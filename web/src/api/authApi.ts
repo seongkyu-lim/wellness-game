@@ -25,12 +25,20 @@ async function readTokenResponse(res: Response): Promise<TokenResponse> {
   return body as TokenResponse
 }
 
-/** authorization code를 백엔드에서 교환하고 서버 발급 토큰을 받는다. */
-export async function postSocialLogin(provider: string, code: string, redirectUri: string): Promise<TokenResponse> {
+/**
+ * authorization code를 백엔드에서 교환하고 서버 발급 토큰을 받는다.
+ * codeVerifier는 PKCE를 쓴 provider(google·kakao)일 때만 보낸다(naver는 PKCE 미지원).
+ */
+export async function postSocialLogin(
+  provider: string,
+  code: string,
+  redirectUri: string,
+  codeVerifier?: string,
+): Promise<TokenResponse> {
   const res = await fetch(`${BASE_URL}/api/auth/${encodeURIComponent(provider)}`, {
     method: 'POST',
     headers: { ...languageHeaders(), ...JSON_HEADERS },
-    body: JSON.stringify({ code, redirectUri }),
+    body: JSON.stringify(codeVerifier ? { code, redirectUri, codeVerifier } : { code, redirectUri }),
   })
   return readTokenResponse(res)
 }

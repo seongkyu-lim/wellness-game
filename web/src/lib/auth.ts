@@ -1,10 +1,15 @@
 import { postSocialLogin } from '../api/authApi'
 import { LocalizedError } from '../i18n/core'
+import { codeChallengeS256, createCodeVerifier } from './pkce'
 import { isProvider, sessionManager, type Provider, type Session } from './session'
 
 export type { Provider, Session } from './session'
 
 const STATE_KEY = 'wellness.oauth-state'
+const VERIFIER_KEY = 'wellness.oauth-verifier'
+
+/** PKCE(S256)를 지원하는 provider. naver는 지원하지 않아 state만 쓴다. */
+const PKCE_PROVIDERS: ReadonlySet<Provider> = new Set(['google', 'kakao'])
 
 const CLIENT_IDS: Record<Provider, string | undefined> = {
   google: import.meta.env.VITE_GOOGLE_CLIENT_ID,
@@ -38,10 +43,26 @@ export function logout(): Promise<void> {
 export const onRemoteSignOut = sessionManager.onRemoteSignOut.bind(sessionManager)
 
 /** provider 인증 페이지로 이동한다. 완료되면 같은 주소로 code와 함께 돌아온다. */
-export function startLogin(provider: Provider): void {
+export async function startLogin(provider: Provider): Promise<void> {
+  window.location.href = await buildLoginUrl(provider)
+}
+
+/**
+ * state(와 PKCE 지원 provider면 code_verifier)를 sessionStorage에 두고 인가 URL을 만든다.
+ * code_verifier는 브라우저에만 남기고 인가 요청에는 code_challenge(S256)만 보낸다.
+ */
+export async function buildLoginUrl(provider: Provider): Promise<string> {
   const state = `${provider}:${crypto.randomUUID()}`
+  let codeChallenge: string | undefined
+  if (PKCE_PROVIDERS.has(provider)) {
+    const verifier = createCodeVerifier()
+    sessionStorage.setItem(VERIFIER_KEY, verifier)
+    codeChallenge = await codeChallengeS256(verifier)
+  } else {
+    sessionStorage.removeItem(VERIFIER_KEY)
+  }
   sessionStorage.setItem(STATE_KEY, state)
-  window.location.href = authorizeUrl(provider, state)
+  return authorizeUrl(provider, state, codeChallenge)
 }
 
 /**
@@ -57,7 +78,10 @@ export async function completeLoginFromRedirect(): Promise<Session | null> {
   }
 
   const savedState = sessionStorage.getItem(STATE_KEY)
+  const codeVerifier = sessionStorage.getItem(VERIFIER_KEY) ?? undefined
+  // state·verifier는 한 번만 쓴다. 검증 실패해도 남기지 않는다.
   sessionStorage.removeItem(STATE_KEY)
+  sessionStorage.removeItem(VERIFIER_KEY)
   window.history.replaceState(null, '', window.location.pathname)
 
   if (state !== savedState) {
@@ -68,7 +92,8 @@ export async function completeLoginFromRedirect(): Promise<Session | null> {
   if (!isProvider(provider)) {
     throw new LocalizedError({ key: 'error.unsupportedProvider' })
   }
-  const result = await postSocialLogin(provider, code, redirectUri())
+  const verifier = PKCE_PROVIDERS.has(provider) ? codeVerifier : undefined
+  const result = await postSocialLogin(provider, code, redirectUri(), verifier)
   return sessionManager.start(provider, result)
 }
 
@@ -78,13 +103,18 @@ function redirectUri(): string {
   return `${window.location.origin}${import.meta.env.BASE_URL}`
 }
 
-function authorizeUrl(provider: Provider, state: string): string {
+/** codeChallenge가 있으면 PKCE(S256) 파라미터를 붙인다. */
+function authorizeUrl(provider: Provider, state: string, codeChallenge?: string): string {
   const params = new URLSearchParams({
     client_id: CLIENT_IDS[provider]!,
     redirect_uri: redirectUri(),
     response_type: 'code',
     state,
   })
+  if (codeChallenge) {
+    params.set('code_challenge', codeChallenge)
+    params.set('code_challenge_method', 'S256')
+  }
   switch (provider) {
     case 'kakao':
       return `https://kauth.kakao.com/oauth/authorize?${params}`

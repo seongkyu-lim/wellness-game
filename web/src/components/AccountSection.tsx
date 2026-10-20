@@ -27,7 +27,7 @@ export function AccountSection({ session, onLogout }: Props) {
     <button
       key={provider}
       className={PROVIDER_CLASSES[provider]}
-      onClick={() => startLogin(provider)}
+      onClick={() => void startLogin(provider)}
       disabled={!isConfigured(provider)}
     >
       {t('account.signInWith', { provider: PROVIDER_LABELS[provider] })}
