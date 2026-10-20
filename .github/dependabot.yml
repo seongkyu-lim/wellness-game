@@ -1,0 +1,29 @@
+# 의존성 업데이트 PR (#109). Actions는 커밋 SHA로 고정돼 있어 Dependabot이 SHA와 버전 주석을 함께 갱신한다.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: gradle
+    directory: /backend
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: gradle
+    directory: /android
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /web
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

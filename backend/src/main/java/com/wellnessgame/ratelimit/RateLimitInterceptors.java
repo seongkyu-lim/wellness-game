@@ -35,7 +35,7 @@ public class RateLimitInterceptors {
         this.limiter = new FixedWindowRateLimiter(clock, WINDOW, properties.maxKeys());
     }
 
-    /** {@code /api/auth/**} 전체: 클라이언트 IP 별. */
+    /** {@code /api/auth/**} 전체({@code /refresh} 제외): 클라이언트 IP 별. */
     public HandlerInterceptor auth() {
         return interceptor("auth", RateLimitProperties::authPerMinute, clientIpResolver::resolve);
     }
@@ -43,6 +43,11 @@ public class RateLimitInterceptors {
     /** 로그인·가입: 클라이언트 IP 별(더 엄격한 한도). */
     public HandlerInterceptor login() {
         return interceptor("login", RateLimitProperties::loginPerMinute, clientIpResolver::resolve);
+    }
+
+    /** 리프레시 토큰 회전: 클라이언트 IP 별. auth·login 한도와 따로 센다(#102). */
+    public HandlerInterceptor refresh() {
+        return interceptor("refresh", RateLimitProperties::refreshPerMinute, clientIpResolver::resolve);
     }
 
     /** 동기화: 인증 주체(userId)별. {@link AuthenticationInterceptor} 다음에 등록해야 한다. POST 만 센다. */

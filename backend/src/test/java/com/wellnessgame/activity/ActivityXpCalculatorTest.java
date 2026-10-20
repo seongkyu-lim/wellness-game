@@ -36,6 +36,17 @@ class ActivityXpCalculatorTest {
     }
 
     @Test
+    void workoutShorterThanMinimumEarnsNothingIncludingTypeBonus() {
+        ActivityPayload shortSwim = new ActivityPayload(ActivityType.WORKOUT, WorkoutType.SWIMMING, 4,
+                null, null, null, null, null, null, null);
+        ActivityPayload minimumSwim = new ActivityPayload(ActivityType.WORKOUT, WorkoutType.SWIMMING, 5,
+                null, null, null, null, null, null, null);
+
+        assertThat(calculator.workoutXp(shortSwim)).isZero();
+        assertThat(calculator.workoutXp(minimumSwim)).isEqualTo(35); // 5*3 + 20
+    }
+
+    @Test
     void calculatesSleepScoreFromDuration() {
         assertThat(calculator.sleepScore(450)).isEqualTo(90);
         assertThat(calculator.sleepScore(390)).isEqualTo(70);

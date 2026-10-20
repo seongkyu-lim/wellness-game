@@ -34,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.rate-limit.sync-per-minute=2",
         "app.rate-limit.auth-per-minute=4",
         "app.rate-limit.login-per-minute=2",
+        "app.rate-limit.refresh-per-minute=6",
         "app.rate-limit.trust-forwarded-header=false"
 })
 @AutoConfigureMockMvc
@@ -118,15 +119,30 @@ class RateLimitIntegrationTest {
         socialCodeExchange("198.51.100.31").andExpect(status().isServiceUnavailable());
     }
 
-    /** Auth v2: 공개 경로인 /api/auth/refresh 도 /api/auth/** IP 한도에 포함된다. */
+    /**
+     * #102 /api/auth/refresh 는 auth·login 한도를 쓰지 않고 별도의 IP 한도(여기서는 6)를 쓴다. 자동 갱신이 몰려도 같은 IP 의
+     * 로그인이 막히지 않고, 로그인 시도가 많아도 갱신이 막히지 않는다.
+     */
     @Test
-    void refreshCountsTowardWholeAuthLimitPerIp() throws Exception {
-        for (int i = 0; i < 4; i++) {
-            refresh("198.51.100.60").andExpect(status().isUnauthorized());
+    void refreshHasOwnBucketSeparateFromAuthAndLogin() throws Exception {
+        for (int i = 0; i < 6; i++) {
+            refresh("198.51.100.63").andExpect(status().isUnauthorized());
         }
+        refresh("198.51.100.63").andExpect(status().isTooManyRequests());
+        // 같은 IP 의 로그인은 auth(4)·login(2) 한도를 그대로 쓴다.
+        login("198.51.100.63").andExpect(status().isBadRequest());
+        login("198.51.100.63").andExpect(status().isBadRequest());
+        refresh("198.51.100.64").andExpect(status().isUnauthorized());
+    }
 
-        refresh("198.51.100.60").andExpect(status().isTooManyRequests());
-        refresh("198.51.100.61").andExpect(status().isUnauthorized());
+    @Test
+    void exhaustedAuthBucketDoesNotBlockRefresh() throws Exception {
+        for (int i = 0; i < 4; i++) {
+            socialCodeExchange("198.51.100.65").andExpect(status().is(not(429)));
+        }
+        socialCodeExchange("198.51.100.65").andExpect(status().isTooManyRequests());
+
+        refresh("198.51.100.65").andExpect(status().isUnauthorized());
     }
 
     /** 공개 경로인 /api/auth/logout 도 /api/auth/** IP 한도에 포함된다. */

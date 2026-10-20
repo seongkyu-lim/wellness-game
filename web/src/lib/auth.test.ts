@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocalizedError } from '../i18n/core'
-import { clearSession, completeLoginFromRedirect, loadSession, type Session } from './auth'
+import { buildLoginUrl, clearSession, completeLoginFromRedirect, loadSession, type Session } from './auth'
+import { codeChallengeS256 } from './pkce'
 
 const SESSION_KEY = 'wellness.session'
 const STATE_KEY = 'wellness.oauth-state'
+const VERIFIER_KEY = 'wellness.oauth-verifier'
+const RFC_VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'
 
 function validSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -146,5 +149,90 @@ describe('completeLoginFromRedirect', () => {
       accessToken: 'acc',
       expiresAt: 1_000_000 + 3_600_000,
     })
+  })
+})
+
+describe('PKCE', () => {
+  beforeEach(() => window.history.replaceState(null, '', '/'))
+
+  function tokenFetch() {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ userId: 'u', accessToken: 'a', tokenType: 'Bearer', expiresIn: 60 }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  it.each(['google', 'kakao'] as const)(
+    '%s는 code_verifier를 sessionStorage에 두고 그 S256 값을 code_challenge로 보낸다',
+    async (provider) => {
+      const url = new URL(await buildLoginUrl(provider))
+      const verifier = sessionStorage.getItem(VERIFIER_KEY)!
+      expect(verifier).toMatch(/^[A-Za-z0-9\-._~]{43,128}$/)
+      expect(url.searchParams.get('code_challenge')).toBe(await codeChallengeS256(verifier))
+      expect(url.searchParams.get('code_challenge_method')).toBe('S256')
+      expect(url.searchParams.get('state')).toBe(sessionStorage.getItem(STATE_KEY))
+      expect(url.searchParams.get('state')).toMatch(new RegExp(`^${provider}:`))
+      expect(url.searchParams.get('response_type')).toBe('code')
+      // verifier 자체는 인가 요청에 실리지 않는다.
+      expect(url.toString()).not.toContain(verifier)
+    },
+  )
+
+  it('로그인마다 다른 code_verifier를 만든다', async () => {
+    await buildLoginUrl('google')
+    const first = sessionStorage.getItem(VERIFIER_KEY)
+    await buildLoginUrl('google')
+    expect(sessionStorage.getItem(VERIFIER_KEY)).not.toBe(first)
+  })
+
+  it('naver는 PKCE 파라미터 없이 보내고 남아 있던 code_verifier도 지운다', async () => {
+    sessionStorage.setItem(VERIFIER_KEY, RFC_VERIFIER)
+    const url = new URL(await buildLoginUrl('naver'))
+    expect(url.searchParams.has('code_challenge')).toBe(false)
+    expect(url.searchParams.has('code_challenge_method')).toBe(false)
+    expect(url.searchParams.get('state')).toMatch(/^naver:/)
+    expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+  })
+
+  it('콜백에서 code·redirectUri와 함께 codeVerifier를 보내고 사용 후 지운다', async () => {
+    const fetchMock = tokenFetch()
+    sessionStorage.setItem(STATE_KEY, 'google:s')
+    sessionStorage.setItem(VERIFIER_KEY, RFC_VERIFIER)
+    window.history.replaceState(null, '', '/?code=the-code&state=google:s')
+
+    await completeLoginFromRedirect()
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    expect(JSON.parse(init.body as string)).toEqual({
+      code: 'the-code',
+      redirectUri: `${window.location.origin}/`,
+      codeVerifier: RFC_VERIFIER,
+    })
+    expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+  })
+
+  it('naver 콜백에는 codeVerifier를 보내지 않는다', async () => {
+    const fetchMock = tokenFetch()
+    sessionStorage.setItem(STATE_KEY, 'naver:s')
+    sessionStorage.setItem(VERIFIER_KEY, RFC_VERIFIER)
+    window.history.replaceState(null, '', '/?code=c&state=naver:s')
+
+    await completeLoginFromRedirect()
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    expect(JSON.parse(init.body as string)).not.toHaveProperty('codeVerifier')
+    expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
+  })
+
+  it('state가 다르면 교환하지 않고 code_verifier도 지운다', async () => {
+    const fetchMock = tokenFetch()
+    sessionStorage.setItem(STATE_KEY, 'kakao:expected')
+    sessionStorage.setItem(VERIFIER_KEY, RFC_VERIFIER)
+    window.history.replaceState(null, '', '/?code=c&state=kakao:forged')
+
+    await expect(completeLoginFromRedirect()).rejects.toBeInstanceOf(LocalizedError)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
   })
 })

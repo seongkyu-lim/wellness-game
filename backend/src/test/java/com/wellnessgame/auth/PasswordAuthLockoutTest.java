@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -23,15 +22,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * #55 로그인 브루트포스·계정 열거 방어: 더미 해시 비교, (아이디, IP) 잠금과 아이디 전체 한도, 잠금 해제,
@@ -51,15 +48,7 @@ class PasswordAuthLockoutTest {
     @BeforeEach
     void setUp() {
         store = new HashMap<>();
-        repository = mock(UserCredentialRepository.class);
-        when(repository.existsByUsername(anyString())).thenAnswer(inv -> store.containsKey(inv.getArgument(0)));
-        when(repository.findByUsername(anyString()))
-                .thenAnswer(inv -> Optional.ofNullable(store.get(inv.getArgument(0))));
-        when(repository.save(any(UserCredential.class))).thenAnswer(inv -> {
-            UserCredential credential = inv.getArgument(0);
-            store.put(credential.getUsername(), credential);
-            return credential;
-        });
+        repository = InMemoryCredentialRepository.create(store);
         // cost 4: 테스트 속도용. 동작은 기본 cost 와 같다.
         passwordEncoder = spy(new BCryptPasswordEncoder(4));
         service = newService(new LoginLockoutProperties(5, 50, 15), passwordEncoder);
@@ -76,6 +65,31 @@ class PasswordAuthLockoutTest {
 
         assertThat(unknown).isExactlyInstanceOf(BadRequestException.class).hasMessage(INVALID);
         assertThat(wrongPassword).isExactlyInstanceOf(BadRequestException.class).hasMessage(INVALID);
+    }
+
+    /** #106 형식이 아닌 아이디(ſ·ı 등 SQL upper() 만 접는 문자)는 조회 없이 거부하되 bcrypt 비교는 한 번 한다. */
+    @Test
+    void usernameOutsideSignupFormatIsRejectedWithoutLookupButSameTiming() {
+        for (String odd : new String[]{"real_uſer", "real_user\u0131", "re", "real-user", "x".repeat(33)}) {
+            clearInvocations(passwordEncoder, repository);
+            assertThat(catchFailure(odd, "password123", IP)).as(odd).hasMessage(INVALID);
+            verify(passwordEncoder, times(1)).matches(eq("password123"), anyString());
+            verify(repository, never()).findByUsername(anyString());
+            verify(repository, never()).findByUsernameIgnoreCase(anyString());
+        }
+    }
+
+    /** #106 잠금 키는 찾은 계정의 저장된 아이디다. 대소문자 철자를 바꿔도 같은 카운터를 쓴다. */
+    @Test
+    void lockoutIsKeyedOnCanonicalUsernameAcrossCaseVariants() {
+        store.put("Legacy_Case", new UserCredential("Legacy_Case", passwordEncoder.encode("password123"), "legacy-id", "L"));
+        String[] spellings = {"Legacy_Case", "legacy_case", "LEGACY_CASE", "lEGACY_cASE", "Legacy_CASE"};
+        for (String spelling : spellings) {
+            assertThat(catchFailure(spelling, "wrong-password", IP)).hasMessage(INVALID);
+        }
+
+        assertThat(catchFailure("legacy_case", "password123", IP)).hasMessage(INVALID);
+        assertThat(catchFailure("Legacy_Case", "password123", IP)).hasMessage(INVALID);
     }
 
     @Test

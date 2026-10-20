@@ -57,6 +57,18 @@ describe('요청 헤더', () => {
     expect(lastHeaders()).toEqual({ 'Accept-Language': 'en', 'Content-Type': 'application/json' })
     expect(JSON.parse(init.body as string)).toEqual({ code: 'code-1', redirectUri: 'http://localhost:5173/' })
   })
+  it('PKCE codeVerifier가 있으면 교환 본문에 함께 보낸다', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, { userId: 'google:1', displayName: null, accessToken: 'a', tokenType: 'Bearer', expiresIn: 60 }),
+    )
+    await postSocialLogin('google', 'code-1', 'http://localhost:5173/', 'v'.repeat(43))
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    expect(JSON.parse(init.body as string)).toEqual({
+      code: 'code-1',
+      redirectUri: 'http://localhost:5173/',
+      codeVerifier: 'v'.repeat(43),
+    })
+  })
 })
 
 describe('오류 처리', () => {

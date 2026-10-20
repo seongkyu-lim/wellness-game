@@ -29,8 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '21'
@@ -38,7 +38,7 @@ jobs:
       # setup-android 는 sdkmanager 프리뷰 약관 단계에서 실패해 사용하지 않는다.
       - name: Android SDK
         run: echo "ANDROID_HOME=$ANDROID_HOME" && test -d "$ANDROID_HOME"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
         with:
           cache-read-only: ${{ !contains(fromJSON('["refs/heads/dev","refs/heads/main"]'), github.ref) }}
       - name: Unit tests, debug·release build, lint
@@ -46,7 +46,7 @@ jobs:
         run: ./gradlew -PAPI_BASE_URL=https://api.wellnessgame.example testDebugUnitTest assembleDebug lint assembleRelease
       - name: Upload lint and test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: android-reports
           path: |

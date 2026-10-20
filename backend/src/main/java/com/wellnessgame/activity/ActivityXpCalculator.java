@@ -29,6 +29,12 @@ public class ActivityXpCalculator {
      */
     public static final int DAILY_WORKOUT_XP_CAP = 400;
 
+    /**
+     * XP·스탯을 주는 최소 운동 시간(분). 시작~종료 구간이나 활동 시간(durationMinutes)이 이보다 짧으면 0 XP 다.
+     * 종목 보너스가 시간과 무관한 고정값이라 짧은 운동을 여러 번 보내 보너스만 챙기는 것을 막는다.
+     */
+    public static final int MIN_WORKOUT_MINUTES = 5;
+
     private static final int STEPS_XP_CAP = 100;
     private static final int WORKOUT_XP_CAP = 200;
     public static final int SLEEP_QUALITY_BONUS_SCORE = 80;
@@ -43,6 +49,9 @@ public class ActivityXpCalculator {
     }
 
     public int workoutXp(ActivityPayload activity) {
+        if (value(activity.durationMinutes()) < MIN_WORKOUT_MINUTES) {
+            return 0; // 최소 운동 시간 미만은 종목 보너스도 주지 않는다.
+        }
         double xp = value(activity.durationMinutes()) * 3.0
                 + Math.floor(decimal(activity.calories()) / 10.0)
                 + workoutTypeBonus(activity.workoutType());
