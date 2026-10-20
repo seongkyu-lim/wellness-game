@@ -272,6 +272,8 @@ struct ContentView: View {
             Text(viewModel.statusMessage)
                 .font(.rounded(.caption, weight: .medium))
                 .foregroundStyle(Theme.textSecondary)
+            #if DEBUG
+            // 개발자 옵션: 출시 빌드에는 노출하지 않는다(가짜 데이터로 경험치를 받는 것을 막음, #108).
             Toggle(isOn: $viewModel.useMockData) {
                 Label("Mock 데이터 사용", systemImage: "wrench.and.screwdriver")
                     .font(.rounded(.footnote, weight: .medium))
@@ -279,6 +281,7 @@ struct ContentView: View {
             }
             .tint(Theme.primary)
             .disabled(!userSession.isSignedIn)
+            #endif
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 4)

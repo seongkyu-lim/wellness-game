@@ -27,8 +27,13 @@ final class DashboardViewModel: ObservableObject {
         self.userSession = userSession
     }
 
+    /// Mock 데이터는 개발 빌드에서만 쓴다. 출시 빌드는 토글 값과 무관하게 항상 실제 HealthKit 데이터를 보낸다(#108).
     var activeProvider: HealthDataProvider {
+        #if DEBUG
         useMockData ? mockProvider : appleProvider
+        #else
+        appleProvider
+        #endif
     }
 
     /// 권한 확인 → 오늘 데이터 로드 → 서버 동기화를 한 번에 수행한다.
