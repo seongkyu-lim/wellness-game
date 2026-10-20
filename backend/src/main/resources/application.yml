@@ -25,6 +25,14 @@ spring:
       hibernate:
         format_sql: true
 
+# API 문서(#93): /swagger-ui/index.html, /v3/api-docs. 기본은 꺼짐(fail-closed). 로컬은 application-local.yml, 운영은 APP_API_DOCS_ENABLED=true 로 켠다.
+springdoc:
+  api-docs:
+    enabled: ${APP_API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${APP_API_DOCS_ENABLED:false}
+    persist-authorization: true
+
 server:
   # Render 등 PaaS 는 PORT 환경변수로 포트를 준다. 로컬 기본은 8080.
   port: ${PORT:8080}

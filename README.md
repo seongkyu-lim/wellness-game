@@ -135,11 +135,23 @@ cd backend
 | `V1__baseline.sql` | 기준 스키마(`user_character`, `health_activity_log`, `user_credential`와 유일 제약·인덱스) |
 | `V2__sleep_key_normalization` (Java) | 구 형식 수면 로그 키 정리와 legacy 수면 XP 합치기(멱등, 행 삭제 없음) |
 | `V3__refresh_tokens.sql` | 회전 리프레시 토큰(`refresh_token`)과 사용자별 액세스 토큰 무효화 기준(`user_auth_state`) |
+| `V4__enable_row_level_security` (Java) | 모든 테이블 RLS 활성화(허용 정책 없음, Supabase 데이터 API 차단, PostgreSQL 전용) |
 
 - 빈 DB에 V1부터 순서대로 실행합니다. #87에서 운영 적용 전에 V1~V3를 PostgreSQL 문법으로 다시 썼습니다(MySQL 데이터 이전·baseline 없음).
 - 컬럼 타입은 Hibernate의 PostgreSQL 기본 매핑과 같습니다: UUID → `uuid`, Instant → `timestamp(6) with time zone`,
   BigDecimal → `numeric(38,2)`, 문자열 enum → `varchar(255)` + check 제약. H2 PostgreSQL 모드에서도 실행되도록 공통 문법만 씁니다.
-- 스키마를 바꿀 때는 기존 파일을 고치지 말고 `V4__설명.sql`처럼 새 버전을 추가하세요. 적용된 마이그레이션을 고치면 체크섬 검증에 실패합니다.
+- 스키마를 바꿀 때는 기존 파일을 고치지 말고 `V5__설명.sql`처럼 새 버전을 추가하세요. 적용된 마이그레이션을 고치면 체크섬 검증에 실패합니다.
+
+#### 최신 전체 스키마 (`backend/db/schema.sql`)
+
+마이그레이션을 모두 적용한 최종 스키마(테이블·컬럼·제약·인덱스·RLS)를 한 파일로 모은 참고·수동 세팅용 SQL입니다.
+리소스 경로 밖이라 **자동 실행되지 않으며**, `flyway_schema_history`는 없습니다. 이 파일로 만든 DB에 서버를 붙이려면
+먼저 Flyway baseline을 최신 버전으로 잡아야 합니다(없으면 "non-empty schema"로 기동 실패).
+
+- 갱신: 마이그레이션 추가 → `schema.sql` 수동 갱신 → `./gradlew postgresTest`로 확인. `SchemaSqlMatchesMigrationsPostgresTest`가
+  빈 DB 두 개(Flyway migrate / `schema.sql` 실행)의 컬럼·제약·인덱스·RLS를 비교해 다르면 어떤 항목이 다른지 보여 주며 실패합니다(CI에서도 실행).
+- 생성: 로컬 PostgreSQL의 빈 DB에 서버를 한 번 띄워(또는 Flyway migrate) 마이그레이션을 적용한 뒤
+  `pg_dump --schema-only --no-owner --no-privileges --exclude-table=flyway_schema_history <db>`로 뽑아 정리해도 됩니다.
 
 ### 소셜 로그인 서버 환경변수
 
