@@ -149,6 +149,24 @@ class PostgresIntegrationTest {
     }
 
     @Test
+    void everyTableHasRowLevelSecurityEnabledAndAppStillReadsAsOwner() throws SQLException {
+        // #94 Supabase 데이터 API(anon 키) 노출 차단. 새 테이블을 추가하는 마이그레이션도 RLS 를 켜야 이 테스트가 통과한다.
+        List<String> withoutRls = new ArrayList<>();
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery(
+                     "select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace "
+                             + "where n.nspname = current_schema() and c.relkind = 'r' and not c.relrowsecurity")) {
+            while (rows.next()) {
+                withoutRls.add(rows.getString(1));
+            }
+        }
+        assertThat(withoutRls).isEmpty();
+        // 소유자로 접속한 앱은 RLS 와 무관하게 읽고 쓸 수 있다.
+        assertThat(characterRepository.count()).isGreaterThanOrEqualTo(0);
+    }
+
+    @Test
     void migrationsMatchHibernatePostgresMappingAndExistingTablesWithoutHistoryFailFast() throws Exception {
         // 마이그레이션을 쓰지 않고 Hibernate 가 지금 엔티티로 만든 PostgreSQL 스키마(기본 타입 매핑)와 비교한다.
         String hibernateDb = newDatabase();
