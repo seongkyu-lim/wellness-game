@@ -14,6 +14,9 @@ export const MAX_NONCE_LENGTH = 256;
 /** RFC 7636 code_verifier: 43~128자, [A-Z a-z 0-9 - . _ ~] (#105) */
 export const CODE_VERIFIER_PATTERN = /^[A-Za-z0-9\-._~]{43,128}$/;
 export const MAX_DISPLAY_NAME_LENGTH = 64;
+/** 비밀번호 글자 수(UTF-16 코드 단위, @Size) 범위와 UTF-8 바이트 상한(BCrypt 한계) */
+export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PASSWORD_LENGTH = 72;
 export const MAX_PASSWORD_BYTES = 72;
 
 /**
@@ -26,21 +29,23 @@ export function registerAuthRoutes(app: Hono<AppEnv>, platform: Platform) {
   /** 로그인 한 번에 발급하는 액세스·리프레시 토큰 쌍. scope=read 는 웹 코드 교환 로그인(#105) */
   async function newSession(c: AppContext, db: Db, userId: string, scope: TokenScope) {
     const { jwt, refresh } = c.get('services');
-    const access = scope === 'read' ? await jwt.issueForScope(userId, 'read') : await jwt.issue(userId);
-    return { access, refresh: await refresh.issue(db, userId, scope) };
+    return { access: await jwt.issueForScope(userId, scope), refresh: await refresh.issue(db, userId, scope) };
   }
 
-  async function socialLoginResponse(c: AppContext, result: SocialLoginResult, scope: TokenScope = 'full') {
-    const session = await newSession(c, platform.db(c), result.userId, scope);
-    return c.json({
-      userId: result.userId,
-      displayName: result.displayName,
+  /** 로그인 응답 공통 토큰 필드 */
+  function tokenFields(session: Awaited<ReturnType<typeof newSession>>) {
+    return {
       accessToken: session.access.accessToken,
       tokenType: session.access.tokenType,
       expiresIn: session.access.expiresIn,
       refreshToken: session.refresh.refreshToken,
       refreshExpiresIn: session.refresh.expiresIn,
-    });
+    };
+  }
+
+  async function socialLoginResponse(c: AppContext, result: SocialLoginResult, scope: TokenScope = 'full') {
+    const session = await newSession(c, platform.db(c), result.userId, scope);
+    return c.json({ userId: result.userId, displayName: result.displayName, ...tokenFields(session) });
   }
 
   async function passwordResponse(c: AppContext, result: { userIdentifier: string; userId: string; displayName: string | null }) {
@@ -49,11 +54,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>, platform: Platform) {
       userIdentifier: result.userIdentifier,
       userId: result.userId,
       displayName: result.displayName,
-      accessToken: session.access.accessToken,
-      tokenType: session.access.tokenType,
-      expiresIn: session.access.expiresIn,
-      refreshToken: session.refresh.refreshToken,
-      refreshExpiresIn: session.refresh.expiresIn,
+      ...tokenFields(session),
     });
   }
 
@@ -76,7 +77,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>, platform: Platform) {
       notBlank('username', username),
       pattern('username', username, USERNAME_PATTERN, 'validation.username.pattern'),
       notBlank('password', password),
-      size('password', password, 8, 72, 'validation.password.size'),
+      size('password', password, MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH, 'validation.password.size'),
       maxUtf8Bytes('password', password, MAX_PASSWORD_BYTES, 'validation.password.bytes'),
       size('displayName', displayName, 0, MAX_DISPLAY_NAME_LENGTH, 'validation.display-name.size'),
     );

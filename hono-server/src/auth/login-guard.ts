@@ -27,8 +27,10 @@ export class LoginAttemptGuard {
     maxKeys: number,
   ) {
     this.lockoutMs = config.lockoutMinutes * 60_000;
-    this.perClient = new BoundedExpiringStore(clock, 60_000, maxKeys, (a) => a.expiresAt);
-    this.perUsername = new BoundedExpiringStore(clock, 60_000, maxKeys, (a) => a.expiresAt);
+    // 잠금 중인 기록은 키가 가득 차도 내보내지 않는다(새 키를 대량으로 만들어 잠금을 풀지 못하게)
+    const locked = (max: number) => (a: Attempts) => max > 0 && a.failures >= max;
+    this.perClient = new BoundedExpiringStore(clock, 60_000, maxKeys, (a) => a.expiresAt, locked(config.maxFailedLogins));
+    this.perUsername = new BoundedExpiringStore(clock, 60_000, maxKeys, (a) => a.expiresAt, locked(config.maxFailedLoginsPerUsername));
   }
 
   /** 시도 한 건을 실패로 미리 센다. 이미 잠겨 있으면 세지 않고 false */

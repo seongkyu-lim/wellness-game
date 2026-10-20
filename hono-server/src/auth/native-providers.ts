@@ -4,6 +4,8 @@ import { logger } from '../lib/logger.js';
 import { asLong, asText, HttpClient, HttpStatusError, path } from './http-client.js';
 import { toResult, type SocialAuthService, type SocialLoginResult } from './social.js';
 
+const isBlank = (value: string | null | undefined) => !value || !value.trim();
+
 /** 미설정(503). 설정 이름은 서버 로그에만 남긴다(Spring NativeAuthSupport) */
 export function unavailable(provider: string, settingHint: string, messageCode: string): ApiError {
   logger.error(`${provider} 네이티브 로그인 설정 없음: ${settingHint} 를 확인하세요.`);
@@ -12,10 +14,9 @@ export function unavailable(provider: string, settingHint: string, messageCode: 
 
 /** 빈 토큰(400) */
 export function requireToken(token: string | null | undefined, messageCode: string): asserts token is string {
-  if (!token || !token.trim()) throw badRequest(messageCode);
+  if (isBlank(token)) throw badRequest(messageCode);
 }
 
-const isBlank = (value: string | null | undefined) => !value || !value.trim();
 
 /**
  * iOS 카카오 SDK 액세스 토큰 검증(Spring KakaoNativeAuthService).

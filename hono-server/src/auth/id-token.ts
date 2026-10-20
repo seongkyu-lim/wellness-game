@@ -4,6 +4,7 @@ import { sha256Hex, timingSafeEqual } from '../lib/crypto.js';
 import { message } from '../lib/i18n.js';
 import type { Locale } from '../lib/i18n.js';
 import { serviceUnavailableCaused, unauthorized, unauthorizedCaused } from '../lib/errors.js';
+import { audienceOf } from './claims.js';
 import type { HttpClient } from './http-client.js';
 import { JwksKeyCache, JwksUnavailableError } from './jwks-cache.js';
 import { requireToken, unavailable } from './native-providers.js';
@@ -28,10 +29,6 @@ async function verifySignature(token: string, keys: JwksKeyCache, clock: () => n
   }
 }
 
-function audienceOf(payload: JWTPayload): string[] {
-  if (payload.aud === undefined || payload.aud === null) return [];
-  return Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-}
 
 /**
  * iOS Google Sign-In ID 토큰을 Google JWKS 로 직접 검증해 "google:{sub}" userId 를 만든다(Spring GoogleNativeAuthService).
@@ -104,7 +101,12 @@ export class AppleNativeAuthService {
       : null;
   }
 
-  async authenticate(identityToken: string, fullName: string | null | undefined, nonce: string | null | undefined, locale: Locale) {
+  async authenticate(
+    identityToken: string,
+    fullName: string | null | undefined,
+    nonce: string | null | undefined,
+    locale: Locale,
+  ): Promise<SocialLoginResult> {
     if (!this.keys) throw unavailable('애플', 'OAUTH_APPLE_BUNDLE_ID 환경변수', 'auth.apple.unavailable');
     requireToken(identityToken, 'auth.apple.identity-token-blank');
     const claims = await verifySignature(identityToken.trim(), this.keys, this.clock, {
@@ -119,8 +121,7 @@ export class AppleNativeAuthService {
       throw unauthorized('auth.apple.identity-token-invalid');
     }
     await this.verifyNonce(claims, nonce);
-    const result: SocialLoginResult = { userId: `apple:${claims.sub}`, displayName: displayName(fullName, locale) };
-    return result;
+    return { userId: `apple:${claims.sub}`, displayName: displayName(fullName, locale) };
   }
 
   private async verifyNonce(claims: JWTPayload, nonce: string | null | undefined) {

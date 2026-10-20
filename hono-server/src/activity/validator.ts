@@ -141,8 +141,9 @@ function workoutReason(activity: ActivityPayload): LocalizedMessage | null {
   );
   if (minutesReason) return minutesReason;
   if (!withinDecimal(activity.calories, MAX_CALORIES)) return { code: 'sync.reason.calories-range', args: [MAX_CALORIES] };
-  // calories > 분당 상한 × 구간(초 단위까지) ⇔ calories × 60 > 20 × seconds
-  if (activity.calories !== null && activity.calories * 60 > MAX_CALORIES_PER_MINUTE * spanSeconds) {
+  // calories > 분당 상한 × 구간(초 단위까지) ⇔ calories × 60 > 20 × seconds. 칼로리는 소수 둘째 자리까지라
+  // 1/100 kcal 정수로 바꿔 비교한다(부동소수 경계 오차 방지)
+  if (activity.calories !== null && Math.round(activity.calories * 100) * 60 > MAX_CALORIES_PER_MINUTE * 100 * spanSeconds) {
     return { code: 'sync.reason.calories-per-minute', args: [MAX_CALORIES_PER_MINUTE] };
   }
   if (!withinDecimal(activity.distanceMeters, MAX_DISTANCE_METERS)) {

@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import { parseLocalDate, type LocalDate } from '../lib/dates.js';
 import { ApiError, UnreadableBodyError } from '../lib/errors.js';
 import { Instant } from '../lib/instant.js';
+import { NUMERIC_STRING } from '../lib/patterns.js';
 
 /**
  * 요청 본문 처리. Spring 과 같은 두 단계로 나눈다.
@@ -62,7 +63,7 @@ export function int(obj: JsonObject, field: string): number | null {
   if (typeof value === 'number') n = value;
   else if (typeof value === 'string') {
     if (value.trim() === '') return null;
-    if (!/^\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\s*$/.test(value)) throw unreadable(field);
+    if (!NUMERIC_STRING.test(value)) throw unreadable(field);
     n = Number(value);
   } else throw unreadable(field);
   if (!Number.isFinite(n)) throw unreadable(field);
@@ -78,7 +79,7 @@ export function decimal(obj: JsonObject, field: string): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
     if (value.trim() === '') return null;
-    if (/^\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\s*$/.test(value)) return Number(value);
+    if (NUMERIC_STRING.test(value)) return Number(value);
   }
   throw unreadable(field);
 }
@@ -128,15 +129,18 @@ export function instant(obj: JsonObject, field: string): Instant | null {
   throw unreadable(field);
 }
 
-/** List<객체>: 배열이 아니면 오류. 원소가 객체가 아니면 오류 */
-export function objectList(obj: JsonObject, field: string): JsonObject[] | null {
+/** List: 배열이 아니면 오류. 원소는 아직 보지 않는다(개수 검증 뒤 listItem 으로 하나씩 읽는다) */
+export function list(obj: JsonObject, field: string): unknown[] | null {
   const value = obj[field];
   if (value === undefined || value === null) return null;
   if (!Array.isArray(value)) throw unreadable(field);
-  return value.map((item) => {
-    if (item === null || typeof item !== 'object' || Array.isArray(item)) throw unreadable(field);
-    return item as JsonObject;
-  });
+  return value;
+}
+
+/** List<객체> 의 원소: 객체가 아니면 오류 */
+export function listItem(item: unknown, field: string): JsonObject {
+  if (item === null || typeof item !== 'object' || Array.isArray(item)) throw unreadable(field);
+  return item as JsonObject;
 }
 
 // ---- Bean Validation ----

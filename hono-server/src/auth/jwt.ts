@@ -1,6 +1,7 @@
 import { SignJWT, errors as joseErrors, jwtVerify } from 'jose';
 import type { AppConfig } from '../config.js';
 import { unauthorized, unauthorizedCaused } from '../lib/errors.js';
+import { audienceOf } from './claims.js';
 
 /** 액세스 토큰 권한 범위. JWT 의 scope 클레임으로 싣고, 클레임이 없으면 full(Spring TokenScope) */
 export type TokenScope = 'full' | 'read';
@@ -92,15 +93,18 @@ export class JwtTokenService {
     if (typeof payload.exp !== 'number' || typeof sub !== 'string' || !sub.trim() || !this.hasExpectedIssuerAndAudience(payload)) {
       throw unauthorized('auth.token-invalid');
     }
+    // scope 클레임이 없으면 전체 권한, "read" 면 조회 전용, 그 밖의 값은 거부
     const scopeClaim = payload[SCOPE_CLAIM];
-    const scope: TokenScope | null = scopeClaim === undefined || scopeClaim === null ? 'full' : scopeClaim === 'read' ? 'read' : null;
-    if (scope === null) throw unauthorized('auth.token-invalid');
+    let scope: TokenScope;
+    if (scopeClaim === undefined || scopeClaim === null) scope = 'full';
+    else if (scopeClaim === 'read') scope = 'read';
+    else throw unauthorized('auth.token-invalid');
     return { userId: sub, scope, issuedAt: typeof payload.iat === 'number' ? payload.iat : null };
   }
 
   private hasExpectedIssuerAndAudience(payload: Record<string, unknown>): boolean {
     const issuer = payload.iss;
-    const audience = payload.aud === undefined || payload.aud === null ? [] : Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    const audience = audienceOf(payload);
     if ((issuer === undefined || issuer === null) && audience.length === 0) {
       const cutoff = this.config.legacyCutoffEpochSeconds;
       return cutoff !== null && typeof payload.iat === 'number' && payload.iat < cutoff;

@@ -41,11 +41,6 @@ export function message(locale: Locale, code: string, ...args: MessageArg[]): st
   return formatMessage(pattern, args, locale);
 }
 
-/** 해당 키 문구가 있는지(테스트용) */
-export function hasMessage(code: string): boolean {
-  return code in KO && code in EN;
-}
-
 export function formatMessage(pattern: string, args: MessageArg[], locale: Locale): string {
   let out = '';
   let i = 0;

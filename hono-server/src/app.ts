@@ -3,7 +3,7 @@ import type { MiddlewareHandler } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { UnsupportedMediaTypeError } from './http/body.js';
 import type { AppContext, AppEnv, Platform } from './http/env.js';
-import { apiCors, authenticate, rateLimit, requestContext, securityHeaders } from './http/middleware.js';
+import { apiCors, authenticate, maxBody, noStore, rateLimit, requestContext, securityHeaders } from './http/middleware.js';
 import { ApiError, defaultErrorBody, errorBody, InternalError, resolve, UnreadableBodyError } from './lib/errors.js';
 import { message } from './lib/i18n.js';
 import { logger } from './lib/logger.js';
@@ -11,6 +11,10 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerGameRoutes } from './routes/game.js';
 import { registerApiDocs } from './routes/openapi.js';
 import type { Services } from './services.js';
+
+export const MAX_BODY_BYTES = 512 * 1024;
+export const MAX_AUTH_BODY_BYTES = 16 * 1024;
+export const MAX_SYNC_BODY_BYTES = 256 * 1024;
 
 export interface CreateAppOptions {
   services: Services;
@@ -37,6 +41,12 @@ export function createApp({ services, platform, before = [] }: CreateAppOptions)
   app.use('*', securityHeaders(config.hstsHeader));
   app.use('*', requestContext(services, platform));
   app.use('/api/*', apiCors(config.corsAllowedOrigins));
+  app.use('/api/auth/*', noStore());
+
+  // 본문 크기 상한(인증 요청은 토큰 몇 개, 동기화는 활동 50개면 충분하다)
+  app.use('*', maxBody(MAX_BODY_BYTES));
+  app.use('/api/auth/*', maxBody(MAX_AUTH_BODY_BYTES));
+  app.use('/api/health-activities/sync', maxBody(MAX_SYNC_BODY_BYTES));
 
   // 레이트 리밋(#48·#102): IP 별은 인증 전에, 동기화는 userId 별로 인증 뒤에 센다(등록 순서 = 실행 순서)
   app.use('/api/*', rateLimit('general', (s) => s.config.rateLimit.generalPerMinute, ipKey));

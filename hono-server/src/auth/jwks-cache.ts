@@ -34,12 +34,14 @@ interface CachedKeys {
  * - cacheTtl 동안 캐시. 모르는 kid(키 교체)면 다시 받되 1분 안에서는 재조회하지 않는다(위조 kid 로 반복 호출 방지)
  * - 받기에 실패하면 30초 동안 재시도하지 않고 기존 키를 계속 쓴다. 마지막 조회가 staleMax 보다 오래됐거나
  *   키가 하나도 없으면 JwksUnavailableError(503)
- * - 재조회는 한 번만 진행한다. 기존 키가 있으면 다른 요청은 기다리지 않고 기존 키로 검증한다
+ * - 요청 사이에는 받은 키 맵만 공유한다(진행 중인 Promise 는 공유하지 않음: Workers 는 다른 요청의 I/O 를 기다릴 수 없다).
+ *   재조회 중이면 기존 키가 있는 요청은 기존 키로 검증하고, 키가 없는 요청은 각자 받는다
  */
 export class JwksKeyCache {
   private cached: CachedKeys | null = null;
   private retryNotBefore = 0;
-  private inflight: Promise<KeyMap> | null = null;
+  /** 다른 요청이 재조회 중인지(플래그만 둔다. Workers 는 요청 사이에 Promise 를 공유하면 안 된다) */
+  private refreshing = false;
 
   constructor(
     private readonly name: string,
@@ -69,28 +71,23 @@ export class JwksKeyCache {
 
   private async refresh(stale: CachedKeys | null): Promise<KeyMap> {
     if (this.clock() < this.retryNotBefore) return this.staleOrUnavailable(stale, null);
-    if (this.inflight) {
-      // 다른 요청이 받는 중: 기존 키가 있으면 기다리지 않는다(최초 조회 때만 대기)
-      return stale ? this.staleOrUnavailable(stale, null) : this.inflight;
+    if (this.refreshing && stale) return this.staleOrUnavailable(stale, null);
+    this.refreshing = true;
+    try {
+      const fetched = await this.fetchKeys();
+      this.cached = { keys: fetched, fetchedAt: this.clock() };
+      return fetched;
+    } catch (error) {
+      const failure =
+        error instanceof JwksUnavailableError ? error : new JwksUnavailableError(`${this.name} JWKS 조회 실패`, { cause: error });
+      this.retryNotBefore = this.clock() + FAILURE_BACKOFF_MS;
+      logger.warn(
+        `${this.name} JWKS 조회 실패. ${FAILURE_BACKOFF_MS / 1000}초 동안 재시도하지 않고 기존 키(${stale ? `${stale.keys.size}개` : '없음'})를 사용합니다.`,
+      );
+      return this.staleOrUnavailable(stale, failure);
+    } finally {
+      this.refreshing = false;
     }
-    this.inflight = (async () => {
-      try {
-        const fetched = await this.fetchKeys();
-        this.cached = { keys: fetched, fetchedAt: this.clock() };
-        return fetched;
-      } catch (error) {
-        const failure =
-          error instanceof JwksUnavailableError ? error : new JwksUnavailableError(`${this.name} JWKS 조회 실패`, { cause: error });
-        this.retryNotBefore = this.clock() + FAILURE_BACKOFF_MS;
-        logger.warn(
-          `${this.name} JWKS 조회 실패. ${FAILURE_BACKOFF_MS / 1000}초 동안 재시도하지 않고 기존 키(${stale ? `${stale.keys.size}개` : '없음'})를 사용합니다.`,
-        );
-        return this.staleOrUnavailable(stale, failure);
-      } finally {
-        this.inflight = null;
-      }
-    })();
-    return this.inflight;
   }
 
   private staleOrUnavailable(stale: CachedKeys | null, failure: JwksUnavailableError | null): KeyMap {

@@ -11,7 +11,8 @@ import {
   localDate,
   notEmpty,
   notNull,
-  objectList,
+  list,
+  listItem,
   positiveOrZero,
   readJsonObject,
   size,
@@ -53,14 +54,16 @@ export function registerGameRoutes(app: Hono<AppEnv>, platform: Platform) {
     const body = await readJsonObject(c);
     const requestedUserId = str(body, 'userId');
     const date = localDate(body, 'date');
-    const rawActivities = objectList(body, 'activities');
-    const activities = rawActivities?.map((item) => decodeActivity(item)) ?? null;
-    const checks: Check[] = [
+    const rawActivities = list(body, 'activities');
+    // 개수부터 본다: 상한을 넘는 배열의 항목은 역직렬화하지 않는다
+    validate(
       notNull('date', date),
-      notEmpty('activities', activities),
-      size('activities', activities, 0, MAX_ACTIVITIES_PER_REQUEST, 'validation.activities.size'),
-    ];
-    activities?.forEach((a, i) => {
+      notEmpty('activities', rawActivities),
+      size('activities', rawActivities, 0, MAX_ACTIVITIES_PER_REQUEST, 'validation.activities.size'),
+    );
+    const activities = rawActivities!.map((item) => decodeActivity(listItem(item, 'activities')));
+    const checks: Check[] = [];
+    activities.forEach((a, i) => {
       const field = (name: string) => `activities[${i}].${name}`;
       checks.push(
         notNull(field('type'), a.type),
@@ -87,7 +90,8 @@ export function registerGameRoutes(app: Hono<AppEnv>, platform: Platform) {
     const requestedUserId = c.req.query('userId');
     const rawDate = c.req.query('date');
     if (rawDate === undefined || rawDate.trim() === '') throw missingParameter();
-    const date = parseLocalDate(rawDate.trim());
+    // 공백만이면 누락, 앞뒤 공백이 있으면 Spring 처럼 형식 오류(trim 하지 않는다)
+    const date = parseLocalDate(rawDate);
     if (!date) throw invalidParameter();
     const resolvedUserId = resolveUserAccess(userId, requestedUserId);
     const rows = await healthActivities.findByUserIdAndDate(platform.db(c), resolvedUserId, date);

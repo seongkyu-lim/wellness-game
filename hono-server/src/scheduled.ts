@@ -18,11 +18,13 @@ export async function purgeRefreshTokens(services: Services, db: Db): Promise<nu
 export function scheduleDailyCleanup(services: Services, db: Db, hour = 4): { stop(): void } {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const zone = services.config.timezone;
+  /** date 의 hour 시(zone) epoch ms */
+  const at = (date: string) => startOfDay(date, zone).toEpochMilli() + hour * 3_600_000;
   const scheduleNext = () => {
     const now = services.clock();
     const today = localDateOf(Instant.ofEpochMilli(now), zone);
-    let next = startOfDay(today, zone).toEpochMilli() + hour * 3_600_000;
-    if (next <= now) next = startOfDay(addDays(today, 1), zone).toEpochMilli() + hour * 3_600_000;
+    let next = at(today);
+    if (next <= now) next = at(addDays(today, 1));
     timer = setTimeout(() => {
       purgeRefreshTokens(services, db)
         .catch((error: unknown) => logger.error('리프레시 토큰 정리 실패', error))

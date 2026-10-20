@@ -1,3 +1,5 @@
+import { IPV4 } from '../lib/patterns.js';
+
 export const MAX_ADDRESS_LENGTH = 64;
 
 /** X-Forwarded-For 가 여러 줄로 오면 어느 값도 믿지 않고 모두 이 키 하나로 센다(위조 줄을 섞어 키를 늘리지 못하게) */
@@ -49,7 +51,7 @@ export function normalizeIp(candidate: string | null | undefined): string | null
   let value = candidate.trim();
   if (value.startsWith('[') && value.endsWith(']')) value = value.slice(1, -1);
   if (!value || value.length > MAX_ADDRESS_LENGTH) return null;
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) {
+  if (IPV4.test(value)) {
     return value.split('.').every((octet) => Number(octet) <= 255) ? value : null;
   }
   if (!value.includes(':') || !/^[0-9A-Fa-f:.]+$/.test(value)) return null;
@@ -67,13 +69,12 @@ export function normalizeIp(candidate: string | null | undefined): string | null
 }
 
 /** IPv6 텍스트를 16비트 그룹 8개로. 틀리면 null */
-function parseIpv6(text: string): number[] | null {
-  const value = text;
+function parseIpv6(value: string): number[] | null {
   const lastColon = value.lastIndexOf(':');
   const last = value.slice(lastColon + 1);
   if (last.includes('.')) {
     // 끝의 IPv4 표기(예: ::ffff:1.2.3.4)는 두 그룹으로 바꿔 다시 해석한다
-    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(last)) return null;
+    if (!IPV4.test(last)) return null;
     const octets = last.split('.').map(Number) as [number, number, number, number];
     if (octets.some((o) => o > 255)) return null;
     const hex = (hi: number, lo: number) => ((hi << 8) | lo).toString(16);

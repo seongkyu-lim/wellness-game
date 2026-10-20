@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
-import { forbidden, tooManyRequests, unauthorized } from '../lib/errors.js';
+import { defaultErrorBody, forbidden, tooManyRequests, unauthorized } from '../lib/errors.js';
 import { resolveLocale } from '../lib/i18n.js';
 import type { Services } from '../services.js';
 import { resolveClientIp } from './client-ip.js';
@@ -53,16 +54,43 @@ export function securityHeaders(hsts: string): Middleware {
   };
 }
 
-/** Spring WebConfig#addCorsMappings("/api/**") 와 같은 허용 목록·메서드·헤더. 자격 증명(쿠키)은 허용하지 않는다 */
+/**
+ * Spring WebConfig#addCorsMappings("/api/**") 와 같은 허용 목록·메서드·헤더. 자격 증명(쿠키)은 허용하지 않는다.
+ * 다른 출처의 요청(Origin 이 있고 요청 주소의 출처와 다름)인데 허용 목록에 없으면 Spring DefaultCorsProcessor 처럼
+ * preflight·실제 요청 모두 403 "Invalid CORS request" 로 끝낸다.
+ */
 export function apiCors(allowedOrigins: string[]): Middleware {
   const any = allowedOrigins.includes('*');
-  return cors({
+  const handler = cors({
     origin: (origin) => (any ? '*' : allowedOrigins.includes(origin) ? origin : null),
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Authorization', 'Content-Type'],
     exposeHeaders: ['WWW-Authenticate', 'Retry-After'],
     maxAge: 1800,
   }) as Middleware;
+  return async (c, next) => {
+    const origin = c.req.header('origin');
+    if (origin !== undefined && !any && !allowedOrigins.includes(origin) && origin !== new URL(c.req.url).origin) {
+      return c.text('Invalid CORS request', 403);
+    }
+    return handler(c, next);
+  };
+}
+
+/** 본문 크기 상한. 넘으면 413(스프링 기본 오류 본문 형식). Content-Length 가 없어도 읽는 도중에 끊는다 */
+export function maxBody(maxSize: number): Middleware {
+  return bodyLimit({
+    maxSize,
+    onError: (c) => c.json(defaultErrorBody(413, c.req.path), 413),
+  }) as Middleware;
+}
+
+/** 인증 응답(토큰이 든 본문)은 어디에도 저장하지 않게 한다 */
+export function noStore(): Middleware {
+  return async (c, next) => {
+    await next();
+    c.res.headers.set('Cache-Control', 'no-store');
+  };
 }
 
 const isPreflight = (method: string, header: (name: string) => string | undefined) =>

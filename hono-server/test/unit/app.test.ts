@@ -38,6 +38,7 @@ describe('HTTP 계약(DB 없음)', () => {
     });
     expect(preflight.headers.get('access-control-allow-origin')).toBe('https://app.example.com');
     const denied = await call('GET', '/api/characters/me', { headers: { Origin: 'https://evil.example' } });
+    expect(denied.status).toBe(403);
     expect(denied.headers.get('access-control-allow-origin')).toBeNull();
     const unauthorized = await call('GET', '/api/characters/me', { headers: { Origin: 'http://localhost:5173' } });
     expect(unauthorized.status).toBe(401);

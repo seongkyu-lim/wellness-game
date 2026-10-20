@@ -12,6 +12,11 @@ export const BCRYPT_COST = 10;
 export const USER_ID_PREFIX = 'password:';
 /** 가입 아이디 규칙. 로그인 입력이 이 규칙에 맞지 않으면 DB 를 보지 않고 실패로 센다 */
 export const USERNAME_PATTERN = /^[A-Za-z0-9_]{4,32}$/;
+/**
+ * 없는 아이디·잠금·형식 오류에서도 bcrypt 비교를 한 번 하도록 쓰는 고정 해시(무작위 값의 cost 10 해시, 원문은 버렸다).
+ * 모듈 로드 때 정해진 상수라 Workers 요청 사이에 Promise 를 공유하지 않는다.
+ */
+export const DUMMY_PASSWORD_HASH = '$2a$10$O/5KGk7HKAX/jAfuPxlBLecRiE8pfpro8eqnosthY40aU0X0FOnUa';
 
 export interface PasswordAuthResult {
   userIdentifier: string;
@@ -27,7 +32,6 @@ export interface PasswordAuthResult {
  */
 export class PasswordAuthService {
   private readonly guard: LoginAttemptGuard;
-  private dummyHash: Promise<string> | null = null;
 
   constructor(
     lockout: AppConfig['lockout'],
@@ -35,12 +39,6 @@ export class PasswordAuthService {
     maxKeys: number,
   ) {
     this.guard = new LoginAttemptGuard(lockout, clock, maxKeys);
-  }
-
-  /** 없는 아이디도 해시 비교 한 번을 거치게 해 응답 시간으로 아이디 존재가 드러나지 않게 한다 */
-  private dummyPasswordHash(): Promise<string> {
-    this.dummyHash ??= bcrypt.hash(randomUuid(), BCRYPT_COST);
-    return this.dummyHash;
   }
 
   /** 아이디는 소문자로 정규화해 저장한다. 대소문자만 다른 아이디·동시 가입은 username-taken(400) */
@@ -78,14 +76,14 @@ export class PasswordAuthService {
     const found = await findForLogin(db, trimmed);
     const key = found?.username ?? trimmed.toLowerCase();
     if (!this.guard.tryReserve(key, clientIp)) return this.fail(rawPassword);
-    const matches = await bcrypt.compare(rawPassword, found?.password_hash ?? (await this.dummyPasswordHash()));
+    const matches = await bcrypt.compare(rawPassword, found?.password_hash ?? DUMMY_PASSWORD_HASH);
     if (!found || !matches) throw badRequest('auth.invalid-credentials');
     this.guard.recordSuccess(key, clientIp);
     return { userIdentifier: found.user_identifier, displayName: found.display_name, userId: USER_ID_PREFIX + found.user_identifier };
   }
 
   private async fail(rawPassword: string): Promise<never> {
-    await bcrypt.compare(rawPassword, await this.dummyPasswordHash());
+    await bcrypt.compare(rawPassword, DUMMY_PASSWORD_HASH);
     throw badRequest('auth.invalid-credentials');
   }
 }

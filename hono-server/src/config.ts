@@ -72,6 +72,8 @@ export type EnvSource = Record<string, unknown>;
 
 export const MIN_SECRET_BYTES = 32;
 export const MIN_DISTINCT_SECRET_CHARS = 8;
+/** 예시·개발용 시크릿에 들어 있는 문구. 이런 값으로는 기동하지 않는다(운영에 그대로 배포되는 사고 방지) */
+export const PLACEHOLDER_SECRET_MARKERS = ['change-me', 'local-dev-only'];
 
 export function loadConfig(env: EnvSource): AppConfig {
   const get = (key: string): string | undefined => {
@@ -117,6 +119,9 @@ export function loadConfig(env: EnvSource): AppConfig {
     throw new Error(
       `auth.jwt.secret(AUTH_JWT_SECRET)이 너무 단순합니다. 서로 다른 문자가 ${MIN_DISTINCT_SECRET_CHARS}종류 이상인 무작위 값을 쓰세요(예: openssl rand -base64 48).`,
     );
+  }
+  if (PLACEHOLDER_SECRET_MARKERS.some((marker) => secret.toLowerCase().includes(marker))) {
+    throw new Error('auth.jwt.secret(AUTH_JWT_SECRET)이 예시 값입니다. openssl rand -base64 48 로 만든 무작위 값을 쓰세요.');
   }
   const ttlSeconds = Math.trunc(duration('AUTH_JWT_TTL', '1h') / 1000);
   const watchTtlSeconds = Math.trunc(duration('AUTH_WATCH_TOKEN_TTL', '7d') / 1000);
@@ -181,6 +186,13 @@ export function loadConfig(env: EnvSource): AppConfig {
     return ms >= 0 ? ms : 86_400_000;
   };
 
+  // 네이티브 구글 로그인이 웹 로그인 클라이언트 ID 를 aud 로 받으면 웹(조회 전용)용 ID 토큰으로 전체 권한 세션을 얻을 수 있다
+  const googleWebClientId = str('OAUTH_GOOGLE_CLIENT_ID', '').trim();
+  const googleNativeClientIds = list('OAUTH_GOOGLE_NATIVE_CLIENT_IDS', get('OAUTH_GOOGLE_IOS_CLIENT_ID') ?? '');
+  if (googleWebClientId && googleNativeClientIds.includes(googleWebClientId)) {
+    throw new Error('OAUTH_GOOGLE_NATIVE_CLIENT_IDS 에 웹 로그인 클라이언트 ID(OAUTH_GOOGLE_CLIENT_ID)를 넣으면 안 됩니다.');
+  }
+
   return {
     timezone,
     databaseUrl: resolveDatabaseUrl(get('DATABASE_URL'), get('DATABASE_USERNAME'), get('DATABASE_PASSWORD')),
@@ -223,7 +235,7 @@ export function loadConfig(env: EnvSource): AppConfig {
       },
       googleNative: {
         // 허용 aud·azp 전체(iOS·Android·Android 전용 서버 클라이언트). 웹 로그인 클라이언트 ID 는 넣지 않는다
-        clientIds: list('OAUTH_GOOGLE_NATIVE_CLIENT_IDS', get('OAUTH_GOOGLE_IOS_CLIENT_ID') ?? ''),
+        clientIds: googleNativeClientIds,
         jwksUri: 'https://www.googleapis.com/oauth2/v3/certs',
         jwksCacheTtlMs: jwksCacheTtl('OAUTH_GOOGLE_JWKS_CACHE_TTL'),
         jwksStaleMaxMs: jwksStaleMax('OAUTH_GOOGLE_JWKS_STALE_MAX'),

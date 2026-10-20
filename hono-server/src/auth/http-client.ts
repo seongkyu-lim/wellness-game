@@ -91,10 +91,15 @@ export function asText(node: Json | undefined, fallback: string | null): string 
   return String(node);
 }
 
-/** JsonNode.asLong(): 숫자·숫자 문자열은 정수로, 그 밖은 0 */
+/**
+ * JsonNode.asLong(): 숫자·숫자 문자열은 정수로, 그 밖은 0.
+ * JS number 로 정확히 담을 수 없는 값(2^53 이상)은 0 으로 본다: 회원번호가 반올림돼 다른 사용자 ID 와 섞이지 않게
+ * 호출자가 0 을 무효로 거부한다.
+ */
 export function asLong(node: Json | undefined): number {
-  if (typeof node === 'number') return Math.trunc(node);
-  if (typeof node === 'string' && /^\s*[+-]?\d+\s*$/.test(node)) return Number(node.trim());
-  if (typeof node === 'boolean') return node ? 1 : 0;
-  return 0;
+  let value = 0;
+  if (typeof node === 'number') value = Math.trunc(node);
+  else if (typeof node === 'string' && /^\s*[+-]?\d+\s*$/.test(node)) value = Number(node.trim());
+  else if (typeof node === 'boolean') value = node ? 1 : 0;
+  return Number.isSafeInteger(value) ? value : 0;
 }

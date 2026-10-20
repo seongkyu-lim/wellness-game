@@ -23,6 +23,7 @@ export const REASON_PHRASES: Record<number, string> = {
   404: 'Not Found',
   405: 'Method Not Allowed',
   409: 'Conflict',
+  413: 'Content Too Large',
   415: 'Unsupported Media Type',
   429: 'Too Many Requests',
   500: 'Internal Server Error',

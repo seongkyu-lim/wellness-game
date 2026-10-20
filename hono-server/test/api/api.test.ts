@@ -122,6 +122,20 @@ describeDb('API(PostgreSQL)', () => {
     expect((await call('GET', '/api/characters/me', { token: again.json.accessToken })).status).toBe(401);
   });
 
+  it('같은 리프레시 토큰을 동시에 보내면 회전 1회 + 유예 재발급 정확히 1회, 나머지는 재사용 감지', async () => {
+    const { call } = build();
+    const session = await signUp(call);
+    clock.advance(1000);
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => call('POST', '/api/auth/refresh', { body: { refreshToken: session.refreshToken } })),
+    );
+    const statuses = results.map((r) => r.status).sort();
+    expect(statuses).toEqual([200, 200, 401, 401, 401]);
+    expect(results.filter((r) => r.status === 401).every((r) => r.json.message.includes('이미 사용된'))).toBe(true);
+    const [row] = await db<{ count: number }[]>`select count(*)::int as count from refresh_token where grace_reissued`;
+    expect(row!.count).toBe(1);
+  });
+
   it('이 기기 로그아웃(full family)은 Watch 토큰을 무효화하고, 웹(read family) 로그아웃은 하지 않는다', async () => {
     const { call } = build();
     const session = await signUp(call);

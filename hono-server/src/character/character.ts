@@ -1,7 +1,7 @@
 import type { Db } from '../db/client.js';
 import { pgErrorCode } from '../db/client.js';
 import { randomUuid } from '../lib/crypto.js';
-import { Instant } from '../lib/instant.js';
+import type { Instant } from '../lib/instant.js';
 
 const INT_MAX = 2_147_483_647;
 
@@ -135,4 +135,3 @@ export const characters = {
   },
 };
 
-export const nowInstant = (clock: () => number) => Instant.ofEpochMilli(clock());

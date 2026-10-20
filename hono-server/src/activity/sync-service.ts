@@ -302,22 +302,14 @@ export class HealthActivitySyncService {
     return activity.type === 'WORKOUT' ? localDateOf(activity.startedAt!, this.zone) : request.date;
   }
 
-  private async remainingDaily(tx: Db, state: SyncState, date: LocalDate): Promise<number> {
-    let value = state.remainingDailyXp.get(date);
-    if (value === undefined) {
-      value = Math.max(0, DAILY_XP_CAP - (await healthActivities.sumGainedXp(tx, state.request.userId, date)));
-      state.remainingDailyXp.set(date, value);
-    }
-    return value;
+  private remainingDaily(tx: Db, state: SyncState, date: LocalDate): Promise<number> {
+    return remaining(state.remainingDailyXp, date, DAILY_XP_CAP, () => healthActivities.sumGainedXp(tx, state.request.userId, date));
   }
 
-  private async remainingWorkout(tx: Db, state: SyncState, date: LocalDate): Promise<number> {
-    let value = state.remainingWorkoutXp.get(date);
-    if (value === undefined) {
-      value = Math.max(0, DAILY_WORKOUT_XP_CAP - (await healthActivities.sumGainedXp(tx, state.request.userId, date, 'WORKOUT')));
-      state.remainingWorkoutXp.set(date, value);
-    }
-    return value;
+  private remainingWorkout(tx: Db, state: SyncState, date: LocalDate): Promise<number> {
+    return remaining(state.remainingWorkoutXp, date, DAILY_WORKOUT_XP_CAP, () =>
+      healthActivities.sumGainedXp(tx, state.request.userId, date, 'WORKOUT'),
+    );
   }
 }
 
@@ -411,19 +403,25 @@ function meetsSleepQuality(score: number): boolean {
   return score >= SLEEP_QUALITY_BONUS_SCORE;
 }
 
+/** 날짜별 남은 상한. 처음 쓸 때 DB 합계로 채운다 */
+async function remaining(cache: Map<LocalDate, number>, date: LocalDate, cap: number, sumGained: () => Promise<number>) {
+  let value = cache.get(date);
+  if (value === undefined) {
+    value = Math.max(0, cap - (await sumGained()));
+    cache.set(date, value);
+  }
+  return value;
+}
+
 function capToDaily(earnedXp: number, remainingDailyXp: number): number {
   return Math.max(0, Math.min(earnedXp, remainingDailyXp));
 }
 
 export function externalKey(request: SyncRequest, activity: ActivityPayload): string {
-  switch (activity.type) {
-    case 'STEPS':
-      return [request.userId, request.date, 'STEPS'].join('|');
-    case 'WORKOUT':
-      return [request.userId, activity.startedAt!.toString(), activity.endedAt!.toString(), source(activity)].join('|');
-    case 'SLEEP':
-      return [request.userId, request.date, 'SLEEP'].join('|');
-  }
+  // STEPS·SLEEP 은 날짜별 1건("userId|date|TYPE"), WORKOUT 은 시작·종료·종류
+  return activity.type === 'WORKOUT'
+    ? [request.userId, activity.startedAt!.toString(), activity.endedAt!.toString(), source(activity)].join('|')
+    : [request.userId, request.date, activity.type].join('|');
 }
 
 export function source(activity: ActivityPayload): string {
@@ -451,12 +449,18 @@ function skipMessage(locale: Locale, activity: ActivityPayload, decision: Exclud
 }
 
 function rewardMessage(locale: Locale, activity: ActivityPayload, xp: number, capped: boolean): string {
-  const text =
-    activity.type === 'STEPS'
-      ? message(locale, 'activity.reward.steps', xp)
-      : activity.type === 'WORKOUT'
-        ? message(locale, 'activity.reward.workout', displayName(locale, activity), xp)
-        : message(locale, 'activity.reward.sleep', xp);
+  let text: string;
+  switch (activity.type) {
+    case 'STEPS':
+      text = message(locale, 'activity.reward.steps', xp);
+      break;
+    case 'WORKOUT':
+      text = message(locale, 'activity.reward.workout', displayName(locale, activity), xp);
+      break;
+    case 'SLEEP':
+      text = message(locale, 'activity.reward.sleep', xp);
+      break;
+  }
   return capped ? message(locale, 'activity.reward.capped', text) : text;
 }
 
