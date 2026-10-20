@@ -42,6 +42,28 @@ class TokenValidityUpsertTest {
         assertThat(tokenValidityService.isRevoked(user, Instant.parse("2026-06-17T10:59:59Z"))).isTrue();
     }
 
+    /** #103 조회 전용 기준: 행이 없으면 전체 기준 "없음"(NO_CUTOFF)으로 만들고, 앞으로만 옮기며, 전체 기준을 건드리지 않는다. */
+    @Test
+    void readCutoffCreatesRowWithoutFullCutoffAndOnlyMovesForward() {
+        String user = "upsert-read-user";
+        clock.setInstant(Instant.parse("2026-06-17T10:00:00.500Z"));
+        tokenValidityService.revokeReadTokens(user);
+        UserAuthState state = repository.findById(user).orElseThrow();
+        assertThat(state.getTokensValidAfter()).isEqualTo(TokenValidityService.NO_CUTOFF);
+        assertThat(state.getReadTokensValidAfter()).isEqualTo(Instant.parse("2026-06-17T10:00:00Z"));
+
+        clock.setInstant(Instant.parse("2026-06-17T09:00:00Z"));
+        tokenValidityService.revokeReadTokens(user);
+        assertThat(repository.findById(user).orElseThrow().getReadTokensValidAfter())
+                .isEqualTo(Instant.parse("2026-06-17T10:00:00Z"));
+
+        clock.setInstant(Instant.parse("2026-06-17T12:00:00Z"));
+        tokenValidityService.revokeIssuedTokens(user);
+        state = repository.findById(user).orElseThrow();
+        assertThat(state.getTokensValidAfter()).isEqualTo(Instant.parse("2026-06-17T12:00:00Z"));
+        assertThat(state.getReadTokensValidAfter()).isEqualTo(Instant.parse("2026-06-17T10:00:00Z"));
+    }
+
     private Instant validAfter(String user) {
         return repository.findById(user).orElseThrow().getTokensValidAfter();
     }

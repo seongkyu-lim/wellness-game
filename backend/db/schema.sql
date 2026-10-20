@@ -1,4 +1,4 @@
--- 최신 전체 DB 스키마(PostgreSQL, #98). Flyway 마이그레이션 V1~V4 를 모두 적용한 최종 상태를 한 파일로 모은 것이다.
+-- 최신 전체 DB 스키마(PostgreSQL, #98). Flyway 마이그레이션 V1~V6 을 모두 적용한 최종 상태를 한 파일로 모은 것이다.
 --
 -- - 자동 실행되지 않는다. 리소스 경로(src/main/resources) 밖에 두어 Flyway·애플리케이션이 읽지 않는다.
 --   실제 스키마는 언제나 src/main/resources/db/migration 의 마이그레이션이 만든다. 이 파일은 구조 참고·수동 세팅용이다.
@@ -6,7 +6,7 @@
 --   빈 DB 두 개(Flyway migrate / 이 파일 실행)의 테이블·컬럼·제약·인덱스·RLS 를 비교해 검사한다.
 -- - flyway_schema_history 는 넣지 않는다(Flyway 가 관리). 그래서 이 파일로 만든 DB 에 서버를 붙이면
 --   "non-empty schema" 로 기동에 실패한다. 붙이려면 먼저 Flyway baseline 을 현재 최신 버전으로 잡아야 한다
---   (예: flyway -baselineVersion=4 baseline, 마이그레이션 추가 뒤에는 그 버전).
+--   (예: flyway -baselineVersion=6 baseline, 마이그레이션 추가 뒤에는 그 버전).
 -- - 데이터 마이그레이션(V2 수면 키 정리)은 스키마를 바꾸지 않으므로 여기에 없다.
 -- - 타입 매핑은 V1 주석 참고: UUID → uuid, Instant → timestamp(6) with time zone, BigDecimal → numeric(38,2),
 --   @Enumerated(STRING) → varchar(255) + check 제약.
@@ -80,8 +80,12 @@ create table refresh_token (
     expires_at        timestamp(6) with time zone not null,
     revoked_at        timestamp(6) with time zone,
     replaced_by       uuid,
+    -- V5(#103·#105, Java 마이그레이션): family 권한 범위('full' 앱 / 'read' 웹), 유예 재발급 1회 제한
+    scope             varchar(16)                 default 'full' not null,
+    grace_reissued    boolean                     default false not null,
     constraint refresh_token_pkey primary key (id),
-    constraint uk_refresh_token_hash unique (token_hash)
+    constraint uk_refresh_token_hash unique (token_hash),
+    constraint ck_refresh_token_scope check (scope in ('full', 'read'))
 );
 
 create index idx_refresh_token_family on refresh_token (family_id);
@@ -89,8 +93,10 @@ create index idx_refresh_token_user on refresh_token (user_id);
 create index idx_refresh_token_expires on refresh_token (expires_at);
 
 create table user_auth_state (
-    user_id            varchar(255)                not null,
-    tokens_valid_after timestamp(6) with time zone not null,
+    user_id                 varchar(255)                not null,
+    tokens_valid_after      timestamp(6) with time zone not null,
+    -- V5(#103): 조회 전용(scope=read) 액세스 토큰만의 무효화 기준(이 기기 로그아웃). null 이면 없음.
+    read_tokens_valid_after timestamp(6) with time zone,
     constraint user_auth_state_pkey primary key (user_id)
 );
 
@@ -102,3 +108,37 @@ alter table refresh_token enable row level security;
 alter table user_auth_state enable row level security;
 alter table user_character enable row level security;
 alter table user_credential enable row level security;
+
+-- V6 (Supabase 데이터 API 역할 권한 회수, #104) ----------------------------------------------------------
+-- anon·authenticated 역할이 있을 때만(Supabase). flyway_schema_history 는 이 파일에 없으므로 대상이 아니다.
+-- 권한은 postgresTest 의 스키마 비교 대상이 아니다(V6 자체는 ApiRoleGrantsPostgresTest 가 검사).
+
+do $$
+declare
+    roles text;
+    obj   text;
+begin
+    select string_agg(quote_ident(rolname), ', ' order by rolname) into roles
+    from pg_roles where rolname in ('anon', 'authenticated');
+    if roles is null then
+        return;
+    end if;
+    -- V6 과 같게 이 역할이 소유한 객체만(flyway_schema_history 제외).
+    for obj in
+        select format('table %I', tablename) from pg_tables
+        where schemaname = current_schema() and tablename <> 'flyway_schema_history'
+          and pg_has_role(current_user, tableowner, 'USAGE')
+        union all
+        select format('sequence %I', c.relname) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = current_schema() and c.relkind = 'S' and pg_has_role(current_user, c.relowner, 'USAGE')
+        union all
+        select format('routine %s', p.oid::regprocedure) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = current_schema() and p.prokind in ('f', 'p') and pg_has_role(current_user, p.proowner, 'USAGE')
+    loop
+        execute format('revoke all on %s from %s', obj, roles);
+    end loop;
+    execute format('alter default privileges in schema %I revoke all on tables from %s', current_schema(), roles);
+    execute format('alter default privileges in schema %I revoke all on sequences from %s', current_schema(), roles);
+    execute format('alter default privileges in schema %I revoke all on functions from %s', current_schema(), roles);
+end
+$$;
