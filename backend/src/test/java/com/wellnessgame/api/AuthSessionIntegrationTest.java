@@ -49,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestClockConfig.class)
 class AuthSessionIntegrationTest {
     private static final long REFRESH_TTL_SECONDS = Duration.ofDays(30).toSeconds();
-    private static final Duration GRACE = Duration.ofSeconds(30);
+    private static final Duration GRACE = Duration.ofSeconds(10);
 
     @Autowired
     private MockMvc mockMvc;
@@ -166,6 +166,56 @@ class AuthSessionIntegrationTest {
         assertThat(row(first).getReplacedBy()).isEqualTo(row(lostSuccessor).getId());
         refreshOk(lostSuccessor);
         refreshOk(sibling);
+    }
+
+    /** #103 유예 재발급은 회전된 토큰 하나당 한 번만이다. 유예 구간 안이라도 두 번째 재사용은 재사용 공격으로 본다. */
+    @Test
+    void secondReuseWithinGraceRevokesFamily() throws Exception {
+        JsonNode session = signUp("rt_grace3");
+        String first = session.path("refreshToken").asText();
+        String successor = refreshOk(first).path("refreshToken").asText();
+
+        clock.setInstant(TestClockConfig.DEFAULT_NOW.plusSeconds(1));
+        String sibling = refreshOk(first).path("refreshToken").asText();
+        assertThat(row(first).isGraceReissued()).isTrue();
+
+        clock.setInstant(TestClockConfig.DEFAULT_NOW.plusSeconds(2));
+        refresh(first)
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message", is("이미 사용된 리프레시 토큰입니다. 보안을 위해 다시 로그인해 주세요.")));
+        refresh(successor).andExpect(status().isUnauthorized());
+        refresh(sibling).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/characters/me").with(bearerToken(session.path("accessToken").asText())))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * #103 이 기기 로그아웃은 그 사용자의 조회 전용(Watch) 액세스 토큰도 무효로 만든다. 전체 권한 액세스 토큰은 짧은 수명에 맡기고,
+     * 로그아웃 뒤 새로 발급한 조회 토큰은 쓸 수 있다.
+     */
+    @Test
+    void logoutInvalidatesReadScopeAccessTokensOnly() throws Exception {
+        JsonNode session = signUp("rt_logout_read");
+        String fullAccess = session.path("accessToken").asText();
+        String otherDevice = login("rt_logout_read").path("accessToken").asText();
+        String watchToken = watchToken(fullAccess);
+
+        clock.setInstant(TestClockConfig.DEFAULT_NOW.plusSeconds(1));
+        logout(session.path("refreshToken").asText()).andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/characters/me").with(bearerToken(watchToken)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message", is("로그인이 해제되었습니다. 다시 로그인해 주세요.")));
+        for (String stillValid : new String[]{fullAccess, otherDevice, watchToken(otherDevice)}) {
+            mockMvc.perform(get("/api/characters/me").with(bearerToken(stillValid)))
+                    .andExpect(status().isNotFound());
+        }
+        // 없는 토큰 로그아웃은 아무것도 무효로 만들지 않는다.
+        String laterWatch = watchToken(otherDevice);
+        clock.setInstant(TestClockConfig.DEFAULT_NOW.plusSeconds(2));
+        logout("does-not-exist").andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/characters/me").with(bearerToken(laterWatch)))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -335,6 +385,12 @@ class AuthSessionIntegrationTest {
         cleanupJob.purge();
         assertThat(refreshTokenRepository.findAll()).singleElement()
                 .satisfies(row -> assertThat(row.getTokenHash()).isEqualTo(sha256Hex(fresh)));
+    }
+
+    private String watchToken(String fullAccessToken) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(post("/api/auth/watch-token").with(bearerToken(fullAccessToken)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).path("accessToken").asText();
     }
 
     private JsonNode signUp(String username) throws Exception {

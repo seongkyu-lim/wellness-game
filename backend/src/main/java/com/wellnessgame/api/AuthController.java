@@ -13,7 +13,9 @@ import com.wellnessgame.auth.PasswordAuthService;
 import com.wellnessgame.auth.RefreshTokenService;
 import com.wellnessgame.auth.SocialAuthService;
 import com.wellnessgame.auth.SocialLoginResult;
+import com.wellnessgame.auth.TokenScope;
 import com.wellnessgame.ratelimit.ClientIpResolver;
+import com.wellnessgame.validation.MaxUtf8Bytes;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -36,6 +38,9 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>계정 정책: userId 는 "{provider}:{provider 식별자}" 라서 로그인 방식별로 별도 계정이다. 같은 사람이
  * 카카오·네이버·구글·애플·아이디 로그인으로 각각 가입해도 이메일 등으로 계정을 합치지 않는다.
  * iOS 네이티브 토큰 교환({@code /{provider}/native})은 웹 코드 교환과 같은 userId 규칙을 써서 같은 계정으로 이어진다.
+ *
+ * <p>웹 코드 교환({@code /{provider}}, #105)은 조회 전용(scope=read) 세션을 준다. 웹은 조회 대시보드라서 쓰기 API 가 필요 없고,
+ * 리프레시 토큰 family 에 범위를 저장해 회전해도 같은 범위로만 다시 발급한다.
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -45,6 +50,8 @@ public class AuthController {
     /** 서버 리프레시 토큰은 43자(base64url 32바이트)다. */
     static final int MAX_REFRESH_TOKEN_LENGTH = 256;
     static final int MAX_NONCE_LENGTH = 256;
+    /** RFC 7636 code_verifier: unreserved 문자 43~128자. */
+    static final String CODE_VERIFIER_PATTERN = "^[A-Za-z0-9\\-._~]{43,128}$";
 
     private final SocialAuthService authService;
     private final PasswordAuthService passwordAuthService;
@@ -119,15 +126,19 @@ public class AuthController {
                 appleNativeAuthService.authenticate(request.identityToken(), request.fullName(), request.nonce()));
     }
 
-    /** 리프레시 토큰 회전. 재사용(이미 회전된 토큰)이면 family 전체를 폐기하고 401. 공개 경로다. */
+    /**
+     * 리프레시 토큰 회전. 재사용(이미 회전된 토큰)이면 family 전체를 폐기하고 401. 공개 경로다.
+     * 액세스 토큰은 family 의 범위(앱 full, 웹 read)로 발급한다.
+     */
     @PostMapping("/refresh")
     public RefreshResponse refresh(@Valid @RequestBody RefreshRequest request) {
         RefreshTokenService.Rotation rotation = refreshTokenService.rotate(request.refreshToken());
-        return RefreshResponse.of(rotation.userId(), tokenService.issue(rotation.userId()), rotation.refreshToken());
+        return RefreshResponse.of(rotation.userId(), tokenService.issue(rotation.userId(), rotation.scope()),
+                rotation.refreshToken());
     }
 
     /**
-     * 이 기기 로그아웃: body 의 리프레시 토큰 family 를 폐기한다. 공개 경로다(토큰 소유가 곧 권한 증명이라 액세스 토큰이
+     * 이 기기 로그아웃: body 의 리프레시 토큰 family 를 폐기하고, 그 사용자의 조회 전용(Watch·웹) 액세스 토큰도 무효로 만든다(#103). 공개 경로다(토큰 소유가 곧 권한 증명이라 액세스 토큰이
      * 만료된 뒤에도 로그아웃할 수 있다). 토큰이 없거나 이미 폐기됐어도 같은 204 로 응답해 토큰 유효 여부를 드러내지 않는다.
      */
     @PostMapping("/logout")
@@ -149,13 +160,20 @@ public class AuthController {
         return tokenService.issueReadOnly(userId);
     }
 
+    /** 웹 코드 교환 로그인. 조회 전용(scope=read) 세션을 준다(#105). codeVerifier 는 PKCE(선택, 카카오·구글만 전달). */
     @PostMapping("/{provider}")
     public SocialLoginResponse login(@PathVariable String provider, @Valid @RequestBody SocialLoginRequest request) {
-        return socialLogin(authService.authenticate(provider, request.code(), request.redirectUri()));
+        SocialLoginResult result = authService.authenticate(
+                provider, request.code(), request.redirectUri(), request.codeVerifier());
+        return SocialLoginResponse.of(result, newSession(result.userId(), TokenScope.READ));
     }
 
     private Session newSession(String userId) {
-        return new Session(tokenService.issue(userId), refreshTokenService.issue(userId));
+        return newSession(userId, TokenScope.FULL);
+    }
+
+    private Session newSession(String userId, TokenScope scope) {
+        return new Session(tokenService.issue(userId, scope), refreshTokenService.issue(userId, scope));
     }
 
     private SocialLoginResponse socialLogin(SocialLoginResult result) {
@@ -168,8 +186,9 @@ public class AuthController {
 
     public record SignUpRequest(
             @NotBlank @Pattern(regexp = "^[A-Za-z0-9_]{4,32}$", message = "{validation.username.pattern}") String username,
-            @NotBlank @Size(min = 8, max = 72, message = "{validation.password.size}") String password,
-            String displayName
+            @NotBlank @Size(min = 8, max = 72, message = "{validation.password.size}")
+            @MaxUtf8Bytes(value = 72, message = "{validation.password.bytes}") String password,
+            @Size(max = 64, message = "{validation.display-name.size}") String displayName
     ) {
     }
 
@@ -193,7 +212,15 @@ public class AuthController {
         }
     }
 
-    public record SocialLoginRequest(@NotBlank String code, @NotBlank String redirectUri) {
+    /** codeVerifier: RFC 7636 PKCE code_verifier(선택). 있으면 공급자 토큰 교환에 code_verifier 로 넘긴다. */
+    public record SocialLoginRequest(
+            @NotBlank String code,
+            @NotBlank String redirectUri,
+            @Pattern(regexp = CODE_VERIFIER_PATTERN, message = "{validation.code-verifier.pattern}") String codeVerifier
+    ) {
+        public SocialLoginRequest(String code, String redirectUri) {
+            this(code, redirectUri, null);
+        }
     }
 
     public record GoogleNativeLoginRequest(@NotBlank @Size(max = MAX_TOKEN_LENGTH, message = "{validation.token.size}") String idToken) {

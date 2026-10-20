@@ -1,6 +1,7 @@
 package com.wellnessgame.auth;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -53,23 +54,38 @@ public class RefreshToken {
     @Column(name = "replaced_by")
     private UUID replacedBy;
 
+    /** family 의 권한 범위(#105). 회전해도 같은 범위로 다시 발급한다. DB 값은 'full'·'read'. */
+    @Convert(converter = TokenScopeConverter.class)
+    @Column(name = "scope", nullable = false, updatable = false, length = 16)
+    private TokenScope scope = TokenScope.FULL;
+
+    /** 회전된 뒤 유예 구간 재발급을 이미 했는지(#103). 토큰 하나당 한 번만 허용한다. */
+    @Column(name = "grace_reissued", nullable = false)
+    private boolean graceReissued;
+
     protected RefreshToken() {
     }
 
     RefreshToken(String userId, UUID familyId, Instant familyCreatedAt, String tokenHash, Instant issuedAt,
-                 Instant expiresAt) {
+                 Instant expiresAt, TokenScope scope) {
         this.userId = userId;
         this.familyId = familyId;
         this.familyCreatedAt = familyCreatedAt;
         this.tokenHash = tokenHash;
         this.issuedAt = issuedAt;
         this.expiresAt = expiresAt;
+        this.scope = scope;
     }
 
     /** 회전으로 폐기한다. replacedBy 는 첫 후계 토큰이다(유예 구간의 형제 토큰은 기록하지 않음). */
     void markRotated(Instant now, UUID successorId) {
         this.revokedAt = now;
         this.replacedBy = successorId;
+    }
+
+    /** 유예 구간 재발급을 했다고 기록한다. 다음 재사용은 재사용 공격으로 본다. */
+    void markGraceReissued() {
+        this.graceReissued = true;
     }
 
     public UUID getId() {
@@ -106,5 +122,13 @@ public class RefreshToken {
 
     public UUID getReplacedBy() {
         return replacedBy;
+    }
+
+    public TokenScope getScope() {
+        return scope;
+    }
+
+    public boolean isGraceReissued() {
+        return graceReissued;
     }
 }

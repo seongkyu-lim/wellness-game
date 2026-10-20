@@ -117,4 +117,45 @@ class SocialAuthServiceTest {
                 .withMessage("이 로그인 방식은 지금 사용할 수 없어요.")
                 .withMessageNotContaining("OAUTH_");
     }
+
+    /** #105 PKCE: 카카오·구글은 code_verifier 를 토큰 교환에 넘기고, 네이버는 넘기지 않는다. */
+    @Test
+    void passesCodeVerifierToKakaoAndGoogleButNotNaver() {
+        String verifier = "v".repeat(43);
+        for (String[] c : new String[][]{
+                {"kakao", "https://kauth.test/oauth/token", "https://kapi.test/v2/user/me", "{\"id\":1}"},
+                {"google", "https://google.test/token", "https://google.test/userinfo", "{\"sub\":\"g1\"}"}}) {
+            server.reset();
+            server.expect(requestTo(c[1]))
+                    .andExpect(content().formDataContains(java.util.Map.of("code_verifier", verifier, "code", "auth-code")))
+                    .andRespond(withSuccess("{\"access_token\":\"t\"}", MediaType.APPLICATION_JSON));
+            server.expect(requestTo(c[2])).andRespond(withSuccess(c[3], MediaType.APPLICATION_JSON));
+
+            service.authenticate(c[0], "auth-code", "http://localhost:5173", verifier);
+            server.verify();
+        }
+
+        server.reset();
+        server.expect(requestTo("https://nid.test/oauth2.0/token"))
+                .andExpect(request -> assertThat(((org.springframework.mock.http.client.MockClientHttpRequest) request)
+                        .getBodyAsString()).doesNotContain("code_verifier"))
+                .andRespond(withSuccess("{\"access_token\":\"t\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://openapi.test/v1/nid/me"))
+                .andRespond(withSuccess("{\"response\":{\"id\":\"n1\"}}", MediaType.APPLICATION_JSON));
+        service.authenticate("naver", "auth-code", "http://localhost:5173", verifier);
+        server.verify();
+    }
+
+    @Test
+    void omitsCodeVerifierWhenAbsent() {
+        server.expect(requestTo("https://google.test/token"))
+                .andExpect(request -> assertThat(((org.springframework.mock.http.client.MockClientHttpRequest) request)
+                        .getBodyAsString()).doesNotContain("code_verifier"))
+                .andRespond(withSuccess("{\"access_token\":\"t\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://google.test/userinfo"))
+                .andRespond(withSuccess("{\"sub\":\"g2\"}", MediaType.APPLICATION_JSON));
+
+        service.authenticate("google", "auth-code", "http://localhost:5173", null);
+        server.verify();
+    }
 }

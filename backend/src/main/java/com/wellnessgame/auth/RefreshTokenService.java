@@ -21,10 +21,14 @@ import java.util.UUID;
  *   <li>로그인마다 새 family 를 만든다. 회전하면 기존 토큰을 폐기하고 replaced_by 를 남긴 뒤 같은 family 로 새 토큰을 준다.
  *       만료는 min(지금 + ttl, family 생성 + absolute-ttl) 이다.</li>
  *   <li>회전된 지 reuse-grace 안의 토큰이 다시 오면(응답 유실·동시 요청) 같은 family 에 형제 토큰을 하나 더 준다.
- *       기존 후계 토큰도 계속 유효하다. 같은 토큰의 동시 회전은 행 잠금으로 직렬화돼 둘째 요청이 이 경로를 탄다.</li>
- *   <li>유예 구간이 지난 회전된 토큰이 오면 탈취 후 재사용으로 보고 family 전체를 폐기하고, 그 사용자의 기존 액세스 토큰도
- *       무효로 만든 뒤 401 이다. 로그아웃으로 폐기된 토큰은 그냥 401 이다.</li>
+ *       기존 후계 토큰도 계속 유효하다. 같은 토큰의 동시 회전은 행 잠금으로 직렬화돼 둘째 요청이 이 경로를 탄다.
+ *       유예 재발급은 회전된 토큰 하나당 한 번(grace_reissued)만이고, WARN 로그를 남긴다(#103).</li>
+ *   <li>유예 구간이 지났거나 유예 재발급을 이미 한 토큰이 다시 오면 탈취 후 재사용으로 보고 family 전체를 폐기하고,
+ *       그 사용자의 기존 액세스 토큰도 무효로 만든 뒤 401 이다. 로그아웃으로 폐기된 토큰은 그냥 401 이다.</li>
+ *   <li>family 는 권한 범위(scope)를 가진다(#105). 회전은 같은 범위로 하고, 조회 전용(read) family 는 수명이 더 짧다.</li>
  * </ul>
+ *
+ * <p>로그에는 토큰 원문·해시를 남기지 않는다(userId·family 만).
  */
 @Service
 public class RefreshTokenService {
@@ -49,14 +53,20 @@ public class RefreshTokenService {
         this.clock = clock;
     }
 
-    /** 새 로그인: 새 family 의 첫 토큰. */
+    /** 새 로그인: 전체 권한 family 의 첫 토큰. */
     @Transactional
     public IssuedRefreshToken issue(String userId) {
+        return issue(userId, TokenScope.FULL);
+    }
+
+    /** 새 로그인: 주어진 권한 범위로 새 family 의 첫 토큰. */
+    @Transactional
+    public IssuedRefreshToken issue(String userId, TokenScope scope) {
         if (userId == null || userId.isBlank()) {
             throw new IllegalArgumentException("토큰 주체(userId)가 비어 있습니다.");
         }
         Instant now = clock.instant();
-        return create(userId, UUID.randomUUID(), now, now).issued();
+        return create(userId, UUID.randomUUID(), now, now, scope).issued();
     }
 
     /**
@@ -78,9 +88,10 @@ public class RefreshTokenService {
         if (!current.getExpiresAt().isAfter(now)) {
             throw new UnauthorizedException(Messages.get("auth.refresh.expired"));
         }
-        Created next = create(current.getUserId(), current.getFamilyId(), current.getFamilyCreatedAt(), now);
+        Created next = create(current.getUserId(), current.getFamilyId(), current.getFamilyCreatedAt(), now,
+                current.getScope());
         current.markRotated(now, next.id());
-        return new Rotation(current.getUserId(), next.issued());
+        return new Rotation(current.getUserId(), current.getScope(), next.issued());
     }
 
     private Rotation rotateRevoked(RefreshToken token, Instant now) {
@@ -88,24 +99,33 @@ public class RefreshTokenService {
             throw invalid(); // 로그아웃·재사용 감지로 폐기됨
         }
         boolean withinGrace = !now.isAfter(token.getRevokedAt().plus(properties.reuseGrace()));
-        if (!withinGrace) {
+        if (!withinGrace || token.isGraceReissued()) {
             throw reuseDetected(token, now);
         }
         if (!repository.existsByFamilyIdAndRevokedAtIsNullAndExpiresAtAfter(token.getFamilyId(), now)) {
             throw invalid(); // 유예 구간 안이지만 family 가 이미 로그아웃됨
         }
-        Created sibling = create(token.getUserId(), token.getFamilyId(), token.getFamilyCreatedAt(), now);
-        return new Rotation(token.getUserId(), sibling.issued());
+        // 행 잠금을 잡은 채 기록하므로 같은 토큰의 동시 재사용도 한 번만 이 경로를 지난다.
+        token.markGraceReissued();
+        Created sibling = create(token.getUserId(), token.getFamilyId(), token.getFamilyCreatedAt(), now,
+                token.getScope());
+        log.warn("리프레시 토큰 유예 재발급: userId={}, family={}", token.getUserId(), token.getFamilyId());
+        return new Rotation(token.getUserId(), token.getScope(), sibling.issued());
     }
 
-    /** 로그아웃(토큰 소유가 곧 권한): 그 토큰의 family 를 폐기한다. 없는 토큰이면 아무것도 하지 않는다. */
+    /**
+     * 로그아웃(토큰 소유가 곧 권한): 그 토큰의 family 를 폐기하고, 그 사용자의 조회 전용(Watch·웹) 액세스 토큰도 무효로 만든다
+     * (#103). 전체 권한 액세스 토큰은 짧은 수명에 맡긴다. 없는 토큰이면 아무것도 하지 않는다.
+     */
     @Transactional
     public void revokeFamily(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
             return;
         }
-        repository.findByTokenHash(Sha256.hex(rawToken.trim()))
-                .ifPresent(token -> repository.revokeFamily(token.getFamilyId(), clock.instant()));
+        repository.findByTokenHash(Sha256.hex(rawToken.trim())).ifPresent(token -> {
+            repository.revokeFamily(token.getFamilyId(), clock.instant());
+            tokenValidityService.revokeReadTokens(token.getUserId());
+        });
     }
 
     /** 모든 기기 로그아웃: 리프레시 토큰을 모두 폐기하고 이미 발급된 액세스 토큰도 무효로 만든다. */
@@ -133,13 +153,13 @@ public class RefreshTokenService {
         return new UnauthorizedException(Messages.get("auth.refresh.reused"));
     }
 
-    private Created create(String userId, UUID familyId, Instant familyCreatedAt, Instant now) {
+    private Created create(String userId, UUID familyId, Instant familyCreatedAt, Instant now, TokenScope scope) {
         byte[] bytes = new byte[TOKEN_BYTES];
         random.nextBytes(bytes);
         String raw = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        Instant expiresAt = earliest(now.plus(properties.ttl()), familyCreatedAt.plus(properties.absoluteTtl()));
+        Instant expiresAt = earliest(now.plus(properties.ttl(scope)), familyCreatedAt.plus(properties.absoluteTtl(scope)));
         RefreshToken saved = repository.save(
-                new RefreshToken(userId, familyId, familyCreatedAt, Sha256.hex(raw), now, expiresAt));
+                new RefreshToken(userId, familyId, familyCreatedAt, Sha256.hex(raw), now, expiresAt, scope));
         return new Created(saved.getId(), new IssuedRefreshToken(raw, Duration.between(now, expiresAt).toSeconds()));
     }
 
@@ -147,8 +167,8 @@ public class RefreshTokenService {
         return a.isBefore(b) ? a : b;
     }
 
-    /** 회전 결과: 토큰 주체와 새 리프레시 토큰. */
-    public record Rotation(String userId, IssuedRefreshToken refreshToken) {
+    /** 회전 결과: 토큰 주체, family 의 권한 범위, 새 리프레시 토큰. */
+    public record Rotation(String userId, TokenScope scope, IssuedRefreshToken refreshToken) {
     }
 
     private record Created(UUID id, IssuedRefreshToken issued) {

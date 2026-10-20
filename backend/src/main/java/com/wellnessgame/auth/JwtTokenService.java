@@ -79,6 +79,14 @@ public class JwtTokenService {
         return issue(userId, TokenScope.FULL, ttl);
     }
 
+    /**
+     * 로그인·회전 세션용 액세스 토큰. 범위와 무관하게 유효 기간은 {@code auth.jwt.ttl} 이다.
+     * 웹 코드 교환 로그인(#105)은 READ 로 발급한다.
+     */
+    public IssuedToken issue(String userId, TokenScope scope) {
+        return issue(userId, scope, ttl);
+    }
+
     /** Watch 전용 조회 토큰(scope=read, #76). 유효 기간은 {@code auth.jwt.watch-ttl}. */
     public IssuedToken issueReadOnly(String userId) {
         return issue(userId, TokenScope.READ, watchTtl);
