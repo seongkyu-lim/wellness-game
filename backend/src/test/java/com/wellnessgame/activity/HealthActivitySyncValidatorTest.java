@@ -170,22 +170,28 @@ class HealthActivitySyncValidatorTest {
     }
 
     @Test
-    void sleepMustEndOnRequestDate() {
-        // 06-16 22:00 ~ 06-17 05:30 수면은 06-17 에만 반영된다.
+    void sleepWakeDateMayBeWithinOneDayOfRequestDate() {
+        // 06-16 22:00 ~ 06-17 05:30 수면은 06-16·06-17·(창 안이라면) 06-18 date 로 받을 수 있다(기기 현지 날짜 허용).
         ActivityPayload night = sleep(450, 90, "2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z");
         assertThat(validator.rejection(TODAY, night)).isEmpty();
-        assertThat(validator.rejection(TODAY.minusDays(1), night).map(LocalizedMessage::resolve))
-                .contains("수면은 깬 날짜(2026-06-17)에만 반영됩니다.");
+        assertThat(validator.rejection(TODAY.minusDays(1), night)).isEmpty();
     }
 
     @Test
-    void sleepWakeDateIsComputedInClockZone() {
-        // 06-16T21:45Z 는 서울 기준 06-17 06:45 → 서울 서버에서는 06-17 수면.
+    void sleepWakeDateMoreThanOneDayAfterRequestDateIsRejected() {
+        // date 06-15 의 창 끝(06-17 00:00)에 정확히 깬 수면 → 깬 날짜 06-17 은 date + 2일.
+        ActivityPayload night = sleep(120, 90, "2026-06-16T22:00:00Z", "2026-06-17T00:00:00Z");
+        assertThat(validator.rejection(TODAY.minusDays(2), night).map(LocalizedMessage::resolve))
+                .contains("수면은 깬 날짜(2026-06-17) 기준 ±1일 안의 날짜로만 반영됩니다.");
+    }
+
+    @Test
+    void usWestSleepIsAcceptedOnSeoulServer() {
+        // 미국 서부(PDT) 06-17 00:00~08:00 수면 = KST 06-17 16:00 ~ 06-18 00:00. 기기는 date 06-17 로 보낸다.
         HealthActivitySyncValidator seoul = new HealthActivitySyncValidator(
-                Clock.fixed(Instant.parse("2026-06-17T03:00:00Z"), ZoneId.of("Asia/Seoul")));
-        ActivityPayload night = sleep(431, 90, "2026-06-16T14:10:00Z", "2026-06-16T21:45:00Z");
+                Clock.fixed(Instant.parse("2026-06-17T16:00:00Z"), ZoneId.of("Asia/Seoul")));
+        ActivityPayload night = sleep(480, null, "2026-06-17T07:00:00Z", "2026-06-17T15:00:00Z");
         assertThat(seoul.rejection(TODAY, night)).isEmpty();
-        assertThat(seoul.rejection(TODAY.minusDays(1), night)).isPresent();
     }
 
     @Test

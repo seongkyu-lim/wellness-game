@@ -21,7 +21,7 @@ import java.util.Optional;
  *   <li>{@link #validate}: 구조 오류(필수 필드 누락, 종료 < 시작, 활동 개수 초과, 동기화 날짜가 오늘 ±1일 밖).
  *       BadRequestException 을 던지며 요청 전체가 400 으로 거부된다.</li>
  *   <li>{@link #rejection}: 값 범위 위반(상한 초과, 분 값이 구간보다 김, 미래 시각, 날짜 창 이탈,
- *       미래 날짜 걸음 수, 깬 날짜가 요청 date 와 다른 수면 등).
+ *       미래 날짜 걸음 수, 깬 날짜가 요청 date ±1일 밖인 수면 등).
  *       사유(메시지 키 + 인자)를 반환하며 서비스는 해당 항목만 건너뛴다.</li>
  * </ul>
  * 날짜 계산은 주입된 Clock 의 시간대(app.timezone)를 따른다. 문구는 messages*.properties 의 sync.* 키를 쓴다.
@@ -30,6 +30,7 @@ import java.util.Optional;
 public class HealthActivitySyncValidator {
     public static final int MAX_ACTIVITIES_PER_REQUEST = 50;
     public static final int SYNC_DATE_TOLERANCE_DAYS = 1;
+    public static final int SLEEP_WAKE_DATE_TOLERANCE_DAYS = 1;
     public static final Duration FUTURE_TOLERANCE = Duration.ofMinutes(5);
 
     public static final int MAX_STEPS = 100_000;
@@ -163,12 +164,14 @@ public class HealthActivitySyncValidator {
     }
 
     /**
-     * 수면은 깬 시각(endedAt)의 서버 현지 날짜에만 반영한다. 같은 수면을 요청 date 만 바꿔(오늘 ±1일)
-     * 여러 날짜로 받아 가지 못하게, 깬 날짜가 요청 date 와 다르면 이 항목을 건너뛴다.
+     * 수면의 깬 시각(endedAt)은 서버 현지 날짜 기준 요청 date ±{@value #SLEEP_WAKE_DATE_TOLERANCE_DAYS}일 안이어야 한다.
+     * 요청 date 는 기기 현지 날짜라 서버 시간대(KST)와 하루 어긋날 수 있다(예: 미국 서부 08:00 기상 = KST 다음 날 00:00).
+     * 같은 수면을 날짜만 바꿔 다시 받는 것은 서비스가 다른 날짜 수면 로그와의 겹침으로 막는다.
      */
     private LocalizedMessage sleepReason(LocalDate date, ActivityPayload activity) {
         LocalDate wakeDate = LocalDate.ofInstant(activity.endedAt(), clock.getZone());
-        if (!wakeDate.equals(date)) {
+        if (wakeDate.isBefore(date.minusDays(SLEEP_WAKE_DATE_TOLERANCE_DAYS))
+                || wakeDate.isAfter(date.plusDays(SLEEP_WAKE_DATE_TOLERANCE_DAYS))) {
             return new LocalizedMessage("sync.reason.sleep-date-mismatch", wakeDate.toString());
         }
         long spanMinutes = spanMinutes(activity.startedAt(), activity.endedAt());

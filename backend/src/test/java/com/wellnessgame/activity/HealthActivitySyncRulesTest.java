@@ -547,30 +547,70 @@ class HealthActivitySyncRulesTest {
     }
 
     @Test
-    void sleepCountsOnlyForItsWakeDateAndCannotBeClaimedUnderOtherDates() {
+    void sameSleepSentUnderTwoDatesIsAwardedOnlyOnce() {
+        // 06-17 00:30 ~ 07:00 수면을 date 06-17 과 06-18(깬 날짜 ±1일 안)로 보낸다.
+        ActivityPayload night = sleepWithScore90(390, "2026-06-17T00:30:00Z", "2026-06-17T07:00:00Z");
+
+        HealthActivitySyncResponse asToday = sync(night);
+        HealthActivitySyncResponse asTomorrow = syncService.sync(
+                new HealthActivitySyncRequest(USER, DAY.plusDays(1), List.of(night)));
+
+        assertThat(asToday.gainedXp()).isEqualTo(60); // 40 + 품질 20
+        assertThat(asTomorrow.gainedXp()).isZero();
+        assertThat(asTomorrow.activityResults().get(0).duplicate()).isTrue();
+        assertThat(asTomorrow.activityResults().get(0).message()).isEqualTo("수면 다른 날짜로 이미 반영됨");
+        assertThat(asTomorrow.character().totalXp()).isEqualTo(60);
+        assertThat(asTomorrow.character().stats().recovery()).isEqualTo(1);
+        assertThat(activityRepository.count()).isEqualTo(1);
+
+        // 같은 날짜에 더 긴 수면이 오면 기존처럼 갱신된다(다른 날짜 겹침 검사 대상 아님).
+        HealthActivitySyncResponse longer = sync(sleepWithScore90(450, "2026-06-16T23:30:00Z", "2026-06-17T07:00:00Z"));
+        assertThat(longer.activityResults().get(0).duplicate()).isFalse();
+        assertThat(longer.gainedXp()).isEqualTo(20); // 80 - 60
+    }
+
+    @Test
+    void sameSleepSentUnderEarlierDateAfterwardsIsAlsoAwardedOnlyOnce() {
         ActivityPayload night = sleepWithScore90(450, "2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z");
 
         HealthActivitySyncResponse asToday = sync(night);
         HealthActivitySyncResponse asYesterday = syncService.sync(
                 new HealthActivitySyncRequest(USER, DAY.minusDays(1), List.of(night)));
-        HealthActivitySyncResponse asTomorrow = syncService.sync(
-                new HealthActivitySyncRequest(USER, DAY.plusDays(1), List.of(night)));
 
         assertThat(asToday.gainedXp()).isEqualTo(80);
-        for (HealthActivitySyncResponse other : List.of(asYesterday, asTomorrow)) {
-            assertThat(other.gainedXp()).isZero();
-            assertThat(other.activityResults().get(0).duplicate()).isTrue();
-        }
-        assertThat(asYesterday.activityResults().get(0).message())
-                .isEqualTo("수면 기록을 반영하지 않았어요: 수면은 깬 날짜(2026-06-17)에만 반영됩니다.");
-        assertThat(asTomorrow.character().totalXp()).isEqualTo(80);
-        assertThat(asTomorrow.character().stats().recovery()).isEqualTo(1);
+        assertThat(asYesterday.gainedXp()).isZero();
+        assertThat(asYesterday.activityResults().get(0).message()).isEqualTo("수면 다른 날짜로 이미 반영됨");
         assertThat(activityRepository.count()).isEqualTo(1);
+    }
 
-        // 같은 날 깬 두 번째 수면(낮잠)은 날짜별 1건 규칙대로 기존 로그와 비교된다(더 짧으면 중복).
-        HealthActivitySyncResponse nap = sync(sleepWithScore90(60, "2026-06-17T13:00:00Z", "2026-06-17T14:00:00Z"));
-        assertThat(nap.activityResults().get(0).duplicate()).isTrue();
-        assertThat(nap.gainedXp()).isZero();
+    @Test
+    void sleepWakingOnNextServerDateIsAcceptedForDeviceDate() {
+        // 서버(테스트 UTC) 기준 06-18 00:30 에 깼지만 기기 현지 날짜는 06-17 (예: 미국 서부 사용자).
+        clock.setInstant(Instant.parse("2026-06-18T01:00:00Z"));
+        HealthActivitySyncResponse response = sync(sleepWithScore90(450, "2026-06-17T17:00:00Z", "2026-06-18T00:30:00Z"));
+
+        assertThat(response.activityResults().get(0).duplicate()).isFalse();
+        assertThat(response.gainedXp()).isEqualTo(80);
+    }
+
+    @Test
+    void tooShortWorkoutDoesNotBlockOverlappingRealWorkout() {
+        HealthActivitySyncResponse shortFirst = sync(workoutAt(WorkoutType.RUNNING, 3, "08:00", "08:03"));
+        assertThat(shortFirst.activityResults().get(0).gainedXp()).isZero();
+
+        HealthActivitySyncResponse real = sync(workoutAt(WorkoutType.RUNNING, 40, "08:00", "08:40"));
+        assertThat(real.activityResults().get(0).duplicate()).isFalse();
+        assertThat(real.gainedXp()).isEqualTo(135); // 40*3 + 15
+
+        // 같은 요청 안에서도 짧은 운동이 먼저 와도 실제 운동을 막지 않는다.
+        HealthActivitySyncResponse sameRequest = sync(
+                workoutAt(WorkoutType.CYCLING, 2, "10:00", "10:02"),
+                workoutAt(WorkoutType.CYCLING, 30, "10:00", "10:30"));
+        assertThat(sameRequest.activityResults()).extracting(r -> r.gainedXp()).containsExactly(0, 105);
+
+        // 실제 운동과 겹치는 짧은 운동은 겹침으로 건너뛴다.
+        HealthActivitySyncResponse shortAfter = sync(workoutAt(WorkoutType.WALKING, 3, "08:10", "08:13"));
+        assertThat(shortAfter.activityResults().get(0).message()).isEqualTo("걷기 겹치는 기록이 이미 반영됨");
     }
 
     @Test

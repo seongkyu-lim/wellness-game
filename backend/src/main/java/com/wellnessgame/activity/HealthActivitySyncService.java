@@ -19,6 +19,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -175,14 +176,16 @@ public class HealthActivitySyncService {
      * 활동 하나의 처리 결과. APPLIED 일 때 earnedXp 는 일일 상한(총·유형별) 적용 전 XP 이고,
      * statReward 는 상한 적용 후 지급 XP 가 0 보다 클 때만 캐릭터 스탯에 반영한다.
      * TOO_SHORT 는 최소 운동 시간 미만 운동으로, 기록만 남기고 XP·스탯은 없다.
+     * SLEEP_OVERLAP 은 다른 날짜로 이미 반영된 수면을 다시 보낸 것으로, 중복처럼 0 XP 로 건너뛴다.
      */
     private record Decision(Outcome outcome, int earnedXp, LocalizedMessage reason, Consumer<CharacterStats> statReward) {
-        enum Outcome { APPLIED, TOO_SHORT, DUPLICATE, OVERLAP, REJECTED }
+        enum Outcome { APPLIED, TOO_SHORT, DUPLICATE, OVERLAP, SLEEP_OVERLAP, REJECTED }
 
         private static final Consumer<CharacterStats> NO_STATS = stats -> { };
 
         static final Decision DUPLICATE = new Decision(Outcome.DUPLICATE, 0, null, NO_STATS);
         static final Decision OVERLAP = new Decision(Outcome.OVERLAP, 0, null, NO_STATS);
+        static final Decision SLEEP_OVERLAP = new Decision(Outcome.SLEEP_OVERLAP, 0, null, NO_STATS);
         static final Decision TOO_SHORT = new Decision(Outcome.TOO_SHORT, 0, null, NO_STATS);
 
         static Decision applied(int earnedXp, Consumer<CharacterStats> statReward) {
@@ -194,15 +197,6 @@ public class HealthActivitySyncService {
         }
     }
 
-    /**
-     * STEPS/SLEEP upsert 결과. earnedXp 는 상한 적용 전 새로 지급할 XP 차액, statReward 는 지급 시 줄 스탯.
-     */
-    private record UpsertResult(int earnedXp, Consumer<CharacterStats> statReward) {
-        /** upsert 결과(null 이면 변화 없음)를 판정으로 변환한다. */
-        static Decision toDecision(UpsertResult result) {
-            return result == null ? Decision.DUPLICATE : Decision.applied(result.earnedXp(), result.statReward());
-        }
-    }
 
     private Decision decide(SyncState state, ActivityPayload activity, LocalizedMessage rejection, String externalKey, String source) {
         if (rejection != null) {
@@ -210,10 +204,10 @@ public class HealthActivitySyncService {
         }
         return switch (activity.type()) {
             case STEPS -> activity == state.effectiveSteps
-                    ? UpsertResult.toDecision(upsertSteps(state, activity, externalKey, source))
+                    ? upsertSteps(state, activity, externalKey, source)
                     : Decision.DUPLICATE;
             case SLEEP -> activity == state.effectiveSleep
-                    ? UpsertResult.toDecision(upsertSleep(state, activity, externalKey, source))
+                    ? upsertSleep(state, activity, externalKey, source)
                     : Decision.DUPLICATE;
             case WORKOUT -> decideWorkout(state, activity, externalKey);
         };
@@ -224,30 +218,36 @@ public class HealthActivitySyncService {
             return Decision.DUPLICATE;
         }
         // 다른 운동 기록과 시간 구간이 겹치면 이 항목만 건너뛴다(먼저 반영된 기록 우선).
-        if (overlapsAccepted(state.acceptedWorkouts, activity) || activityRepository.existsOverlapping(
-                state.request.userId(), ActivityType.WORKOUT, activity.startedAt(), activity.endedAt())) {
+        // 5분 미만 운동(0 XP 기록)은 겹침 판정에서 빼서, 먼저 들어온 짧은 기록이 실제 운동을 막지 않게 한다.
+        boolean overlapsStored = activityRepository.findOverlapping(
+                        state.request.userId(), ActivityType.WORKOUT, activity.startedAt(), activity.endedAt())
+                .stream()
+                .anyMatch(log -> !isTooShort(log.getStartedAt(), log.getEndedAt(), log.getDurationMinutes()));
+        if (overlapsStored || overlapsAccepted(state.acceptedWorkouts, activity)) {
             return Decision.OVERLAP;
         }
-        state.acceptedWorkouts.add(activity);
-        if (isTooShort(activity)) {
-            return Decision.TOO_SHORT;
+        if (isTooShort(activity.startedAt(), activity.endedAt(), activity.durationMinutes())) {
+            return Decision.TOO_SHORT; // acceptedWorkouts 에도 넣지 않는다(같은 요청의 실제 운동을 막지 않음).
         }
+        state.acceptedWorkouts.add(activity);
         return Decision.applied(xpCalculator.calculate(activity), stats -> applyWorkoutStats(stats, activity.workoutType()));
     }
 
     /**
      * 실제 구간(endedAt - startedAt)이나 활동 시간(durationMinutes)이 최소 운동 시간(5분) 미만인 운동.
+     * 저장된 로그도 같은 기준으로 판정한다(기록 시 durationMinutes 는 항상 채워진다).
      */
-    private boolean isTooShort(ActivityPayload activity) {
+    private boolean isTooShort(Instant startedAt, Instant endedAt, Integer durationMinutes) {
         Duration minimum = Duration.ofMinutes(ActivityXpCalculator.MIN_WORKOUT_MINUTES);
-        return Duration.between(activity.startedAt(), activity.endedAt()).compareTo(minimum) < 0
-                || value(activity.durationMinutes()) < ActivityXpCalculator.MIN_WORKOUT_MINUTES;
+        return Duration.between(startedAt, endedAt).compareTo(minimum) < 0
+                || value(durationMinutes) < ActivityXpCalculator.MIN_WORKOUT_MINUTES;
     }
 
     private String skipMessage(ActivityPayload activity, Decision decision) {
         String name = displayName(activity);
         return switch (decision.outcome()) {
             case OVERLAP -> Messages.get("activity.result.overlap", name);
+            case SLEEP_OVERLAP -> Messages.get("activity.result.sleep-other-date", name);
             case REJECTED -> Messages.get("activity.result.rejected", name, decision.reason().resolve());
             default -> Messages.get("activity.result.duplicate", name);
         };
@@ -323,8 +323,8 @@ public class HealthActivitySyncService {
     }
 
     /**
-     * 그날의 STEPS 로그를 생성하거나 더 큰 걸음 수로 갱신하고, 새로 지급할 XP 차액과 지급 시 줄 스탯을 반환한다.
-     * 걸음 수가 늘지 않았으면 null 을 반환한다.
+     * 그날의 STEPS 로그를 생성하거나 더 큰 걸음 수로 갱신하고, 새로 지급할 XP 차액과 지급 시 줄 스탯을 판정으로 반환한다.
+     * 걸음 수가 늘지 않았으면 DUPLICATE 를 반환한다.
      * 차액은 일일 상한 적용 전 값이며, 로그 gainedXp 에는 상한 적용 후 실제 지급 누적액을 기록한다.
      * 스탯(DISCIPLINE)은 이 항목에 XP 가 실제로 지급될 때만 반영된다.
      * <ul>
@@ -332,7 +332,7 @@ public class HealthActivitySyncService {
      *   <li>목표 +1: 목표 미달 → 달성 전환 시 1회(기본 미지급 상태면 목표 달성 여부만 본다).</li>
      * </ul>
      */
-    private UpsertResult upsertSteps(SyncState state, ActivityPayload activity, String externalKey, String source) {
+    private Decision upsertSteps(SyncState state, ActivityPayload activity, String externalKey, String source) {
         int newSteps = Math.max(value(activity.steps()), 0);
         int newXp = xpCalculator.stepsXp(newSteps);
         LocalDate date = state.request.date();
@@ -341,21 +341,21 @@ public class HealthActivitySyncService {
         if (existing.isEmpty()) {
             activityRepository.save(toEntity(state.request, date, activity,
                     capToDaily(newXp, remainingDailyXp(state, date)), externalKey, source));
-            return new UpsertResult(newXp, stepsStatReward(true, crossesStepsGoal(0, newSteps)));
+            return Decision.applied(newXp, stepsStatReward(true, crossesStepsGoal(0, newSteps)));
         }
 
         HealthActivity log = existing.get();
         int previousSteps = value(log.getSteps());
         if (newSteps <= previousSteps) {
-            return null;
+            return Decision.DUPLICATE;
         }
 
         boolean basePending = log.getGainedXp() == 0;
-        boolean goalReached = basePending ? crossesStepsGoal(0, newSteps) : crossesStepsGoal(previousSteps, newSteps);
+        boolean goalReached = crossesStepsGoal(basePending ? 0 : previousSteps, newSteps);
         // 같은 1,000보 구간이거나 상한에 도달했으면 차액은 0 이다. 이미 지급한 XP 는 회수하지 않는다.
         int xpDelta = Math.max(newXp - log.getGainedXp(), 0);
         log.updateSteps(newSteps, log.getGainedXp() + capToDaily(xpDelta, remainingDailyXp(state, date)));
-        return new UpsertResult(xpDelta, stepsStatReward(basePending, goalReached));
+        return Decision.applied(xpDelta, stepsStatReward(basePending, goalReached));
     }
 
     private static Consumer<CharacterStats> stepsStatReward(boolean base, boolean goalReached) {
@@ -374,13 +374,17 @@ public class HealthActivitySyncService {
     }
 
     /**
-     * 그날의 SLEEP 로그(날짜별 1건)를 생성하거나 더 긴 수면으로 갱신하고, 새로 지급할 XP 차액과 지급 시 줄 스탯을 반환한다.
-     * 날짜는 요청 date 이며, 검증에서 깬 날짜(endedAt 의 서버 현지 날짜)와 같은 것만 여기 온다.
+     * 그날의 SLEEP 로그(날짜별 1건)를 생성하거나 더 긴 수면으로 갱신하고, 새로 지급할 XP 차액과 지급 시 줄 스탯을 판정으로 반환한다.
+     * 날짜는 요청 date 다(검증에서 깬 날짜가 date ±1일 안인 것만 여기 온다).
+     * 다른 날짜로 이미 반영된 수면과 겹치고 그보다 늦게 깨지 않았으면(같은 수면을 날짜만 바꿔 보낸 것) SLEEP_OVERLAP 이다.
      * 스탯(XP 가 실제로 지급될 때만): 그날 아직 지급된 XP 가 없으면 RECOVERY +1, INT +1(품질 기준 이상이면 INT +1 추가),
      * 이미 지급됐으면 수면 점수가 품질 기준 미만 → 이상으로 처음 넘어갈 때 INT +1.
-     * 수면 시간이 늘지 않았으면 null 을 반환한다. 이미 지급한 XP 는 회수하지 않는다.
+     * 수면 시간이 늘지 않았으면 DUPLICATE 를 반환한다. 이미 지급한 XP 는 회수하지 않는다.
      */
-    private UpsertResult upsertSleep(SyncState state, ActivityPayload activity, String externalKey, String source) {
+    private Decision upsertSleep(SyncState state, ActivityPayload activity, String externalKey, String source) {
+        if (claimedUnderOtherDate(state, activity)) {
+            return Decision.SLEEP_OVERLAP;
+        }
         int newMinutes = value(activity.sleepMinutes());
         int newScore = xpCalculator.resolvedSleepScore(newMinutes, activity.sleepScore());
         int newXp = xpCalculator.sleepXp(newMinutes, activity.sleepScore());
@@ -390,13 +394,13 @@ public class HealthActivitySyncService {
         if (existing.isEmpty()) {
             activityRepository.save(toEntity(state.request, date, activity,
                     capToDaily(newXp, remainingDailyXp(state, date)), externalKey, source));
-            return new UpsertResult(newXp, sleepStatReward(true, meetsSleepQuality(newScore)));
+            return Decision.applied(newXp, sleepStatReward(true, meetsSleepQuality(newScore)));
         }
 
         HealthActivity log = existing.get();
         int previousMinutes = value(log.getSleepMinutes());
         if (newMinutes <= previousMinutes) {
-            return null;
+            return Decision.DUPLICATE;
         }
 
         boolean basePending = log.getGainedXp() == 0;
@@ -405,7 +409,20 @@ public class HealthActivitySyncService {
         int xpDelta = Math.max(newXp - log.getGainedXp(), 0);
         log.updateSleep(newMinutes, activity.sleepScore(), activity.startedAt(), activity.endedAt(),
                 log.getGainedXp() + capToDaily(xpDelta, remainingDailyXp(state, date)));
-        return new UpsertResult(xpDelta, sleepStatReward(basePending, qualityReached));
+        return Decision.applied(xpDelta, sleepStatReward(basePending, qualityReached));
+    }
+
+    /**
+     * 같은 수면을 다른 날짜로 다시 받으려는지. 다른 날짜(activityDate)의 SLEEP 로그와 구간이 겹치고, 새 수면이 그 로그보다
+     * 늦게 끝나지 않으면(새로 깬 시각이 없으면) 이미 반영된 수면으로 본다. 같은 날짜 로그(구 형식 legacy 행 포함)는 대상이 아니다.
+     * 전날 낮잠이 다음 날 밤잠 조회 범위에 함께 들어와 겹치는 경우는 더 늦게 깨므로 그대로 반영한다.
+     */
+    private boolean claimedUnderOtherDate(SyncState state, ActivityPayload activity) {
+        return activityRepository.findOverlapping(
+                        state.request.userId(), ActivityType.SLEEP, activity.startedAt(), activity.endedAt())
+                .stream()
+                .anyMatch(log -> !state.request.date().equals(log.getActivityDate())
+                        && !log.getEndedAt().isBefore(activity.endedAt()));
     }
 
     private static Consumer<CharacterStats> sleepStatReward(boolean base, boolean qualityReached) {
