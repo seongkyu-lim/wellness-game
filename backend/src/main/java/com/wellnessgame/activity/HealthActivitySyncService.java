@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 @Service
@@ -99,6 +100,13 @@ public class HealthActivitySyncService {
             String externalKey = externalKey(request, activity);
 
             Decision decision = decide(state, activity, rejections.get(i), externalKey, source);
+            if (decision.outcome() == Decision.Outcome.TOO_SHORT) {
+                // 기록은 남기되(재전송은 중복, goals 반영) XP·스탯·상한 차감은 없다.
+                activityRepository.save(toEntity(request, xpDate(request, activity), activity, 0, externalKey, source));
+                results.add(new ActivityResultResponse(activity.type(), source, 0, Messages.get("activity.result.too-short",
+                        displayName(activity), ActivityXpCalculator.MIN_WORKOUT_MINUTES), false));
+                continue;
+            }
             if (decision.outcome() != Decision.Outcome.APPLIED) {
                 results.add(new ActivityResultResponse(activity.type(), source, 0, skipMessage(activity, decision), true));
                 continue;
@@ -115,6 +123,10 @@ public class HealthActivitySyncService {
             if (activity.type() == ActivityType.WORKOUT) {
                 // STEPS/SLEEP 로그는 upsert 에서 같은 규칙(capToDaily)으로 실제 지급액을 기록한다.
                 activityRepository.save(toEntity(request, xpDate, activity, awardedXp, externalKey, source));
+            }
+            if (awardedXp > 0) {
+                // 스탯은 실제로 XP 가 지급된 항목에만 준다(상한 소진 후 스탯만 계속 쌓이는 것을 막음).
+                decision.statReward().accept(character.getStats());
             }
             levelUp = character.addXp(awardedXp) || levelUp;
             gainedXp += awardedXp;
@@ -160,25 +172,35 @@ public class HealthActivitySyncService {
     }
 
     /**
-     * 활동 하나의 처리 결과. APPLIED 일 때 earnedXp 는 일일 상한(총·유형별) 적용 전 XP 다.
+     * 활동 하나의 처리 결과. APPLIED 일 때 earnedXp 는 일일 상한(총·유형별) 적용 전 XP 이고,
+     * statReward 는 상한 적용 후 지급 XP 가 0 보다 클 때만 캐릭터 스탯에 반영한다.
+     * TOO_SHORT 는 최소 운동 시간 미만 운동으로, 기록만 남기고 XP·스탯은 없다.
      */
-    private record Decision(Outcome outcome, int earnedXp, LocalizedMessage reason) {
-        enum Outcome { APPLIED, DUPLICATE, OVERLAP, REJECTED }
+    private record Decision(Outcome outcome, int earnedXp, LocalizedMessage reason, Consumer<CharacterStats> statReward) {
+        enum Outcome { APPLIED, TOO_SHORT, DUPLICATE, OVERLAP, REJECTED }
 
-        static final Decision DUPLICATE = new Decision(Outcome.DUPLICATE, 0, null);
-        static final Decision OVERLAP = new Decision(Outcome.OVERLAP, 0, null);
+        private static final Consumer<CharacterStats> NO_STATS = stats -> { };
 
-        static Decision applied(int earnedXp) {
-            return new Decision(Outcome.APPLIED, earnedXp, null);
+        static final Decision DUPLICATE = new Decision(Outcome.DUPLICATE, 0, null, NO_STATS);
+        static final Decision OVERLAP = new Decision(Outcome.OVERLAP, 0, null, NO_STATS);
+        static final Decision TOO_SHORT = new Decision(Outcome.TOO_SHORT, 0, null, NO_STATS);
+
+        static Decision applied(int earnedXp, Consumer<CharacterStats> statReward) {
+            return new Decision(Outcome.APPLIED, earnedXp, null, statReward);
         }
 
         static Decision rejected(LocalizedMessage reason) {
-            return new Decision(Outcome.REJECTED, 0, reason);
+            return new Decision(Outcome.REJECTED, 0, reason, NO_STATS);
         }
+    }
 
+    /**
+     * STEPS/SLEEP upsert 결과. earnedXp 는 상한 적용 전 새로 지급할 XP 차액, statReward 는 지급 시 줄 스탯.
+     */
+    private record UpsertResult(int earnedXp, Consumer<CharacterStats> statReward) {
         /** upsert 결과(null 이면 변화 없음)를 판정으로 변환한다. */
-        static Decision ofUpsert(Integer earnedXp) {
-            return earnedXp == null ? DUPLICATE : applied(earnedXp);
+        static Decision toDecision(UpsertResult result) {
+            return result == null ? Decision.DUPLICATE : Decision.applied(result.earnedXp(), result.statReward());
         }
     }
 
@@ -188,10 +210,10 @@ public class HealthActivitySyncService {
         }
         return switch (activity.type()) {
             case STEPS -> activity == state.effectiveSteps
-                    ? Decision.ofUpsert(upsertSteps(state, activity, externalKey, source))
+                    ? UpsertResult.toDecision(upsertSteps(state, activity, externalKey, source))
                     : Decision.DUPLICATE;
             case SLEEP -> activity == state.effectiveSleep
-                    ? Decision.ofUpsert(upsertSleep(state, activity, externalKey, source))
+                    ? UpsertResult.toDecision(upsertSleep(state, activity, externalKey, source))
                     : Decision.DUPLICATE;
             case WORKOUT -> decideWorkout(state, activity, externalKey);
         };
@@ -206,9 +228,20 @@ public class HealthActivitySyncService {
                 state.request.userId(), ActivityType.WORKOUT, activity.startedAt(), activity.endedAt())) {
             return Decision.OVERLAP;
         }
-        applyWorkoutStats(state.character.getStats(), activity.workoutType());
         state.acceptedWorkouts.add(activity);
-        return Decision.applied(xpCalculator.calculate(activity));
+        if (isTooShort(activity)) {
+            return Decision.TOO_SHORT;
+        }
+        return Decision.applied(xpCalculator.calculate(activity), stats -> applyWorkoutStats(stats, activity.workoutType()));
+    }
+
+    /**
+     * 실제 구간(endedAt - startedAt)이나 활동 시간(durationMinutes)이 최소 운동 시간(5분) 미만인 운동.
+     */
+    private boolean isTooShort(ActivityPayload activity) {
+        Duration minimum = Duration.ofMinutes(ActivityXpCalculator.MIN_WORKOUT_MINUTES);
+        return Duration.between(activity.startedAt(), activity.endedAt()).compareTo(minimum) < 0
+                || value(activity.durationMinutes()) < ActivityXpCalculator.MIN_WORKOUT_MINUTES;
     }
 
     private String skipMessage(ActivityPayload activity, Decision decision) {
@@ -226,14 +259,14 @@ public class HealthActivitySyncService {
     }
 
     /**
-     * WORKOUT 의 durationMinutes 가 비어 있으면 시작~종료 구간 길이(분)로 채운다.
+     * WORKOUT 의 durationMinutes 가 비어 있으면 시작~종료 구간 길이(분, 검증과 같은 반올림)로 채운다.
      */
     private ActivityPayload withResolvedDuration(ActivityPayload activity) {
         if (activity.type() != ActivityType.WORKOUT || activity.durationMinutes() != null) {
             return activity;
         }
         int spanMinutes = (int) Math.min(
-                Duration.between(activity.startedAt(), activity.endedAt()).toMinutes(), Integer.MAX_VALUE);
+                HealthActivitySyncValidator.spanMinutes(activity.startedAt(), activity.endedAt()), Integer.MAX_VALUE);
         return new ActivityPayload(activity.type(), activity.workoutType(), spanMinutes, activity.calories(),
                 activity.distanceMeters(), activity.steps(), activity.sleepMinutes(), activity.sleepScore(),
                 activity.startedAt(), activity.endedAt());
@@ -290,24 +323,25 @@ public class HealthActivitySyncService {
     }
 
     /**
-     * 그날의 STEPS 로그를 생성하거나 더 큰 걸음 수로 갱신하고, 새로 지급할 XP 차액을 반환한다.
-     * 스탯(DISCIPLINE)도 여기서 반영한다. 걸음 수가 늘지 않았으면 null 을 반환한다.
-     * 반환값은 일일 상한 적용 전 차액이며, 로그 gainedXp 에는 상한 적용 후 실제 지급 누적액을 기록한다.
+     * 그날의 STEPS 로그를 생성하거나 더 큰 걸음 수로 갱신하고, 새로 지급할 XP 차액과 지급 시 줄 스탯을 반환한다.
+     * 걸음 수가 늘지 않았으면 null 을 반환한다.
+     * 차액은 일일 상한 적용 전 값이며, 로그 gainedXp 에는 상한 적용 후 실제 지급 누적액을 기록한다.
+     * 스탯(DISCIPLINE)은 이 항목에 XP 가 실제로 지급될 때만 반영된다.
+     * <ul>
+     *   <li>기본 +1: 그날 로그에 아직 지급된 XP 가 없을 때(첫 생성, 또는 1,000보 미만·상한으로 0 XP 였던 로그) 1회.</li>
+     *   <li>목표 +1: 목표 미달 → 달성 전환 시 1회(기본 미지급 상태면 목표 달성 여부만 본다).</li>
+     * </ul>
      */
-    private Integer upsertSteps(SyncState state, ActivityPayload activity, String externalKey, String source) {
+    private UpsertResult upsertSteps(SyncState state, ActivityPayload activity, String externalKey, String source) {
         int newSteps = Math.max(value(activity.steps()), 0);
         int newXp = xpCalculator.stepsXp(newSteps);
-        CharacterStats stats = state.character.getStats();
+        LocalDate date = state.request.date();
 
         Optional<HealthActivity> existing = activityRepository.findByExternalKey(externalKey);
         if (existing.isEmpty()) {
-            stats.addDiscipline(1); // 걸음 활동 기본 보상: 그날 첫 STEPS 로그 생성 시 1회
-            if (crossesStepsGoal(0, newSteps)) {
-                stats.addDiscipline(1);
-            }
-            activityRepository.save(toEntity(state.request, state.request.date(), activity,
-                    capToDaily(newXp, remainingDailyXp(state, state.request.date())), externalKey, source));
-            return newXp;
+            activityRepository.save(toEntity(state.request, date, activity,
+                    capToDaily(newXp, remainingDailyXp(state, date)), externalKey, source));
+            return new UpsertResult(newXp, stepsStatReward(true, crossesStepsGoal(0, newSteps)));
         }
 
         HealthActivity log = existing.get();
@@ -316,40 +350,47 @@ public class HealthActivitySyncService {
             return null;
         }
 
-        if (crossesStepsGoal(previousSteps, newSteps)) {
-            stats.addDiscipline(1); // 목표 달성 보너스: 미달 → 달성 전환 시 1회
-        }
+        boolean basePending = log.getGainedXp() == 0;
+        boolean goalReached = basePending ? crossesStepsGoal(0, newSteps) : crossesStepsGoal(previousSteps, newSteps);
         // 같은 1,000보 구간이거나 상한에 도달했으면 차액은 0 이다. 이미 지급한 XP 는 회수하지 않는다.
         int xpDelta = Math.max(newXp - log.getGainedXp(), 0);
-        log.updateSteps(newSteps, log.getGainedXp() + capToDaily(xpDelta, remainingDailyXp(state, state.request.date())));
-        return xpDelta;
+        log.updateSteps(newSteps, log.getGainedXp() + capToDaily(xpDelta, remainingDailyXp(state, date)));
+        return new UpsertResult(xpDelta, stepsStatReward(basePending, goalReached));
     }
 
-    private boolean crossesStepsGoal(int previousSteps, int newSteps) {
+    private static Consumer<CharacterStats> stepsStatReward(boolean base, boolean goalReached) {
+        return stats -> {
+            if (base) {
+                stats.addDiscipline(1); // 걸음 활동 기본 보상
+            }
+            if (goalReached) {
+                stats.addDiscipline(1); // 목표 달성 보너스
+            }
+        };
+    }
+
+    private static boolean crossesStepsGoal(int previousSteps, int newSteps) {
         return previousSteps < ActivityXpCalculator.STEPS_GOAL && newSteps >= ActivityXpCalculator.STEPS_GOAL;
     }
 
     /**
-     * 그날의 SLEEP 로그(날짜별 1건)를 생성하거나 더 긴 수면으로 갱신하고, 새로 지급할 XP 차액을 반환한다.
-     * 스탯: 첫 로그 생성 시 RECOVERY +1, INT +1. 수면 점수가 품질 기준 미만 → 이상으로 처음 넘어갈 때 INT +1.
+     * 그날의 SLEEP 로그(날짜별 1건)를 생성하거나 더 긴 수면으로 갱신하고, 새로 지급할 XP 차액과 지급 시 줄 스탯을 반환한다.
+     * 날짜는 요청 date 이며, 검증에서 깬 날짜(endedAt 의 서버 현지 날짜)와 같은 것만 여기 온다.
+     * 스탯(XP 가 실제로 지급될 때만): 그날 아직 지급된 XP 가 없으면 RECOVERY +1, INT +1(품질 기준 이상이면 INT +1 추가),
+     * 이미 지급됐으면 수면 점수가 품질 기준 미만 → 이상으로 처음 넘어갈 때 INT +1.
      * 수면 시간이 늘지 않았으면 null 을 반환한다. 이미 지급한 XP 는 회수하지 않는다.
      */
-    private Integer upsertSleep(SyncState state, ActivityPayload activity, String externalKey, String source) {
+    private UpsertResult upsertSleep(SyncState state, ActivityPayload activity, String externalKey, String source) {
         int newMinutes = value(activity.sleepMinutes());
         int newScore = xpCalculator.resolvedSleepScore(newMinutes, activity.sleepScore());
         int newXp = xpCalculator.sleepXp(newMinutes, activity.sleepScore());
-        CharacterStats stats = state.character.getStats();
+        LocalDate date = state.request.date();
 
         Optional<HealthActivity> existing = activityRepository.findByExternalKey(externalKey);
         if (existing.isEmpty()) {
-            stats.addRecovery(1);
-            stats.addIntelligence(1);
-            if (meetsSleepQuality(newScore)) {
-                stats.addIntelligence(1);
-            }
-            activityRepository.save(toEntity(state.request, state.request.date(), activity,
-                    capToDaily(newXp, remainingDailyXp(state, state.request.date())), externalKey, source));
-            return newXp;
+            activityRepository.save(toEntity(state.request, date, activity,
+                    capToDaily(newXp, remainingDailyXp(state, date)), externalKey, source));
+            return new UpsertResult(newXp, sleepStatReward(true, meetsSleepQuality(newScore)));
         }
 
         HealthActivity log = existing.get();
@@ -358,17 +399,28 @@ public class HealthActivitySyncService {
             return null;
         }
 
+        boolean basePending = log.getGainedXp() == 0;
         int previousScore = xpCalculator.resolvedSleepScore(previousMinutes, log.getSleepScore());
-        if (!meetsSleepQuality(previousScore) && meetsSleepQuality(newScore)) {
-            stats.addIntelligence(1);
-        }
+        boolean qualityReached = meetsSleepQuality(newScore) && (basePending || !meetsSleepQuality(previousScore));
         int xpDelta = Math.max(newXp - log.getGainedXp(), 0);
         log.updateSleep(newMinutes, activity.sleepScore(), activity.startedAt(), activity.endedAt(),
-                log.getGainedXp() + capToDaily(xpDelta, remainingDailyXp(state, state.request.date())));
-        return xpDelta;
+                log.getGainedXp() + capToDaily(xpDelta, remainingDailyXp(state, date)));
+        return new UpsertResult(xpDelta, sleepStatReward(basePending, qualityReached));
     }
 
-    private boolean meetsSleepQuality(int score) {
+    private static Consumer<CharacterStats> sleepStatReward(boolean base, boolean qualityReached) {
+        return stats -> {
+            if (base) {
+                stats.addRecovery(1);
+                stats.addIntelligence(1);
+            }
+            if (qualityReached) {
+                stats.addIntelligence(1); // 수면 품질 보너스
+            }
+        };
+    }
+
+    private static boolean meetsSleepQuality(int score) {
         return score >= ActivityXpCalculator.SLEEP_QUALITY_BONUS_SCORE;
     }
 
@@ -417,7 +469,7 @@ public class HealthActivitySyncService {
         return Messages.get(prefix + source(activity));
     }
 
-    private void applyWorkoutStats(CharacterStats stats, WorkoutType workoutType) {
+    private static void applyWorkoutStats(CharacterStats stats, WorkoutType workoutType) {
         WorkoutType type = workoutType == null ? WorkoutType.OTHER : workoutType;
         switch (type) {
             case STRENGTH_TRAINING -> {

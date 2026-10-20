@@ -318,7 +318,8 @@ class HealthActivitySyncRulesTest {
         HealthActivitySyncResponse capped = sync(workoutAt(WorkoutType.RUNNING, 30, "12:00", "12:30"));
         assertThat(capped.gainedXp()).isZero();
         assertThat(capped.activityResults().get(0).duplicate()).isFalse();
-        assertThat(capped.character().stats().vit()).isEqualTo(8); // 스탯은 상한과 무관하게 반영
+        // #107: 상한으로 0 XP 가 된 운동은 스탯도 주지 않는다(달리기·수영·자전거 VIT +2 씩 = 6).
+        assertThat(capped.character().stats().vit()).isEqualTo(6);
     }
 
     @Test
@@ -354,6 +355,7 @@ class HealthActivitySyncRulesTest {
                 workoutAt(WorkoutType.SWIMMING, 70, "08:00", "09:10"),
                 workoutAt(WorkoutType.CYCLING, 70, "10:00", "11:10"));
 
+        clock.setInstant(Instant.parse("2026-06-18T12:00:00Z")); // 미래 날짜 걸음 수는 거부되므로 다음 날로 이동(#107)
         HealthActivitySyncResponse nextDay = syncService.sync(new HealthActivitySyncRequest(
                 USER, DAY.plusDays(1), List.of(steps(8_500))));
 
@@ -382,7 +384,8 @@ class HealthActivitySyncRulesTest {
         assertThat(second.activityResults()).extracting(r -> r.gainedXp()).containsExactly(0, 100, 80);
         assertThat(second.activityResults().get(0).duplicate()).isFalse();
         assertThat(second.activityResults().get(0).message()).isEqualTo("근력 운동 완료 +0 XP (일일 XP 상한 도달)");
-        assertThat(second.character().stats().str()).isEqualTo(1 + 1 + 1 + 2); // 달리기·달리기·자전거 +1, 근력 +2
+        // 달리기·달리기·자전거 +1. 0 XP 가 된 근력 운동은 스탯도 없음(#107).
+        assertThat(second.character().stats().str()).isEqualTo(1 + 1 + 1);
         assertThat(second.character().totalXp()).isEqualTo(580);
     }
 
@@ -475,6 +478,112 @@ class HealthActivitySyncRulesTest {
         }
         assertThat(characterRepository.findAll()).filteredOn(c -> newUser.equals(c.getUserId())).hasSize(1);
         assertThat(characterRepository.findByUserId(newUser).orElseThrow().getTotalXp()).isEqualTo(210);
+    }
+
+    // ---- XP 악용 방지 (#107) ----
+
+    @Test
+    void workoutShorterThanFiveMinutesIsRecordedWithoutXpOrStats() {
+        HealthActivitySyncResponse response = sync(
+                ActivityPayloads.workout(WorkoutType.SWIMMING, 5, "2026-06-17T08:00:00Z", "2026-06-17T08:04:59Z"),
+                ActivityPayloads.workout(WorkoutType.RUNNING, 0, "2026-06-17T09:00:00Z", "2026-06-17T09:00:01Z"),
+                // 구간은 5분 이상이지만 활동 시간(일시정지 제외)이 5분 미만
+                workoutAt(WorkoutType.CYCLING, 4, "10:00", "10:20"));
+
+        assertThat(response.activityResults()).extracting(r -> r.duplicate()).containsExactly(false, false, false);
+        assertThat(response.activityResults()).extracting(r -> r.gainedXp()).containsExactly(0, 0, 0);
+        assertThat(response.activityResults()).extracting(r -> r.message()).containsExactly(
+                "수영 기록됨 (5분 미만 운동은 XP·스탯이 없어요)",
+                "달리기 기록됨 (5분 미만 운동은 XP·스탯이 없어요)",
+                "자전거 기록됨 (5분 미만 운동은 XP·스탯이 없어요)");
+        assertThat(response.gainedXp()).isZero();
+        assertThat(response.character().stats().str()).isZero();
+        assertThat(response.character().stats().vit()).isZero();
+        assertThat(activityRepository.count()).isEqualTo(3);
+        assertThat(activityRepository.sumGainedXpByUserIdAndActivityDateAndType(USER, DAY, ActivityType.WORKOUT))
+                .isZero();
+
+        HealthActivitySyncResponse resent = sync(
+                ActivityPayloads.workout(WorkoutType.SWIMMING, 5, "2026-06-17T08:00:00Z", "2026-06-17T08:04:59Z"));
+        assertThat(resent.activityResults().get(0).duplicate()).isTrue();
+    }
+
+    @Test
+    void workoutOfExactlyFiveMinutesEarnsXp() {
+        HealthActivitySyncResponse response = sync(workoutAt(WorkoutType.RUNNING, 5, "08:00", "08:05"));
+
+        assertThat(response.gainedXp()).isEqualTo(30); // 5*3 + 15
+        assertThat(response.character().stats().vit()).isEqualTo(2);
+    }
+
+    @Test
+    void workoutMinutesBeyondRoundedSpanAreRejected() {
+        HealthActivitySyncResponse response = sync(
+                workoutAt(WorkoutType.RUNNING, 31, "08:00", "08:30"),
+                ActivityPayloads.workout(WorkoutType.CYCLING, 30, "2026-06-17T10:00:00Z", "2026-06-17T10:29:30Z"));
+
+        assertThat(response.activityResults()).extracting(r -> r.duplicate()).containsExactly(true, false);
+        assertThat(response.activityResults().get(0).message())
+                .isEqualTo("달리기 기록을 반영하지 않았어요: 운동 시간(durationMinutes)이 시작~종료 구간 길이보다 깁니다.");
+        assertThat(response.activityResults().get(1).gainedXp()).isEqualTo(105); // 29분 30초 → 30분(반올림)
+    }
+
+    @Test
+    void noStatsWhenDailyCapIsAlreadyExhausted() {
+        seedPriorXp(ActivityXpCalculator.DAILY_XP_CAP);
+
+        HealthActivitySyncResponse response = sync(
+                steps(9_000),
+                sleepWithScore90(450, "2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z"),
+                workoutAt(WorkoutType.STRENGTH_TRAINING, 30, "08:00", "08:30"));
+
+        assertThat(response.gainedXp()).isZero();
+        assertThat(response.activityResults()).extracting(r -> r.duplicate()).containsExactly(false, false, false);
+        assertThat(response.character().stats().discipline()).isZero();
+        assertThat(response.character().stats().recovery()).isZero();
+        assertThat(response.character().stats().intStat()).isZero();
+        assertThat(response.character().stats().str()).isZero();
+        assertThat(response.character().stats().vit()).isZero();
+    }
+
+    @Test
+    void sleepCountsOnlyForItsWakeDateAndCannotBeClaimedUnderOtherDates() {
+        ActivityPayload night = sleepWithScore90(450, "2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z");
+
+        HealthActivitySyncResponse asToday = sync(night);
+        HealthActivitySyncResponse asYesterday = syncService.sync(
+                new HealthActivitySyncRequest(USER, DAY.minusDays(1), List.of(night)));
+        HealthActivitySyncResponse asTomorrow = syncService.sync(
+                new HealthActivitySyncRequest(USER, DAY.plusDays(1), List.of(night)));
+
+        assertThat(asToday.gainedXp()).isEqualTo(80);
+        for (HealthActivitySyncResponse other : List.of(asYesterday, asTomorrow)) {
+            assertThat(other.gainedXp()).isZero();
+            assertThat(other.activityResults().get(0).duplicate()).isTrue();
+        }
+        assertThat(asYesterday.activityResults().get(0).message())
+                .isEqualTo("수면 기록을 반영하지 않았어요: 수면은 깬 날짜(2026-06-17)에만 반영됩니다.");
+        assertThat(asTomorrow.character().totalXp()).isEqualTo(80);
+        assertThat(asTomorrow.character().stats().recovery()).isEqualTo(1);
+        assertThat(activityRepository.count()).isEqualTo(1);
+
+        // 같은 날 깬 두 번째 수면(낮잠)은 날짜별 1건 규칙대로 기존 로그와 비교된다(더 짧으면 중복).
+        HealthActivitySyncResponse nap = sync(sleepWithScore90(60, "2026-06-17T13:00:00Z", "2026-06-17T14:00:00Z"));
+        assertThat(nap.activityResults().get(0).duplicate()).isTrue();
+        assertThat(nap.gainedXp()).isZero();
+    }
+
+    @Test
+    void stepsForFutureDateAreRejected() {
+        // 서버 기준 오늘은 06-17. 요청 date 06-18(내일)은 구조상 허용 범위지만 걸음 수는 반영하지 않는다.
+        HealthActivitySyncResponse response = syncService.sync(
+                new HealthActivitySyncRequest(USER, DAY.plusDays(1), List.of(steps(8_500))));
+
+        assertThat(response.gainedXp()).isZero();
+        assertThat(response.activityResults().get(0).duplicate()).isTrue();
+        assertThat(response.activityResults().get(0).message())
+                .isEqualTo("걸음 수 기록을 반영하지 않았어요: 오늘 이후 날짜의 걸음 수는 반영할 수 없습니다.");
+        assertThat(activityRepository.count()).isZero();
     }
 
     // ---- 오버플로 포화 ----

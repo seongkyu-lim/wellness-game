@@ -94,8 +94,8 @@ class HealthActivitySyncValidatorTest {
     @Test
     void startMustNotBeBeforePreviousDayMidnight() {
         Instant windowStart = Instant.parse("2026-06-16T00:00:00Z");
-        assertAccepted(sleep(400, 90, windowStart, windowStart.plus(Duration.ofMinutes(400))));
-        assertReason(sleep(400, 90, windowStart.minusSeconds(1), windowStart.plus(Duration.ofMinutes(400))),
+        assertAccepted(workout(WorkoutType.RUNNING, 30, windowStart, windowStart.plus(Duration.ofMinutes(30))));
+        assertReason(workout(WorkoutType.RUNNING, 30, windowStart.minusSeconds(1), windowStart.plus(Duration.ofMinutes(30))),
                 "활동 시간이 동기화 날짜 범위를 벗어났습니다.");
     }
 
@@ -118,26 +118,74 @@ class HealthActivitySyncValidatorTest {
         assertReason(workout(WorkoutType.RUNNING, 0, NOW, NOW), "운동 종료 시간은 시작 시간보다 늦어야 합니다.");
     }
 
+    // #107: 허용 오차(+1분) 없이 반올림한 구간(30초 이상 올림)까지만 인정한다.
+
     @Test
-    void acceptsWorkoutDurationUpToSpanPlusOneMinute() {
-        assertAccepted(workout(WorkoutType.RUNNING, 31, minutesBeforeNow(30), NOW));
+    void acceptsWorkoutDurationUpToRoundedSpan() {
+        assertAccepted(workout(WorkoutType.RUNNING, 30, minutesBeforeNow(30), NOW));
+        assertAccepted(workout(WorkoutType.RUNNING, 30, NOW.minusSeconds(29 * 60 + 30), NOW)); // 29분 30초 → 30분
     }
 
     @Test
-    void rejectsWorkoutDurationLongerThanSpanPlusOneMinute() {
-        assertReason(workout(WorkoutType.RUNNING, 32, minutesBeforeNow(30), NOW),
+    void rejectsWorkoutDurationLongerThanRoundedSpan() {
+        assertReason(workout(WorkoutType.RUNNING, 31, minutesBeforeNow(30), NOW),
+                "운동 시간(durationMinutes)이 시작~종료 구간 길이보다 깁니다.");
+        assertReason(workout(WorkoutType.RUNNING, 30, NOW.minusSeconds(29 * 60 + 29), NOW), // 29분 29초 → 29분
                 "운동 시간(durationMinutes)이 시작~종료 구간 길이보다 깁니다.");
     }
 
     @Test
-    void acceptsSleepMinutesUpToSpanPlusOneMinute() {
-        assertAccepted(sleep(451, 90, minutesBeforeNow(450), NOW));
+    void oneSecondWorkoutCannotClaimOneMinute() {
+        assertReason(workout(WorkoutType.SWIMMING, 1, NOW.minusSeconds(1), NOW),
+                "운동 시간(durationMinutes)이 시작~종료 구간 길이보다 깁니다.");
     }
 
     @Test
-    void rejectsSleepMinutesLongerThanSpanPlusOneMinute() {
-        assertReason(sleep(452, 90, minutesBeforeNow(450), NOW),
+    void spanMinutesRoundsHalfUp() {
+        assertThat(HealthActivitySyncValidator.spanMinutes(NOW, NOW.plusSeconds(29))).isZero();
+        assertThat(HealthActivitySyncValidator.spanMinutes(NOW, NOW.plusSeconds(30))).isEqualTo(1);
+        assertThat(HealthActivitySyncValidator.spanMinutes(NOW, NOW.plusSeconds(89))).isEqualTo(1);
+        assertThat(HealthActivitySyncValidator.spanMinutes(NOW, NOW.plusSeconds(90))).isEqualTo(2);
+    }
+
+    @Test
+    void acceptsSleepMinutesUpToRoundedSpan() {
+        assertAccepted(sleep(450, 90, minutesBeforeNow(450), NOW));
+    }
+
+    @Test
+    void rejectsSleepMinutesLongerThanRoundedSpan() {
+        assertReason(sleep(451, 90, minutesBeforeNow(450), NOW),
                 "수면 시간(sleepMinutes)이 시작~종료 구간 길이보다 깁니다.");
+    }
+
+    // ---- #107: 날짜 귀속 ----
+
+    @Test
+    void stepsForTodayOrYesterdayAreAcceptedButNotForTomorrow() {
+        assertThat(validator.rejection(TODAY, steps(1_000))).isEmpty();
+        assertThat(validator.rejection(TODAY.minusDays(1), steps(1_000))).isEmpty();
+        assertThat(validator.rejection(TODAY.plusDays(1), steps(1_000)).map(LocalizedMessage::resolve))
+                .contains("오늘 이후 날짜의 걸음 수는 반영할 수 없습니다.");
+    }
+
+    @Test
+    void sleepMustEndOnRequestDate() {
+        // 06-16 22:00 ~ 06-17 05:30 수면은 06-17 에만 반영된다.
+        ActivityPayload night = sleep(450, 90, "2026-06-16T22:00:00Z", "2026-06-17T05:30:00Z");
+        assertThat(validator.rejection(TODAY, night)).isEmpty();
+        assertThat(validator.rejection(TODAY.minusDays(1), night).map(LocalizedMessage::resolve))
+                .contains("수면은 깬 날짜(2026-06-17)에만 반영됩니다.");
+    }
+
+    @Test
+    void sleepWakeDateIsComputedInClockZone() {
+        // 06-16T21:45Z 는 서울 기준 06-17 06:45 → 서울 서버에서는 06-17 수면.
+        HealthActivitySyncValidator seoul = new HealthActivitySyncValidator(
+                Clock.fixed(Instant.parse("2026-06-17T03:00:00Z"), ZoneId.of("Asia/Seoul")));
+        ActivityPayload night = sleep(431, 90, "2026-06-16T14:10:00Z", "2026-06-16T21:45:00Z");
+        assertThat(seoul.rejection(TODAY, night)).isEmpty();
+        assertThat(seoul.rejection(TODAY.minusDays(1), night)).isPresent();
     }
 
     @Test
