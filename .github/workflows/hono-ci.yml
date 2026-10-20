@@ -37,7 +37,8 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:16-alpine
+        # postgres:16-alpine (다중 아키텍처 인덱스 digest 고정, 2026-10-21 조회). 올릴 때 docker buildx imagetools inspect 로 다시 조회
+        image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
         env:
           POSTGRES_USER: wellness
           POSTGRES_PASSWORD: wellness
@@ -53,12 +54,15 @@ jobs:
       DATABASE_URL_TEST: postgres://wellness:wellness@localhost:5432/wellness_test
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: hono-server/package-lock.json
-      - run: npm ci
+      # 의존성 설치 스크립트를 실행하지 않는다(타입 검사·테스트·tsc 빌드에 필요 없음을 확인했다)
+      - run: npm ci --ignore-scripts
       - name: Typecheck
         run: npm run typecheck
       - name: Test (unit + PostgreSQL API)

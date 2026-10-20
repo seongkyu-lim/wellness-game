@@ -5,6 +5,7 @@ compatibility_date = "2026-09-01"
 # postgres(porsager)·bcryptjs 가 node:net·crypto 호환 API 를 쓴다
 compatibility_flags = ["nodejs_compat"]
 
+# 아래 OAUTH_APPLE_REQUIRE_NONCE·AUTH_JWT_LEGACY_CUTOFF 는 운영 Spring(render.yaml)과 같은 값이다.
 [vars]
 APP_TIMEZONE = "Asia/Seoul"
 APP_API_DOCS_ENABLED = "false"
@@ -12,8 +13,11 @@ CORS_ALLOWED_ORIGINS = "http://localhost:5173"
 OAUTH_APPLE_REQUIRE_NONCE = "true"
 AUTH_JWT_LEGACY_CUTOFF = ""
 
-# Supabase Postgres 앞의 Hyperdrive(연결 풀·캐시). id 는 `wrangler hyperdrive create` 로 만든 값으로 바꾼다.
-# 로컬 `wrangler dev` 는 localConnectionString(또는 .dev.vars 의 DATABASE_URL)을 쓴다.
+# Supabase Postgres 앞의 Hyperdrive(연결 풀). 반드시 쿼리 캐시를 끈 설정을 쓴다:
+#   wrangler hyperdrive create wellness-db --caching-disabled --connection-string="postgres://...?sslmode=require"
+# 캐시가 켜져 있으면 토큰 무효화 기준·리프레시 토큰·로그인 실패 뒤 계정·방금 쓴 활동 기록을 읽는 SELECT 가 오래된 결과를
+# 받을 수 있다(로그아웃한 토큰 통과, 동기화 직후 조회 누락). 모든 쿼리에 바인딩 하나를 쓴다(README "Hyperdrive").
+# id 는 위 명령이 만든 값으로 바꾼다. 로컬 `wrangler dev` 는 localConnectionString 을 쓴다.
 [[hyperdrive]]
 binding = "HYPERDRIVE"
 id = "00000000000000000000000000000000"

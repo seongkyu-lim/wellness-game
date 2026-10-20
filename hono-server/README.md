@@ -43,7 +43,10 @@ hono-server/
 공통: 오류 본문 `{timestamp,status,error,message}`(404·405·415 는 스프링 기본 `{timestamp,status,error,path}`), 문구는
 `Accept-Language` ko/en(Spring `AcceptHeaderLocaleResolver` 와 같은 선택 규칙), Bean Validation 과 같은 `필드: 문구`,
 형식 오류는 `error.unreadable-body`, 401 에 `WWW-Authenticate: Bearer`, 429 에 `Retry-After`.
-보안 헤더(HSTS·nosniff·X-Frame-Options DENY·CSP frame-ancestors 'none'·Referrer-Policy no-referrer), CORS 허용 목록.
+보안 헤더(HSTS·nosniff·X-Frame-Options DENY·CSP frame-ancestors 'none'·Referrer-Policy no-referrer), CORS 허용 목록
+(목록 밖 Origin 은 Spring 처럼 403 `Invalid CORS request`), `/api/auth/*` 응답은 `Cache-Control: no-store`.
+본문 상한: 전체 512KB, `/api/auth/*` 16KB, 동기화 256KB(넘으면 413). `AUTH_JWT_SECRET` 이 비었거나 짧거나 예시 문구
+(`change-me`, `local-dev-only`)가 들어 있으면 기동하지 않는다. `OAUTH_GOOGLE_NATIVE_CLIENT_IDS` 에 웹 클라이언트 ID 가 있어도 기동하지 않는다.
 
 ## 실행
 
@@ -70,9 +73,18 @@ DB 테스트는 `DATABASE_URL_TEST` 의 **public 스키마를 지우고** `backe
 
 ### Workers 배포 준비(실행은 별도 확인)
 
-1. `wrangler hyperdrive create wellness-db --connection-string="postgres://...supabase...:5432/postgres?sslmode=require"` → `wrangler.toml` 의 `id` 교체
-2. `wrangler secret put AUTH_JWT_SECRET`(Spring 과 같은 값이면 토큰 공유), OAuth 비밀값도 secret 으로
-3. `[vars]` 의 `CORS_ALLOWED_ORIGINS` 를 운영 웹 주소로
+1. `wrangler hyperdrive create wellness-db --caching-disabled --connection-string="postgres://...supabase...:5432/postgres?sslmode=require"` → `wrangler.toml` 의 `id` 교체
+2. `wrangler secret put AUTH_JWT_SECRET`(Spring 과 같은 값이면 토큰 공유. `openssl rand -base64 48`), OAuth 비밀값도 secret 으로
+3. `[vars]` 의 `CORS_ALLOWED_ORIGINS` 를 운영 웹 주소로. `OAUTH_APPLE_REQUIRE_NONCE=true`·빈 `AUTH_JWT_LEGACY_CUTOFF` 는
+   운영 Spring(`render.yaml`)과 같은 값이다
+
+### Hyperdrive: 쿼리 캐시를 끈다
+
+Hyperdrive 는 기본으로 읽기 쿼리(SELECT) 결과를 캐시한다. 이 서버는 인증 판단(토큰 무효화 기준, 리프레시 토큰 상태, 계정 조회)과
+쓰기 직후의 읽기(동기화 상한 합계·중복 확인, 일별 조회)가 모두 최신 값을 봐야 해서, 캐시된 결과를 받으면 로그아웃한 토큰이 통과하거나
+같은 활동에 XP 가 두 번 지급될 수 있다. 쿼리별로 나눠 두 바인딩을 쓰는 것보다 실수 여지가 적도록 **캐시를 끈 설정
+(`--caching-disabled`) 하나를 모든 쿼리에** 쓴다. 연결 풀링 효과는 그대로 얻는다. 이미 만든 설정은
+`wrangler hyperdrive update <id> --caching-disabled` 로 바꾼다.
 
 ## 런타임별 주의
 
