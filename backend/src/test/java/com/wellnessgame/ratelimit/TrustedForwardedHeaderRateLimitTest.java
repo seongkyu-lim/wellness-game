@@ -71,4 +71,12 @@ class TrustedForwardedHeaderRateLimitTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\": \"nobody_fwd\", \"password\": \"wrong-password\"}"));
     }
+
+    /** #102 Render 처럼 오른쪽에 덧붙이는 프록시 뒤에서 왼쪽 값을 바꿔 가며 보내도 한도를 피하지 못한다. */
+    @Test
+    void rotatingSpoofedLeftmostValuesDoesNotBypassLimit() throws Exception {
+        loginVia("1.1.1.1, 203.0.113.40").andExpect(status().isBadRequest());
+        loginVia("2.2.2.2, 203.0.113.40").andExpect(status().isTooManyRequests());
+        loginVia("203.0.113.41, 203.0.113.40").andExpect(status().isTooManyRequests());
+    }
 }
