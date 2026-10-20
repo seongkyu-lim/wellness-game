@@ -84,6 +84,20 @@ VITE_API_BASE_URL=http://192.168.0.10:8080 npm run dev
 
 Apple 로그인은 Apple Developer 유료 계정 + HTTPS 도메인 + Services ID 등록이 선행돼야 해서 웹에서는 아직 지원하지 않습니다.
 
+## 환경별 설정 (.env)
+
+Vite가 모드별로 아래 파일을 자동으로 읽습니다. 모두 **공개값만** 넣는 파일이며 저장소에 커밋됩니다.
+
+| 파일 | 쓰이는 때 | API 주소 |
+|---|---|---|
+| `.env.development` | `npm run dev` | `http://localhost:8080` |
+| `.env.production` | `npm run build`, Vercel(Production·Preview) | `https://wellness-game-api.onrender.com` |
+| `.env.*.local` | 개인 오버라이드(gitignore) | 자유 |
+
+- 우선순위: 셸·Vercel 프로젝트 환경변수 > `.env.[mode].local` > `.env.[mode]`.
+- 운영 개인정보 연락처·시행일(`VITE_PRIVACY_*`)도 `.env.production`에 있습니다. 방침을 바꾸면 시행일을 갱신합니다.
+- 소셜 로그인 client ID는 공개값이라 `.env.production`에 넣어도 됩니다. 비어 있으면 해당 버튼이 비활성화됩니다.
+
 ## 다국어 (ko / en)
 
 - UI는 한국어(ko)와 영어(en)를 지원합니다. 외부 라이브러리 없이 `src/i18n/`의 사전(`dictionaries.ts`)과
