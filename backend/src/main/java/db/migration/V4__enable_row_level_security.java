@@ -26,17 +26,19 @@ public class V4__enable_row_level_security extends BaseJavaMigration {
         if (!"PostgreSQL".equals(connection.getMetaData().getDatabaseProductName())) {
             return;
         }
-        List<String> tables = new ArrayList<>();
+        // %I 로 식별자를 안전하게 인용한 ALTER 문을 DB 가 만들게 한다.
+        List<String> statements = new ArrayList<>();
         try (Statement statement = connection.createStatement();
              ResultSet rows = statement.executeQuery(
-                     "select tablename from pg_tables where schemaname = current_schema() order by tablename")) {
+                     "select format('alter table %I enable row level security', tablename) "
+                             + "from pg_tables where schemaname = current_schema() order by tablename")) {
             while (rows.next()) {
-                tables.add(rows.getString(1));
+                statements.add(rows.getString(1));
             }
         }
         try (Statement statement = connection.createStatement()) {
-            for (String table : tables) {
-                statement.execute("alter table \"" + table.replace("\"", "\"\"") + "\" enable row level security");
+            for (String sql : statements) {
+                statement.execute(sql);
             }
         }
     }

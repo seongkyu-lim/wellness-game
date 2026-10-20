@@ -23,3 +23,10 @@ app:
     sync-per-minute: 0
     auth-per-minute: 0
     login-per-minute: 0
+
+# 운영과 같게 API 문서는 기본 꺼짐(#93). 켜짐 동작은 ApiDocsTest 가 속성으로 켜서 검사한다.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
