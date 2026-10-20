@@ -156,7 +156,8 @@ class PostgresIntegrationTest {
              Statement statement = connection.createStatement();
              ResultSet rows = statement.executeQuery(
                      "select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace "
-                             + "where n.nspname = current_schema() and c.relkind in ('r', 'p') and not c.relrowsecurity")) {
+                             + "where n.nspname = current_schema() and c.relkind in ('r', 'p') and not c.relrowsecurity "
+                             + "and c.relname <> 'flyway_schema_history'")) {
             while (rows.next()) {
                 withoutRls.add(rows.getString(1));
             }
