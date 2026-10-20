@@ -1,0 +1,56 @@
+# Workers 로컬 실행용(wrangler dev 가 .dev.vars 를 읽는다). 복사: cp .dev.vars.example .dev.vars — 운영 비밀값은 `wrangler secret put`.
+# PORT 는 wrangler dev --port 로 정한다
+# Spring 형식(jdbc:postgresql://...)과 postgres://user:pass@host/db 형식 모두 된다. Supabase 는 ?sslmode=require
+# DB 는 wrangler.toml 의 [[hyperdrive]] localConnectionString 을 쓴다(바인딩이 없을 때만 DATABASE_URL)
+# DATABASE_URL=postgres://wellness:wellness@localhost:5432/wellness_game
+# DATABASE_USERNAME=wellness
+# DATABASE_PASSWORD=wellness
+# DB_POOL_MAX 는 Workers 에서 쓰지 않는다(Hyperdrive 가 풀 관리)
+
+# 32바이트 이상 무작위 값(예: openssl rand -base64 48). Spring 서버와 같은 값을 쓰면 토큰을 서로 쓸 수 있다.
+AUTH_JWT_SECRET=local-dev-only-jwt-secret-change-me-0123456789
+# AUTH_JWT_TTL=1h
+# AUTH_WATCH_TOKEN_TTL=7d
+# AUTH_JWT_ISSUER=wellness-game
+# AUTH_JWT_AUDIENCE=wellness-game-api
+# AUTH_JWT_LEGACY_CUTOFF=2026-10-06T00:00:00Z
+# AUTH_REFRESH_TTL=30d
+# AUTH_REFRESH_ABSOLUTE_TTL=90d
+# AUTH_REFRESH_READ_TTL=7d
+# AUTH_REFRESH_READ_ABSOLUTE_TTL=30d
+# AUTH_REFRESH_REUSE_GRACE=30s
+# AUTH_REFRESH_REVOKED_RETENTION=7d
+
+APP_TIMEZONE=Asia/Seoul
+APP_API_DOCS_ENABLED=true
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+# APP_HSTS_HEADER=max-age=31536000; includeSubDomains
+# APP_HTTP_CLIENT_TIMEOUT=8s
+
+# 레이트 리밋(1분 고정 윈도우, 0 이하면 끔)
+# APP_RATE_LIMIT_SYNC_PER_MINUTE=30
+# APP_RATE_LIMIT_AUTH_PER_MINUTE=30
+# APP_RATE_LIMIT_LOGIN_PER_MINUTE=10
+# APP_RATE_LIMIT_REFRESH_PER_MINUTE=120
+# APP_RATE_LIMIT_GENERAL_PER_MINUTE=0
+# Render 등 신뢰하는 프록시 뒤에서만 true. HOPS 는 X-Forwarded-For 오른쪽부터 건너뛸 값 수(0 = 마지막 값)
+# APP_RATE_LIMIT_TRUST_FORWARDED_HEADER=false
+# APP_RATE_LIMIT_TRUSTED_PROXY_HOPS=0
+# APP_RATE_LIMIT_MAX_KEYS=100000
+# APP_AUTH_MAX_FAILED_LOGINS=5
+# APP_AUTH_MAX_FAILED_LOGINS_PER_USERNAME=50
+# APP_AUTH_LOCKOUT_MINUTES=15
+
+# 소셜 로그인(비워 둔 공급자의 엔드포인트는 503)
+OAUTH_GOOGLE_CLIENT_ID=
+OAUTH_GOOGLE_CLIENT_SECRET=
+# 네이티브(iOS·Android) 허용 aud·azp 전체(쉼표). 웹 로그인 클라이언트 ID 는 넣지 않는다
+OAUTH_GOOGLE_NATIVE_CLIENT_IDS=
+# OAUTH_GOOGLE_IOS_CLIENT_ID=  (NATIVE_CLIENT_IDS 가 없을 때만 쓰는 이전 이름)
+OAUTH_KAKAO_CLIENT_ID=
+OAUTH_KAKAO_CLIENT_SECRET=
+OAUTH_KAKAO_NATIVE_APP_ID=
+OAUTH_NAVER_CLIENT_ID=
+OAUTH_NAVER_CLIENT_SECRET=
+OAUTH_APPLE_BUNDLE_ID=
+OAUTH_APPLE_REQUIRE_NONCE=false
