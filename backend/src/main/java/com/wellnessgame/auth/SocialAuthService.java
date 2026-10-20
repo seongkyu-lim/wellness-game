@@ -26,7 +26,7 @@ import java.util.Set;
 public class SocialAuthService {
     private static final Logger log = LoggerFactory.getLogger(SocialAuthService.class);
     private static final Set<String> SUPPORTED = Set.of("kakao", "naver", "google");
-    /** 토큰 교환에 code_verifier 를 넘기는 공급자. */
+    /** 웹 코드 교환에 PKCE code_verifier 가 필수인 공급자. */
     private static final Set<String> PKCE_PROVIDERS = Set.of("kakao", "google");
 
     private final RestClient restClient;
@@ -37,13 +37,9 @@ public class SocialAuthService {
         this.properties = properties;
     }
 
-    public SocialLoginResult authenticate(String providerName, String code, String redirectUri) {
-        return authenticate(providerName, code, redirectUri, null);
-    }
-
     /**
-     * @param codeVerifier PKCE code_verifier(선택, #105). 있으면 카카오·구글 토큰 교환에 {@code code_verifier} 로 넘긴다.
-     *                     네이버는 PKCE 를 지원하지 않아 넘기지 않는다.
+     * @param codeVerifier PKCE code_verifier(#105). 카카오·구글은 필수이며({@code code_verifier} 로 넘김), 없으면 400 이다.
+     *                     네이버는 PKCE 를 지원하지 않아 받지 않고 넘기지도 않는다. 형식은 요청 검증(AuthController)이 본다.
      */
     public SocialLoginResult authenticate(String providerName, String code, String redirectUri, String codeVerifier) {
         if (!SUPPORTED.contains(providerName)) {
@@ -60,8 +56,12 @@ public class SocialAuthService {
             throw new ServiceUnavailableException(Messages.get("auth.social.not-configured"));
         }
 
+        boolean pkce = PKCE_PROVIDERS.contains(providerName);
+        if (pkce && (codeVerifier == null || codeVerifier.isBlank())) {
+            throw new BadRequestException(Messages.get("auth.social.code-verifier-required"));
+        }
         try {
-            String verifier = PKCE_PROVIDERS.contains(providerName) ? codeVerifier : null;
+            String verifier = pkce ? codeVerifier : null;
             String accessToken = requestAccessToken(provider, code, redirectUri, verifier);
             return toResult(providerName, requestProfile(provider, accessToken));
         } catch (RestClientException e) {

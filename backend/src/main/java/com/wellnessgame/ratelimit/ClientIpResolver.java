@@ -20,10 +20,10 @@ import java.util.regex.Pattern;
  *
  * <p>기본은 {@link HttpServletRequest#getRemoteAddr()} 다. {@code X-Forwarded-For} 는 클라이언트가 임의로 넣을 수 있어
  * {@code app.rate-limit.trust-forwarded-header} 가 켜졌을 때만 본다. Render 등 프록시는 클라이언트가 보낸 값을 지우지 않고
- * 오른쪽에 덧붙이므로 왼쪽 값은 위조할 수 있다. 그래서 여러 줄을 순서대로 이어 붙인 목록에서 오른쪽부터
+ * 오른쪽에 덧붙이므로 왼쪽 값은 위조할 수 있다. 그래서 값 목록에서 오른쪽부터
  * {@code app.rate-limit.trusted-proxy-hops} 개를 건너뛴 값(왼쪽 기준 size-1-hops 번째)을 쓴다(#102). hops=0 이면
  * 바로 앞단 프록시가 덧붙인 마지막 값이다. 그 위치가 없거나, 값이 64자를 넘거나 IP 리터럴이 아니면 연결 주소로 돌아간다.
- * DNS 조회는 하지 않는다.
+ * 헤더가 여러 줄로 오면 믿지 않고 고정 키 {@link #MULTIPLE_HEADER_KEY} 하나로 센다. DNS 조회는 하지 않는다.
  *
  * <p>{@code app.rate-limit.log-forwarded-chain} 이 켜지면 배포 뒤 hops 를 맞출 수 있게 연결 주소와 헤더 원문을
  * {@link #CHAIN_LOG_INTERVAL_MILLIS} 에 한 번만 INFO 로 남긴다.
@@ -38,6 +38,10 @@ public class ClientIpResolver {
     private static final Pattern IPV6_CHARS = Pattern.compile("[0-9A-Fa-f:.]+");
 
     static final long CHAIN_LOG_INTERVAL_MILLIS = 10_000;
+    /** X-Forwarded-For 가 여러 줄로 온 요청이 함께 쓰는 고정 키(#102). */
+    static final String MULTIPLE_HEADER_KEY = "multi-xff";
+    /** 로그 줄 위조에 쓰일 수 있는 제어 문자와 줄 구분자(U+0085 NEL, U+2028, U+2029). */
+    private static final Pattern LOG_UNSAFE = Pattern.compile("[\\p{Cc}\\u0085\\u2028\\u2029]");
     /** 로그에 남길 헤더 원문 최대 길이. 클라이언트가 붙인 긴 값으로 로그가 커지지 않게 자른다. */
     private static final int MAX_LOGGED_CHAIN_LENGTH = 512;
     private static final Logger log = LoggerFactory.getLogger(ClientIpResolver.class);
@@ -66,6 +70,11 @@ public class ClientIpResolver {
 
     public static String resolve(HttpServletRequest request, boolean trustForwardedHeader, int trustedProxyHops) {
         if (trustForwardedHeader) {
+            if (headerLines(request).size() > 1) {
+                // 프록시는 한 줄에 덧붙인다. 여러 줄이면 어느 줄이 프록시가 쓴 것인지 알 수 없어 공격자가 값을 고를 수 있으므로
+                // 모두 같은 키 하나로 센다.
+                return MULTIPLE_HEADER_KEY;
+            }
             String forwarded = normalize(forwardedAddress(request, trustedProxyHops));
             if (forwarded != null) {
                 return forwarded;
@@ -131,14 +140,12 @@ public class ClientIpResolver {
     }
 
     /**
-     * 모든 X-Forwarded-For 줄을 순서대로 이어 붙인 값 목록(왼쪽이 가장 먼 쪽). 빈 줄은 건너뛰고, 줄 안의 빈 값("a,,b"·"a,")은
+     * X-Forwarded-For 값 목록(왼쪽이 가장 먼 쪽, 여러 줄이면 이어 붙임). 빈 줄은 건너뛰고, 줄 안의 빈 값("a,,b"·"a,")은
      * 자리를 지키도록 남긴다(선택되면 IP 가 아니라서 연결 주소로 돌아간다).
      */
     static List<String> forwardedChain(HttpServletRequest request) {
-        Enumeration<String> headers = request.getHeaders(FORWARDED_FOR);
-        List<String> lines = headers == null ? List.of() : Collections.list(headers);
         List<String> chain = new ArrayList<>();
-        for (String line : lines) {
+        for (String line : headerLines(request)) {
             if (line == null || line.isBlank()) {
                 continue;
             }
@@ -147,6 +154,11 @@ public class ClientIpResolver {
             }
         }
         return chain;
+    }
+
+    private static List<String> headerLines(HttpServletRequest request) {
+        Enumeration<String> headers = request.getHeaders(FORWARDED_FOR);
+        return headers == null ? List.of() : Collections.list(headers);
     }
 
     private void logChain(HttpServletRequest request) {
@@ -164,7 +176,7 @@ public class ClientIpResolver {
             raw = raw.substring(0, MAX_LOGGED_CHAIN_LENGTH) + "...";
         }
         // 제어 문자를 지워 로그 줄 위조를 막는다.
-        raw = raw.replaceAll("\\p{Cntrl}", "?");
+        raw = LOG_UNSAFE.matcher(raw).replaceAll("?");
         log.info("X-Forwarded-For 보정용: remoteAddr={}, X-Forwarded-For=[{}], trustedProxyHops={}",
                 request.getRemoteAddr(), raw, trustedProxyHops);
     }

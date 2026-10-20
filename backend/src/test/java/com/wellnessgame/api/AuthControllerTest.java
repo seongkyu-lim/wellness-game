@@ -304,7 +304,7 @@ class AuthControllerTest {
         assertThat(body.path("userId").asText()).isEqualTo("kakao:4242");
         assertThat(body.path("displayName").asText()).isEqualTo("카카오친구");
         assertTokenFields(body, "kakao:4242");
-        verify(socialAuthService, never()).authenticate(anyString(), any(), any());
+        verify(socialAuthService, never()).authenticate(anyString(), any(), any(), any());
     }
 
     @Test
@@ -318,7 +318,7 @@ class AuthControllerTest {
 
         assertThat(body.path("userId").asText()).isEqualTo("naver:nv-abc");
         assertTokenFields(body, "naver:nv-abc");
-        verify(socialAuthService, never()).authenticate(anyString(), any(), any());
+        verify(socialAuthService, never()).authenticate(anyString(), any(), any(), any());
     }
 
     @Test
@@ -528,6 +528,27 @@ class AuthControllerTest {
                 "{\"refreshToken\": \"" + login.path("refreshToken").asText() + "\"}");
         assertThat(refreshed.path("refreshExpiresIn").asLong()).isEqualTo(Duration.ofDays(7).toSeconds());
         assertReadOnlyAccess(refreshed.path("accessToken").asText());
+    }
+
+    /** #103 웹(조회 전용) family 로그아웃은 같은 사용자의 Watch 토큰을 끊지 않는다(앱 로그아웃만 끊음). */
+    @Test
+    void webLogoutDoesNotInvalidateWatchTokens() throws Exception {
+        doReturn(new SocialLoginResult("google:web-logout", "Web"))
+                .when(socialAuthService).authenticate("google", "auth-code", "http://localhost:5173/", null);
+        String watch = tokenService.issueReadOnly("google:web-logout").accessToken();
+        JsonNode web = postJson("/api/auth/google", """
+                {"code": "auth-code", "redirectUri": "http://localhost:5173/"}
+                """);
+
+        mockMvc.perform(post("/api/auth/logout").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\": \"" + web.path("refreshToken").asText() + "\"}"))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/characters/me").with(bearerToken(watch)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\": \"" + web.path("refreshToken").asText() + "\"}"))
+                .andExpect(status().isUnauthorized());
     }
 
     /** 앱 로그인(아이디·네이티브)은 계속 전체 권한이다. */

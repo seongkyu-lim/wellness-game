@@ -89,7 +89,9 @@ class TokenValidityCacheTest {
 
         assertThat(row.get().getTokensValidAfter()).isEqualTo(TokenValidityService.NO_CUTOFF);
         assertThat(service.isRevoked(USER, TokenScope.READ, NOW.minusSeconds(1))).isTrue();
-        assertThat(service.isRevoked(USER, TokenScope.READ, NOW)).isFalse();
+        // #103 조회 기준은 경계 초(기준과 같은 초)에 발급된 토큰도 거부한다.
+        assertThat(service.isRevoked(USER, TokenScope.READ, NOW)).isTrue();
+        assertThat(service.isRevoked(USER, TokenScope.READ, NOW.plusSeconds(1))).isFalse();
         assertThat(service.isRevoked(USER, TokenScope.FULL, NOW.minusSeconds(1))).isFalse();
         // NO_CUTOFF 는 "기준 없음"이라 iat 가 없는 전체 권한 토큰도 막지 않는다.
         assertThat(service.isRevoked(USER, TokenScope.FULL, null)).isFalse();

@@ -160,7 +160,7 @@ public class AuthController {
         return tokenService.issueReadOnly(userId);
     }
 
-    /** 웹 코드 교환 로그인. 조회 전용(scope=read) 세션을 준다(#105). codeVerifier 는 PKCE(선택, 카카오·구글만 전달). */
+    /** 웹 코드 교환 로그인. 조회 전용(scope=read) 세션을 준다(#105). codeVerifier 는 PKCE(카카오·구글 필수, 네이버 없음). */
     @PostMapping("/{provider}")
     public SocialLoginResponse login(@PathVariable String provider, @Valid @RequestBody SocialLoginRequest request) {
         SocialLoginResult result = authService.authenticate(
@@ -185,7 +185,7 @@ public class AuthController {
     }
 
     public record SignUpRequest(
-            @NotBlank @Pattern(regexp = "^[A-Za-z0-9_]{4,32}$", message = "{validation.username.pattern}") String username,
+            @NotBlank @Pattern(regexp = PasswordAuthService.USERNAME_REGEX, message = "{validation.username.pattern}") String username,
             @NotBlank @Size(min = 8, max = 72, message = "{validation.password.size}")
             @MaxUtf8Bytes(value = 72, message = "{validation.password.bytes}") String password,
             @Size(max = 64, message = "{validation.display-name.size}") String displayName
@@ -212,15 +212,14 @@ public class AuthController {
         }
     }
 
-    /** codeVerifier: RFC 7636 PKCE code_verifier(선택). 있으면 공급자 토큰 교환에 code_verifier 로 넘긴다. */
+    /**
+     * codeVerifier: RFC 7636 PKCE code_verifier. 형식은 여기서, 공급자별 필수 여부(카카오·구글 필수)는 SocialAuthService 가 본다.
+     */
     public record SocialLoginRequest(
             @NotBlank String code,
             @NotBlank String redirectUri,
             @Pattern(regexp = CODE_VERIFIER_PATTERN, message = "{validation.code-verifier.pattern}") String codeVerifier
     ) {
-        public SocialLoginRequest(String code, String redirectUri) {
-            this(code, redirectUri, null);
-        }
     }
 
     public record GoogleNativeLoginRequest(@NotBlank @Size(max = MAX_TOKEN_LENGTH, message = "{validation.token.size}") String idToken) {

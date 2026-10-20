@@ -80,7 +80,7 @@ create table refresh_token (
     expires_at        timestamp(6) with time zone not null,
     revoked_at        timestamp(6) with time zone,
     replaced_by       uuid,
-    -- V5(#103·#105): family 권한 범위('full' 앱 / 'read' 웹), 유예 재발급 1회 제한
+    -- V5(#103·#105, Java 마이그레이션): family 권한 범위('full' 앱 / 'read' 웹), 유예 재발급 1회 제한
     scope             varchar(16)                 default 'full' not null,
     grace_reissued    boolean                     default false not null,
     constraint refresh_token_pkey primary key (id),
@@ -111,20 +111,32 @@ alter table user_credential enable row level security;
 
 -- V6 (Supabase 데이터 API 역할 권한 회수, #104) ----------------------------------------------------------
 -- anon·authenticated 역할이 있을 때만(Supabase). flyway_schema_history 는 이 파일에 없으므로 대상이 아니다.
--- 권한은 postgresTest 의 스키마 비교 대상이 아니다(V6 자체는 PostgresIntegrationTest 가 검사).
+-- 권한은 postgresTest 의 스키마 비교 대상이 아니다(V6 자체는 ApiRoleGrantsPostgresTest 가 검사).
 
 do $$
 declare
     roles text;
+    obj   text;
 begin
     select string_agg(quote_ident(rolname), ', ' order by rolname) into roles
     from pg_roles where rolname in ('anon', 'authenticated');
     if roles is null then
         return;
     end if;
-    execute format('revoke all on all tables in schema %I from %s', current_schema(), roles);
-    execute format('revoke all on all sequences in schema %I from %s', current_schema(), roles);
-    execute format('revoke all on all functions in schema %I from %s', current_schema(), roles);
+    -- V6 과 같게 이 역할이 소유한 객체만(flyway_schema_history 제외).
+    for obj in
+        select format('table %I', tablename) from pg_tables
+        where schemaname = current_schema() and tablename <> 'flyway_schema_history'
+          and pg_has_role(current_user, tableowner, 'USAGE')
+        union all
+        select format('sequence %I', c.relname) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = current_schema() and c.relkind = 'S' and pg_has_role(current_user, c.relowner, 'USAGE')
+        union all
+        select format('routine %s', p.oid::regprocedure) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = current_schema() and p.prokind in ('f', 'p') and pg_has_role(current_user, p.proowner, 'USAGE')
+    loop
+        execute format('revoke all on %s from %s', obj, roles);
+    end loop;
     execute format('alter default privileges in schema %I revoke all on tables from %s', current_schema(), roles);
     execute format('alter default privileges in schema %I revoke all on sequences from %s', current_schema(), roles);
     execute format('alter default privileges in schema %I revoke all on functions from %s', current_schema(), roles);

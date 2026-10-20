@@ -109,4 +109,17 @@ class PasswordAuthServiceTest {
         assertThat(service.signIn("TWIN_a", "password123").userIdentifier()).isEqualTo("id-2");
         assertThatIllegalArgumentException().isThrownBy(() -> service.signIn("twin_A", "password123"));
     }
+
+    /** #106 정규화 이전의 'Alice' 와 새 'alice' 가 함께 있어도 각자 자기 아이디로 로그인된다(입력 그대로를 먼저 찾음). */
+    @Test
+    void legacyMixedCaseAccountCoexistsWithLowercaseAccount() {
+        PasswordEncoder encoder = new BCryptPasswordEncoder(4);
+        store.put("Alice_01", new UserCredential("Alice_01", encoder.encode("legacy-pass"), "legacy-alice", "Legacy"));
+        store.put("alice_01", new UserCredential("alice_01", encoder.encode("new-pass1"), "new-alice", "New"));
+
+        assertThat(service.signIn("Alice_01", "legacy-pass").userIdentifier()).isEqualTo("legacy-alice");
+        assertThat(service.signIn("alice_01", "new-pass1").userIdentifier()).isEqualTo("new-alice");
+        // 다른 철자는 소문자 계정으로 간다.
+        assertThat(service.signIn("ALICE_01", "new-pass1").userIdentifier()).isEqualTo("new-alice");
+    }
 }

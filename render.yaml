@@ -64,6 +64,10 @@ services:
         sync: false
       - key: OAUTH_GOOGLE_CLIENT_SECRET
         sync: false
+      # google/native 허용 aud·azp(쉼표 구분): iOS 클라이언트, Android 클라이언트, Android 전용 웹 유형 서버 클라이언트.
+      # 웹 로그인 클라이언트(OAUTH_GOOGLE_CLIENT_ID)는 넣지 않는다. 비우면 OAUTH_GOOGLE_IOS_CLIENT_ID 하나만 쓴다.
+      - key: OAUTH_GOOGLE_NATIVE_CLIENT_IDS
+        sync: false
       - key: OAUTH_GOOGLE_IOS_CLIENT_ID
         sync: false
       - key: OAUTH_KAKAO_CLIENT_ID

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * 아이디·비밀번호 가입과 로그인.
@@ -30,6 +31,9 @@ public class PasswordAuthService {
     private final String dummyPasswordHash;
 
     static final int DEFAULT_MAX_KEYS = 100_000;
+    /** 가입 아이디 형식. 가입 요청 검증(AuthController)과 로그인 전 형식 검사가 같은 값을 쓴다. */
+    public static final String USERNAME_REGEX = "^[A-Za-z0-9_]{4,32}$";
+    private static final Pattern USERNAME_FORMAT = Pattern.compile(USERNAME_REGEX);
 
     /** 기본 잠금 설정(아이디·IP 5회, 아이디 전체 50회 → 15분)과 시스템 시계를 쓴다. */
     public PasswordAuthService(UserCredentialRepository repository, PasswordEncoder passwordEncoder) {
@@ -90,43 +94,55 @@ public class PasswordAuthService {
     }
 
     /**
-     * 아이디·비밀번호 로그인. 실패 사유(없는 아이디, 틀린 비밀번호, 잠금)와 상관없이 같은 400 문구로 응답하고,
+     * 아이디·비밀번호 로그인. 실패 사유(형식 오류, 없는 아이디, 틀린 비밀번호, 잠금)와 상관없이 같은 400 문구로 응답하고,
      * 모든 경로에서 bcrypt 비교를 한 번 해 응답 시간도 비슷하게 맞춘다.
+     *
+     * <p>가입 형식({@link #USERNAME_REGEX})이 아닌 아이디는 조회하지 않고 거부한다. Java 소문자 변환과 SQL upper() 가 다르게
+     * 접는 문자(ſ U+017F, ı U+0131 등)로 철자를 바꿔 가며 같은 계정에 닿으면서 잠금 카운터를 따로 쓰는 것을 막는다.
+     * 잠금 키는 찾은 계정의 저장된 아이디(없으면 소문자 정규화 값)다.
      *
      * <p>비교 전에 시도를 먼저 실패로 예약해 동시 요청이 잠금 한도를 넘지 못하게 하고, 성공하면 예약을 되돌린다
      * ({@link LoginAttemptGuard}). 잠긴 동안은 올바른 비밀번호도 거부한다.
      */
     @Transactional(readOnly = true)
     public PasswordAuthResult signIn(String username, String rawPassword, String clientIp) {
-        String trimmedUsername = username == null ? "" : username.trim();
-        String normalizedUsername = normalizeUsername(username);
-        if (!attemptGuard.tryReserve(normalizedUsername, clientIp)) {
+        String trimmedUsername = trimUsername(username);
+        if (!USERNAME_FORMAT.matcher(trimmedUsername).matches()) {
+            passwordEncoder.matches(rawPassword, dummyPasswordHash);
+            throw invalidCredentials();
+        }
+        String normalizedUsername = trimmedUsername.toLowerCase(Locale.ROOT);
+        Optional<UserCredential> found = findForLogin(trimmedUsername, normalizedUsername);
+        String lockoutKey = found.map(UserCredential::getUsername).orElse(normalizedUsername);
+        if (!attemptGuard.tryReserve(lockoutKey, clientIp)) {
             passwordEncoder.matches(rawPassword, dummyPasswordHash);
             throw invalidCredentials();
         }
 
-        Optional<UserCredential> found = findForLogin(normalizedUsername, trimmedUsername);
         String hash = found.map(UserCredential::getPasswordHash).orElse(dummyPasswordHash);
         boolean matches = passwordEncoder.matches(rawPassword, hash);
         if (found.isEmpty() || !matches) {
             throw invalidCredentials();
         }
 
-        attemptGuard.recordSuccess(normalizedUsername, clientIp);
+        attemptGuard.recordSuccess(lockoutKey, clientIp);
         UserCredential credential = found.get();
         return new PasswordAuthResult(credential.getUserIdentifier(), credential.getDisplayName());
     }
 
-    /** 정규화한 아이디 → 입력 그대로 → 대소문자 무시(유일할 때만) 순서로 찾는다. */
-    private Optional<UserCredential> findForLogin(String normalizedUsername, String trimmedUsername) {
-        Optional<UserCredential> exact = repository.findByUsername(normalizedUsername);
-        if (exact.isPresent()) {
-            return exact;
+    /**
+     * 입력 그대로 → 소문자 정규화 → 대소문자 무시(유일할 때만) 순서로 찾는다. 입력 그대로를 먼저 봐야 'alice' 가 있어도
+     * 정규화 이전에 가입한 'Alice' 가 자기 아이디로 로그인할 수 있다.
+     */
+    private Optional<UserCredential> findForLogin(String trimmedUsername, String normalizedUsername) {
+        Optional<UserCredential> asTyped = repository.findByUsername(trimmedUsername);
+        if (asTyped.isPresent()) {
+            return asTyped;
         }
-        if (!trimmedUsername.equals(normalizedUsername)) {
-            Optional<UserCredential> asTyped = repository.findByUsername(trimmedUsername);
-            if (asTyped.isPresent()) {
-                return asTyped;
+        if (!normalizedUsername.equals(trimmedUsername)) {
+            Optional<UserCredential> lowercase = repository.findByUsername(normalizedUsername);
+            if (lowercase.isPresent()) {
+                return lowercase;
             }
         }
         List<UserCredential> legacy = repository.findByUsernameIgnoreCase(normalizedUsername);
@@ -134,7 +150,11 @@ public class PasswordAuthService {
     }
 
     static String normalizeUsername(String username) {
-        return username == null ? "" : username.trim().toLowerCase(Locale.ROOT);
+        return trimUsername(username).toLowerCase(Locale.ROOT);
+    }
+
+    private static String trimUsername(String username) {
+        return username == null ? "" : username.trim();
     }
 
     private static BadRequestException usernameTaken() {

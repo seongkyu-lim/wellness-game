@@ -7,8 +7,9 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * iOS 구글 로그인 ID 토큰 검증 설정. clientIds 는 iOS 클라이언트 ID 목록이며,
- * 웹 클라이언트 ID(oauth.google.client-id)와 함께 허용 aud·azp 목록을 이룬다.
+ * 네이티브(iOS·Android) 구글 로그인 ID 토큰 검증 설정. clientIds 가 허용 aud·azp 목록의 전부다: iOS 클라이언트 ID,
+ * Android 클라이언트 ID, Android 가 aud 로 쓰는 전용 웹 유형 "서버" 클라이언트 ID. 웹 로그인 클라이언트
+ * ID(oauth.google.client-id)는 자동으로 포함하지 않으며 여기에 넣지도 않는다.
  *
  * @param jwksUri      Google 공개키(JWKS) URI
  * @param jwksCacheTtl JWKS 메모리 캐시 유지 시간

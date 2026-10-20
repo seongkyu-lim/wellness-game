@@ -15,7 +15,7 @@ import java.util.UUID;
 
 /**
  * 회전 리프레시 토큰 한 건(V3__refresh_tokens). 토큰 원문 대신 SHA-256 hex 만 저장한다.
- * 회전은 행 잠금({@link RefreshTokenRepository#findForUpdateByTokenHash})을 잡은 채 {@link #markRotated} 로 한다.
+ * 회전은 family 행 잠금({@link RefreshTokenRepository#lockFamily})을 잡은 채 {@link #markRotated} 로 한다.
  */
 @Entity
 @Table(name = "refresh_token",

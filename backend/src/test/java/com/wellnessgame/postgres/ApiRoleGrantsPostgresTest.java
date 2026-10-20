@@ -70,7 +70,7 @@ class ApiRoleGrantsPostgresTest {
                       and table_name <> 'flyway_schema_history'
                     """)).as("앱 테이블에 남은 API 역할 권한").isEmpty();
             assertThat(query(statement, """
-                    select defaclobjtype || ' ' || defaclacl::text from pg_default_acl
+                    select defaclobjtype::text || ' ' || defaclacl::text from pg_default_acl
                     where defaclacl::text like '%anon=%' or defaclacl::text like '%authenticated=%'
                     """)).as("API 역할에 남은 기본 권한").isEmpty();
 

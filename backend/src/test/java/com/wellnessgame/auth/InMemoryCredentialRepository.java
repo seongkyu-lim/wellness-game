@@ -15,7 +15,6 @@ final class InMemoryCredentialRepository {
 
     static UserCredentialRepository create(Map<String, UserCredential> store) {
         UserCredentialRepository repository = mock(UserCredentialRepository.class);
-        when(repository.existsByUsername(anyString())).thenAnswer(inv -> store.containsKey(inv.getArgument(0)));
         when(repository.existsByUsernameIgnoreCase(anyString())).thenAnswer(inv -> store.keySet().stream()
                 .anyMatch(username -> username.equalsIgnoreCase(inv.getArgument(0))));
         when(repository.findByUsername(anyString()))

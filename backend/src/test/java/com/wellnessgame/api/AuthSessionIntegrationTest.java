@@ -49,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestClockConfig.class)
 class AuthSessionIntegrationTest {
     private static final long REFRESH_TTL_SECONDS = Duration.ofDays(30).toSeconds();
-    private static final Duration GRACE = Duration.ofSeconds(10);
+    private static final Duration GRACE = Duration.ofSeconds(30);
 
     @Autowired
     private MockMvc mockMvc;
@@ -190,7 +190,7 @@ class AuthSessionIntegrationTest {
     }
 
     /**
-     * #103 이 기기 로그아웃은 그 사용자의 조회 전용(Watch) 액세스 토큰도 무효로 만든다. 전체 권한 액세스 토큰은 짧은 수명에 맡기고,
+     * #103 앱(전체 권한) family 의 이 기기 로그아웃은 그 사용자의 조회 전용(Watch) 액세스 토큰도 무효로 만든다. 전체 권한 액세스 토큰은 짧은 수명에 맡기고,
      * 로그아웃 뒤 새로 발급한 조회 토큰은 쓸 수 있다.
      */
     @Test
@@ -203,16 +203,21 @@ class AuthSessionIntegrationTest {
         clock.setInstant(TestClockConfig.DEFAULT_NOW.plusSeconds(1));
         logout(session.path("refreshToken").asText()).andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/characters/me").with(bearerToken(watchToken)))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.message", is("로그인이 해제되었습니다. 다시 로그인해 주세요.")));
-        for (String stillValid : new String[]{fullAccess, otherDevice, watchToken(otherDevice)}) {
+        // #103 조회 기준은 경계 초도 거부한다: 로그아웃과 같은 초에 받은 Watch 토큰도 무효다.
+        String sameSecondWatch = watchToken(otherDevice);
+        for (String revoked : new String[]{watchToken, sameSecondWatch}) {
+            mockMvc.perform(get("/api/characters/me").with(bearerToken(revoked)))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.message", is("로그인이 해제되었습니다. 다시 로그인해 주세요.")));
+        }
+        clock.setInstant(TestClockConfig.DEFAULT_NOW.plusSeconds(2));
+        String laterWatch = watchToken(otherDevice);
+        for (String stillValid : new String[]{fullAccess, otherDevice, laterWatch}) {
             mockMvc.perform(get("/api/characters/me").with(bearerToken(stillValid)))
                     .andExpect(status().isNotFound());
         }
         // 없는 토큰 로그아웃은 아무것도 무효로 만들지 않는다.
-        String laterWatch = watchToken(otherDevice);
-        clock.setInstant(TestClockConfig.DEFAULT_NOW.plusSeconds(2));
+        clock.setInstant(TestClockConfig.DEFAULT_NOW.plusSeconds(3));
         logout("does-not-exist").andExpect(status().isNoContent());
         mockMvc.perform(get("/api/characters/me").with(bearerToken(laterWatch)))
                 .andExpect(status().isNotFound());

@@ -11,6 +11,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -77,11 +78,7 @@ public class RefreshTokenService {
     @Transactional(noRollbackFor = UnauthorizedException.class)
     public Rotation rotate(String rawToken) {
         Instant now = clock.instant();
-        RefreshToken current = rawToken == null || rawToken.isBlank() ? null
-                : repository.findForUpdateByTokenHash(Sha256.hex(rawToken.trim())).orElse(null);
-        if (current == null) {
-            throw invalid();
-        }
+        RefreshToken current = lockFamilyOf(rawToken).orElseThrow(RefreshTokenService::invalid);
         if (current.getRevokedAt() != null) {
             return rotateRevoked(current, now);
         }
@@ -105,7 +102,7 @@ public class RefreshTokenService {
         if (!repository.existsByFamilyIdAndRevokedAtIsNullAndExpiresAtAfter(token.getFamilyId(), now)) {
             throw invalid(); // 유예 구간 안이지만 family 가 이미 로그아웃됨
         }
-        // 행 잠금을 잡은 채 기록하므로 같은 토큰의 동시 재사용도 한 번만 이 경로를 지난다.
+        // family 잠금을 잡은 채 기록하므로 같은 토큰의 동시 재사용도 한 번만 이 경로를 지난다.
         token.markGraceReissued();
         Created sibling = create(token.getUserId(), token.getFamilyId(), token.getFamilyCreatedAt(), now,
                 token.getScope());
@@ -114,18 +111,31 @@ public class RefreshTokenService {
     }
 
     /**
-     * 로그아웃(토큰 소유가 곧 권한): 그 토큰의 family 를 폐기하고, 그 사용자의 조회 전용(Watch·웹) 액세스 토큰도 무효로 만든다
-     * (#103). 전체 권한 액세스 토큰은 짧은 수명에 맡긴다. 없는 토큰이면 아무것도 하지 않는다.
+     * 로그아웃(토큰 소유가 곧 권한): 그 토큰의 family 를 폐기한다. 없는 토큰이면 아무것도 하지 않는다.
+     * 앱(전체 권한) family 의 로그아웃이면 그 사용자의 조회 전용(Watch) 액세스 토큰도 무효로 만든다(#103). 웹(조회 전용)
+     * family 의 로그아웃은 Watch 를 끊지 않는다. 전체 권한 액세스 토큰은 짧은 수명에 맡긴다.
+     * family 잠금을 먼저 잡아 진행 중인 회전과 직렬화한다.
      */
     @Transactional
     public void revokeFamily(String rawToken) {
-        if (rawToken == null || rawToken.isBlank()) {
-            return;
-        }
-        repository.findByTokenHash(Sha256.hex(rawToken.trim())).ifPresent(token -> {
+        lockFamilyOf(rawToken).ifPresent(token -> {
             repository.revokeFamily(token.getFamilyId(), clock.instant());
-            tokenValidityService.revokeReadTokens(token.getUserId());
+            if (token.getScope() == TokenScope.FULL) {
+                tokenValidityService.revokeReadTokens(token.getUserId());
+            }
         });
+    }
+
+    /** 토큰의 family 를 잠그고, 잠금 뒤 읽은 그 토큰 행. 없는 토큰이면 빈 값. */
+    private Optional<RefreshToken> lockFamilyOf(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return Optional.empty();
+        }
+        String hash = Sha256.hex(rawToken.trim());
+        return repository.findFamilyIdByTokenHash(hash)
+                .flatMap(familyId -> repository.lockFamily(familyId).stream()
+                        .filter(token -> token.getTokenHash().equals(hash))
+                        .findFirst());
     }
 
     /** 모든 기기 로그아웃: 리프레시 토큰을 모두 폐기하고 이미 발급된 액세스 토큰도 무효로 만든다. */

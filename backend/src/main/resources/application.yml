@@ -82,7 +82,7 @@ auth:
     absolute-ttl: ${AUTH_REFRESH_ABSOLUTE_TTL:90d}
     # 회전된 지 이 시간 안의 토큰이 다시 오면(응답 유실·동시 요청) 재사용으로 보지 않고 형제 토큰을 준다.
     # 토큰 하나당 유예 재발급은 한 번만이다(두 번째는 재사용 공격으로 보고 family 를 폐기, #103).
-    reuse-grace: ${AUTH_REFRESH_REUSE_GRACE:10s}
+    reuse-grace: ${AUTH_REFRESH_REUSE_GRACE:30s}
     # 폐기된 행을 재사용 감지용으로 남겨 두는 기간. 만료 행과 함께 정리 작업이 지운다.
     revoked-retention: ${AUTH_REFRESH_REVOKED_RETENTION:7d}
     # 웹 조회 전용 로그인(scope=read, #105) family 의 유휴·절대 수명. 위 ttl·absolute-ttl 보다 짧게 둔다.
@@ -117,9 +117,11 @@ oauth:
     token-uri: https://oauth2.googleapis.com/token
     profile-uri: https://openidconnect.googleapis.com/v1/userinfo
   # iOS 구글 로그인 ID 토큰 검증(POST /api/auth/google/native). Google JWKS 로 서버에서 직접 검증한다(#55).
-  # aud·azp 는 아래 client-ids(iOS) 와 oauth.google.client-id(웹) 중 하나여야 한다.
+  # aud·azp 는 아래 client-ids 중 하나여야 한다(웹 로그인 클라이언트 ID 는 허용하지 않음).
   google-native:
-    client-ids: ${OAUTH_GOOGLE_IOS_CLIENT_ID:}
+    # 허용 aud·azp 전체(쉼표 구분): iOS 클라이언트 ID, Android 클라이언트 ID, Android 용 전용 웹 유형 서버 클라이언트 ID.
+    # 웹 로그인 클라이언트 ID(OAUTH_GOOGLE_CLIENT_ID)는 넣지 않는다(웹 XSS 로 받은 ID 토큰이 전체 권한을 얻지 못하게).
+    client-ids: ${OAUTH_GOOGLE_NATIVE_CLIENT_IDS:${OAUTH_GOOGLE_IOS_CLIENT_ID:}}
     jwks-uri: https://www.googleapis.com/oauth2/v3/certs
     jwks-cache-ttl: 1h
     # JWKS 조회가 계속 실패할 때 마지막으로 받은 키를 쓰는 최대 기간(마지막 조회 기준). 넘으면 503.

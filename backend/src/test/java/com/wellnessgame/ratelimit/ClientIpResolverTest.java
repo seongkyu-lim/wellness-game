@@ -21,11 +21,19 @@ class ClientIpResolverTest {
     }
 
     @Test
-    void usesLastValueOfLastHeaderLine() {
+    void multipleHeaderLinesShareOneFixedKeyInsteadOfTrustingAnyLine() {
         MockHttpServletRequest request = request("198.51.100.1, 198.51.100.2");
         request.addHeader("X-Forwarded-For", "203.0.113.1, 203.0.113.9");
 
-        assertThat(ClientIpResolver.resolve(request, true)).isEqualTo("203.0.113.9");
+        for (int hops = 0; hops < 3; hops++) {
+            assertThat(ClientIpResolver.resolve(request, true, hops)).isEqualTo(ClientIpResolver.MULTIPLE_HEADER_KEY);
+        }
+        // 빈 줄이 하나 섞여도 여러 줄이다(공격자가 줄 구성을 바꿔 값을 고르지 못하게).
+        MockHttpServletRequest withBlank = request(" ");
+        withBlank.addHeader("X-Forwarded-For", "203.0.113.1");
+        assertThat(ClientIpResolver.resolve(withBlank, true, 0)).isEqualTo(ClientIpResolver.MULTIPLE_HEADER_KEY);
+        // 헤더를 믿지 않으면 연결 주소다.
+        assertThat(ClientIpResolver.resolve(request, false)).isEqualTo(REMOTE);
     }
 
     @Test
@@ -82,8 +90,7 @@ class ClientIpResolverTest {
     @Test
     void hopsSkipsThatManyRightmostTrustedProxyEntries() {
         // 클라이언트 → CDN(198.51.100.9 를 덧붙임) → Render(CDN 주소 203.0.113.50 을 덧붙임)
-        MockHttpServletRequest request = request("203.0.113.7, 198.51.100.9");
-        request.addHeader("X-Forwarded-For", "203.0.113.50");
+        MockHttpServletRequest request = request("203.0.113.7, 198.51.100.9, 203.0.113.50");
 
         assertThat(ClientIpResolver.resolve(request, true, 0)).isEqualTo("203.0.113.50");
         assertThat(ClientIpResolver.resolve(request, true, 1)).isEqualTo("198.51.100.9");
@@ -114,16 +121,6 @@ class ClientIpResolverTest {
     }
 
     @Test
-    void blankHeaderLinesAreSkippedWhenBuildingChain() {
-        MockHttpServletRequest request = request("203.0.113.7");
-        request.addHeader("X-Forwarded-For", " ");
-        request.addHeader("X-Forwarded-For", "198.51.100.9");
-
-        assertThat(ClientIpResolver.forwardedChain(request)).containsExactly("203.0.113.7", "198.51.100.9");
-        assertThat(ClientIpResolver.resolve(request, true, 1)).isEqualTo("203.0.113.7");
-    }
-
-    @Test
     void instanceUsesConfiguredHops() {
         ClientIpResolver resolver = new ClientIpResolver(properties(true, 1, false));
         assertThat(resolver.resolve(request("203.0.113.7, 198.51.100.9"))).isEqualTo("203.0.113.7");
@@ -141,12 +138,12 @@ class ClientIpResolverTest {
     void logsForwardedChainAtMostOncePerInterval(CapturedOutput output) {
         ClientIpResolver resolver = new ClientIpResolver(properties(true, 0, true));
         for (int i = 0; i < 5; i++) {
-            resolver.resolve(request("198.51.100.1, 203.0.113.80\r\nINJECTED"));
+            resolver.resolve(request("198.51.100.1, 203.0.113.80\r\nINJECTED\u2028X\u0085Y\u2029Z"));
         }
 
         String logged = output.getOut() + output.getErr();
         assertThat(logged.split("X-Forwarded-For 보정용", -1)).hasSize(2);
-        assertThat(logged).contains("remoteAddr=" + REMOTE).contains("198.51.100.1, 203.0.113.80??INJECTED");
+        assertThat(logged).contains("remoteAddr=" + REMOTE).contains("198.51.100.1, 203.0.113.80??INJECTED?X?Y?Z");
     }
 
     private static RateLimitProperties properties(boolean trust, int hops, boolean logChain) {
