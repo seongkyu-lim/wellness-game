@@ -4,14 +4,23 @@ import com.wellnessgame.error.BadRequestException;
 import com.wellnessgame.i18n.Messages;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * 아이디·비밀번호 가입과 로그인.
+ *
+ * <p>아이디는 앞뒤 공백을 지우고 소문자로 맞춰 저장·조회한다(#106). 그 전에 대소문자를 섞어 가입한 계정도 로그인되도록
+ * 정확히 일치하는 행이 없으면 대소문자 무시 조회로 한 번 더 찾는다(여러 개면 입력과 정확히 같은 아이디만 인정).
+ */
 @Service
 public class PasswordAuthService {
     private final UserCredentialRepository repository;
@@ -44,11 +53,15 @@ public class PasswordAuthService {
         this.dummyPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
+    /**
+     * 가입. 같은 아이디(대소문자 무시)가 있으면 username-taken 400 이다. 확인과 저장 사이에 같은 아이디로 동시에 가입하면
+     * 유일 제약 위반(DataIntegrityViolationException)이 나는데, 이것도 같은 응답으로 바꾼다.
+     */
     @Transactional
     public PasswordAuthResult signUp(String username, String rawPassword, String displayName) {
-        String normalizedUsername = username == null ? "" : username.trim();
-        if (repository.existsByUsername(normalizedUsername)) {
-            throw new BadRequestException(Messages.get("auth.username-taken"));
+        String normalizedUsername = normalizeUsername(username);
+        if (repository.existsByUsernameIgnoreCase(normalizedUsername)) {
+            throw usernameTaken();
         }
 
         String resolvedDisplayName = displayName == null || displayName.isBlank()
@@ -60,7 +73,13 @@ public class PasswordAuthService {
                 UUID.randomUUID().toString(),
                 resolvedDisplayName
         );
-        UserCredential saved = repository.save(credential);
+        UserCredential saved;
+        try {
+            // 커밋 때가 아니라 여기서 제약 위반이 나도록 바로 flush 한다.
+            saved = repository.saveAndFlush(credential);
+        } catch (DataIntegrityViolationException e) {
+            throw usernameTaken();
+        }
         return new PasswordAuthResult(saved.getUserIdentifier(), saved.getDisplayName());
     }
 
@@ -79,13 +98,14 @@ public class PasswordAuthService {
      */
     @Transactional(readOnly = true)
     public PasswordAuthResult signIn(String username, String rawPassword, String clientIp) {
-        String normalizedUsername = username == null ? "" : username.trim();
+        String trimmedUsername = username == null ? "" : username.trim();
+        String normalizedUsername = normalizeUsername(username);
         if (!attemptGuard.tryReserve(normalizedUsername, clientIp)) {
             passwordEncoder.matches(rawPassword, dummyPasswordHash);
             throw invalidCredentials();
         }
 
-        Optional<UserCredential> found = repository.findByUsername(normalizedUsername);
+        Optional<UserCredential> found = findForLogin(normalizedUsername, trimmedUsername);
         String hash = found.map(UserCredential::getPasswordHash).orElse(dummyPasswordHash);
         boolean matches = passwordEncoder.matches(rawPassword, hash);
         if (found.isEmpty() || !matches) {
@@ -95,6 +115,30 @@ public class PasswordAuthService {
         attemptGuard.recordSuccess(normalizedUsername, clientIp);
         UserCredential credential = found.get();
         return new PasswordAuthResult(credential.getUserIdentifier(), credential.getDisplayName());
+    }
+
+    /** 정규화한 아이디 → 입력 그대로 → 대소문자 무시(유일할 때만) 순서로 찾는다. */
+    private Optional<UserCredential> findForLogin(String normalizedUsername, String trimmedUsername) {
+        Optional<UserCredential> exact = repository.findByUsername(normalizedUsername);
+        if (exact.isPresent()) {
+            return exact;
+        }
+        if (!trimmedUsername.equals(normalizedUsername)) {
+            Optional<UserCredential> asTyped = repository.findByUsername(trimmedUsername);
+            if (asTyped.isPresent()) {
+                return asTyped;
+            }
+        }
+        List<UserCredential> legacy = repository.findByUsernameIgnoreCase(normalizedUsername);
+        return legacy.size() == 1 ? Optional.of(legacy.get(0)) : Optional.empty();
+    }
+
+    static String normalizeUsername(String username) {
+        return username == null ? "" : username.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static BadRequestException usernameTaken() {
+        return new BadRequestException(Messages.get("auth.username-taken"));
     }
 
     private static BadRequestException invalidCredentials() {
