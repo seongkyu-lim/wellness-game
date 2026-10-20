@@ -38,7 +38,7 @@ export async function postSocialLogin(
   const res = await fetch(`${BASE_URL}/api/auth/${encodeURIComponent(provider)}`, {
     method: 'POST',
     headers: { ...languageHeaders(), ...JSON_HEADERS },
-    body: JSON.stringify(codeVerifier ? { code, redirectUri, codeVerifier } : { code, redirectUri }),
+    body: JSON.stringify({ code, redirectUri, codeVerifier: codeVerifier || undefined }),
   })
   return readTokenResponse(res)
 }

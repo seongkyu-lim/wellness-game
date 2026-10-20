@@ -53,15 +53,15 @@ export async function startLogin(provider: Provider): Promise<void> {
  */
 export async function buildLoginUrl(provider: Provider): Promise<string> {
   const state = `${provider}:${crypto.randomUUID()}`
-  let codeChallenge: string | undefined
-  if (PKCE_PROVIDERS.has(provider)) {
-    const verifier = createCodeVerifier()
+  const verifier = PKCE_PROVIDERS.has(provider) ? createCodeVerifier() : undefined
+  const codeChallenge = verifier ? await codeChallengeS256(verifier) : undefined
+  // await 뒤에 state·verifier를 한꺼번에 기록한다. 로그인 시작이 겹쳐도 짝이 어긋난 쌍이 남지 않는다.
+  sessionStorage.setItem(STATE_KEY, state)
+  if (verifier) {
     sessionStorage.setItem(VERIFIER_KEY, verifier)
-    codeChallenge = await codeChallengeS256(verifier)
   } else {
     sessionStorage.removeItem(VERIFIER_KEY)
   }
-  sessionStorage.setItem(STATE_KEY, state)
   return authorizeUrl(provider, state, codeChallenge)
 }
 
@@ -78,7 +78,7 @@ export async function completeLoginFromRedirect(): Promise<Session | null> {
   }
 
   const savedState = sessionStorage.getItem(STATE_KEY)
-  const codeVerifier = sessionStorage.getItem(VERIFIER_KEY) ?? undefined
+  const codeVerifier = sessionStorage.getItem(VERIFIER_KEY) || undefined
   // state·verifier는 한 번만 쓴다. 검증 실패해도 남기지 않는다.
   sessionStorage.removeItem(STATE_KEY)
   sessionStorage.removeItem(VERIFIER_KEY)
