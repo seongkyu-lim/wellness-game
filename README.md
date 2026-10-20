@@ -163,7 +163,7 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 | `OAUTH_GOOGLE_CLIENT_ID`, `OAUTH_GOOGLE_CLIENT_SECRET` | `POST /api/auth/google`(웹), google/native 허용 `aud`·`azp` | 웹 OAuth 클라이언트 |
 | `OAUTH_KAKAO_NATIVE_APP_ID` | `POST /api/auth/kakao/native` | Kakao Developers의 **숫자 앱 ID**(`access_token_info`의 `app_id`) |
 | `OAUTH_KAKAO_CLIENT_ID`, `OAUTH_KAKAO_CLIENT_SECRET` | `POST /api/auth/kakao`(웹) | REST API 키와 client secret |
-| `OAUTH_NAVER_CLIENT_ID`, `OAUTH_NAVER_CLIENT_SECRET` | `POST /api/auth/naver`(웹), `POST /api/auth/naver/native` | 네이버 애플리케이션의 클라이언트 아이디·시크릿(iOS 앱과 같은 애플리케이션) |
+| `OAUTH_NAVER_CLIENT_ID`, `OAUTH_NAVER_CLIENT_SECRET` | `POST /api/auth/naver`(웹), `POST /api/auth/naver/native` | 네이버 애플리케이션의 클라이언트 아이디·시크릿(iOS 앱과 같은 애플리케이션. 앱 시크릿은 추출 가능하므로 [docs/naver-oauth-apps.md](docs/naver-oauth-apps.md) 참고) |
 | `OAUTH_APPLE_BUNDLE_ID` | `POST /api/auth/apple/native` | 앱 Bundle Identifier(identity token의 `aud`) |
 | `OAUTH_APPLE_REQUIRE_NONCE` | `POST /api/auth/apple/native` | 기본 `false`. `true`면 `nonce` 없는 요청을 401로 거부(nonce를 보내는 앱 배포 후 켬) |
 
@@ -187,7 +187,7 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 | `POST /api/auth/watch-token` | Bearer(전체 권한) | 없음 | `200 {accessToken, tokenType, expiresIn}`(`scope: "read"`, 7일) |
 
 - **리프레시 토큰:** 32바이트 무작위 값의 base64url(43자)입니다. 서버 DB(`refresh_token`, Flyway V3)에는 SHA-256 hex만 저장합니다. 로그인마다 새 *family*가 생기고, `/refresh`가 성공하면 기존 토큰을 폐기(`revoked_at`, `replaced_by`)하고 같은 family로 새 토큰과 새 액세스 토큰을 줍니다. 새 토큰 만료는 `min(지금 + 30일, family 생성 + 90일)`이라 회전을 계속해도 한 로그인은 90일(`auth.refresh.absolute-ttl`)을 넘지 못합니다(`refreshExpiresIn`이 30일보다 짧아질 수 있음).
-- **회전 유예 구간:** 회전된 지 30초(`auth.refresh.reuse-grace`) 안의 토큰이 다시 오면(응답 유실 후 재시도, 같은 토큰의 동시 요청) 같은 family에 *형제 토큰*을 하나 더 발급해 `200`으로 응답합니다. 먼저 발급된 후계 토큰도 그대로 유효합니다. 같은 토큰의 동시 회전은 행 잠금으로 직렬화됩니다. 그래도 클라이언트는 refresh를 한 번에 하나만 보내는 것이 좋습니다.
+- **회전 유예 구간:** 회전된 지 10초(`auth.refresh.reuse-grace`) 안의 토큰이 다시 오면(토큰당 1회만, 두 번째는 재사용 공격으로 보고 family 폐기)(응답 유실 후 재시도, 같은 토큰의 동시 요청) 같은 family에 *형제 토큰*을 하나 더 발급해 `200`으로 응답합니다. 먼저 발급된 후계 토큰도 그대로 유효합니다. 같은 토큰의 동시 회전은 행 잠금으로 직렬화됩니다. 그래도 클라이언트는 refresh를 한 번에 하나만 보내는 것이 좋습니다.
 - **재사용 감지:** 유예 구간이 지난 *회전된* 토큰이 다시 오면 탈취로 보고 그 family 전체를 폐기하고, 그 사용자에게 이미 발급된 액세스 토큰도 무효로 만든 뒤 `401`입니다(다른 기기는 자기 리프레시로 다시 받으면 됨). 로그아웃으로 폐기된 토큰은 그냥 `401`입니다.
 - **액세스 토큰 무효화 기준:** 사용자별 `tokens_valid_after`(`user_auth_state`, V3)보다 이전에 발급된(`iat`) 액세스 토큰은 scope와 무관하게(기존 형식 토큰 포함) `401`입니다. `logout-all`과 재사용 감지 때 갱신합니다. `iat`이 초 단위라 같은 초에 발급된 토큰은 통과합니다. 서버는 사용자별 값을 30초 메모리 캐시하므로, 인스턴스가 여러 대면 다른 인스턴스는 최대 30초 늦게 반영합니다.
 - `/refresh`·`/logout`은 공개 경로라 `/api/auth/**` IP 레이트 리밋이 적용됩니다. `logout`은 액세스 토큰이 만료된 뒤에도 할 수 있고, 토큰이 유효한지 드러내지 않도록 항상 `204`입니다. `logout-all`·`watch-token`은 Bearer가 필요합니다. 이 기기 로그아웃 뒤에도 이미 발급된 액세스 토큰은 만료(최대 1시간)까지 유효합니다.
@@ -206,9 +206,12 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 | 설정 키 (환경변수) | 기본값 | 설명 |
 |---|---|---|
 | `app.rate-limit.sync-per-minute` (`APP_RATE_LIMIT_SYNC_PER_MINUTE`) | `30` | `POST /api/health-activities/sync`, 인증 주체(userId)별 분당 한도 |
-| `app.rate-limit.auth-per-minute` (`APP_RATE_LIMIT_AUTH_PER_MINUTE`) | `30` | `/api/auth/**` 전체(소셜 로그인·`/api/auth/{provider}` 포함), 클라이언트 IP별 분당 한도 |
+| `app.rate-limit.auth-per-minute` (`APP_RATE_LIMIT_AUTH_PER_MINUTE`) | `30` | `/api/auth/**`(소셜 로그인·`/api/auth/{provider}` 포함, `/api/auth/refresh` 제외), 클라이언트 IP별 분당 한도 |
+| `app.rate-limit.refresh-per-minute` (`APP_RATE_LIMIT_REFRESH_PER_MINUTE`) | `120` | `/api/auth/refresh` 전용 IP별 분당 한도. 토큰 소유가 곧 권한이라 로그인 한도와 분리(#102) |
 | `app.rate-limit.login-per-minute` (`APP_RATE_LIMIT_LOGIN_PER_MINUTE`) | `10` | `/api/auth/login`·`/api/auth/signup`, IP별 분당 한도(위 한도와 함께 적용) |
-| `app.rate-limit.trust-forwarded-header` (`APP_RATE_LIMIT_TRUST_FORWARDED_HEADER`) | `false` | `true`면 `X-Forwarded-For`의 **마지막 줄의 마지막 값**을 클라이언트 IP로 사용. 신뢰하는 리버스 프록시 한 단 뒤에서만 켤 것 |
+| `app.rate-limit.trust-forwarded-header` (`APP_RATE_LIMIT_TRUST_FORWARDED_HEADER`) | `false` | `true`면 `X-Forwarded-For`(여러 줄은 이어 붙임)에서 오른쪽부터 `trusted-proxy-hops`개를 건너뛴 값을 클라이언트 IP로 사용. 신뢰하는 리버스 프록시 뒤에서만 켤 것 |
+| `app.rate-limit.trusted-proxy-hops` (`APP_RATE_LIMIT_TRUSTED_PROXY_HOPS`) | `0` | 오른쪽에서 건너뛸 신뢰 프록시 항목 수. 0이면 마지막 값. 그 위치가 없거나 IP가 아니면 연결 주소(더 왼쪽 값은 위조 가능해 쓰지 않음) |
+| `app.rate-limit.log-forwarded-chain` (`APP_RATE_LIMIT_LOG_FORWARDED_CHAIN`) | `false` | 연결 주소와 `X-Forwarded-For` 원문을 10초에 한 번 INFO로 기록. 배포 후 hops 보정용으로만 잠시 켬 |
 | `app.rate-limit.max-keys` (`APP_RATE_LIMIT_MAX_KEYS`) | `100000` | 레이트 리밋 카운터·로그인 실패 기록이 각각 메모리에 두는 최대 키 수. 넘으면 만료 키를 먼저 지우고, 그래도 가득 차면 가장 오래된 항목을 내보냄 |
 | `app.auth.max-failed-logins` (`APP_AUTH_MAX_FAILED_LOGINS`) | `5` | 같은 (아이디, IP) 연속 로그인 실패 허용 횟수 |
 | `app.auth.max-failed-logins-per-username` (`APP_AUTH_MAX_FAILED_LOGINS_PER_USERNAME`) | `50` | IP와 무관한 아이디 전체 실패 허용 횟수(분산 공격 방어) |
@@ -217,7 +220,8 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 | `auth.jwt.watch-ttl` (`AUTH_WATCH_TOKEN_TTL`) | `7d` | Watch 조회 토큰 유효 기간 |
 | `auth.refresh.ttl` (`AUTH_REFRESH_TTL`) | `30d` | 리프레시 토큰 유효 기간(응답 `refreshExpiresIn`), 회전마다 새로 시작 |
 | `auth.refresh.absolute-ttl` (`AUTH_REFRESH_ABSOLUTE_TTL`) | `90d` | 한 로그인(family)의 절대 수명. 회전해도 넘지 못함 |
-| `auth.refresh.reuse-grace` (`AUTH_REFRESH_REUSE_GRACE`) | `30s` | 회전된 토큰이 다시 와도 재사용으로 보지 않는 유예 구간 |
+| `auth.refresh.reuse-grace` (`AUTH_REFRESH_REUSE_GRACE`) | `10s` | 회전된 토큰이 다시 와도 재사용으로 보지 않는 유예 구간. 토큰당 유예 재발급은 1회만(#103) |
+| `auth.refresh.read-ttl`, `auth.refresh.read-absolute-ttl` | `7d`, `30d` | 웹(조회 전용 scope) 로그인 family의 리프레시 유효 기간·절대 수명(#105) |
 | `oauth.apple.jwks-stale-max`, `oauth.google-native.jwks-stale-max` | `24h` | JWKS 조회 실패 시 마지막으로 받은 키를 쓰는 최대 기간. 넘으면 503 |
 | `auth.refresh.revoked-retention` (`AUTH_REFRESH_REVOKED_RETENTION`) | `7d` | 폐기된 리프레시 행을 재사용 감지용으로 남겨 두는 기간 |
 | `auth.refresh.cleanup-cron` (`AUTH_REFRESH_CLEANUP_CRON`) | `0 0 4 * * *` | 만료·폐기 행 정리 작업 시각(`app.timezone` 기준) |
@@ -239,7 +243,7 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 #### 배포 체크리스트
 
 - [ ] **리버스 프록시·로드 밸런서 뒤**에 배포한다면 `APP_RATE_LIMIT_TRUST_FORWARDED_HEADER=true`로 설정합니다. 끄면 서버가 보는 연결 주소가 모두 프록시 IP라서 **모든 사용자가 IP 하나를 공유**해 인증 한도(분당 30·10회)와 (아이디, IP) 잠금이 사실상 전체 사용자에게 함께 걸립니다.
-- [ ] 켜기 전에 프록시가 **항상** `X-Forwarded-For`에 클라이언트 주소를 덧붙이는지(클라이언트가 보낸 값을 그대로 넘기기만 하지 않는지) 확인합니다. 서버는 마지막 줄의 마지막 값만 믿으므로 프록시가 덧붙이지 않으면 클라이언트가 IP를 위조할 수 있습니다. 프록시가 여러 단(CDN + LB 등)이면 마지막 값이 앞단 프록시 주소가 되므로 프록시 구성을 바꾸거나 이 구현을 확장해야 합니다.
+- [ ] 켜기 전에 프록시가 **항상** `X-Forwarded-For`에 클라이언트 주소를 덧붙이는지(클라이언트가 보낸 값을 그대로 넘기기만 하지 않는지) 확인합니다. 서버는 오른쪽에서 `trusted-proxy-hops`개를 건너뛴 값만 믿으므로 프록시가 덧붙이지 않으면 클라이언트가 IP를 위조할 수 있습니다. 프록시가 여러 단(CDN + LB 등)이면 `APP_RATE_LIMIT_LOG_FORWARDED_CHAIN=true`로 체인 구조를 확인해 hops를 맞춥니다.
 - [ ] 프록시를 거치지 않고 직접 노출한다면 기본값(`false`)을 유지합니다. 켜면 누구나 헤더로 IP를 바꿔 한도를 피할 수 있습니다.
 - [ ] 모바일 통신사 CGNAT·회사·학교 NAT에서는 많은 사용자가 같은 공인 IP를 쓸 수 있습니다. 같은 IP에서 정상 로그인이 몰려 `429`가 보이면 `APP_RATE_LIMIT_AUTH_PER_MINUTE`·`APP_RATE_LIMIT_LOGIN_PER_MINUTE`를 올립니다.
 - [ ] 인스턴스를 2대 이상 띄우면 한도가 대수만큼 느슨해지므로 Redis 기반 구현을 먼저 검토합니다.
@@ -472,8 +476,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 > 운영은 starter 이상을 쓰고, free는 출시 전 테스트에만 씁니다.
 
 > **레이트 리밋과 프록시:** Render는 프록시 뒤에서 요청을 전달합니다. `APP_RATE_LIMIT_TRUST_FORWARDED_HEADER`가 기본값(`false`)이면
-> 모든 사용자가 프록시 IP 하나로 세어져 인증 한도(분당 30·10회)를 함께 씁니다. 배포 후 `X-Forwarded-For`의 마지막 값이 실제 클라이언트 IP인지
-> 확인하고 켜세요([배포 체크리스트](#배포-체크리스트)).
+> 모든 사용자가 프록시 IP 하나로 세어져 인증 한도(분당 30·10회)를 함께 씁니다. `render.yaml`은 헤더 신뢰(hops 0)와 체인 로그를 켜 둡니다.
+> 배포 직후 로그로 실제 클라이언트 IP 위치를 확인해 hops를 맞추고 체인 로그를 끄세요([배포 체크리스트](#배포-체크리스트)).
 
 ### 3. Vercel 프로젝트·`VITE_API_BASE_URL`
 
