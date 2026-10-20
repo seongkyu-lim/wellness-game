@@ -2,6 +2,7 @@ package com.wellnessgame.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wellnessgame.auth.AccessTokenPrincipal;
 import com.wellnessgame.auth.AppleNativeAuthService;
 import com.wellnessgame.auth.GoogleNativeAuthService;
 import com.wellnessgame.auth.JwtTokenService;
@@ -9,7 +10,9 @@ import com.wellnessgame.auth.KakaoNativeAuthService;
 import com.wellnessgame.auth.NaverNativeAuthService;
 import com.wellnessgame.auth.SocialAuthService;
 import com.wellnessgame.auth.SocialLoginResult;
+import com.wellnessgame.auth.TokenScope;
 import com.wellnessgame.auth.UnauthorizedException;
+import com.wellnessgame.auth.UserCredential;
 import com.wellnessgame.auth.UserCredentialRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,10 +20,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Duration;
+
 import static com.wellnessgame.support.TestAuth.bearer;
+import static com.wellnessgame.support.TestAuth.bearerToken;
 import static com.wellnessgame.support.TestRequests.fromIp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -32,6 +39,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -51,6 +59,9 @@ class AuthControllerTest {
 
     @Autowired
     private UserCredentialRepository credentialRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @MockitoSpyBean
     private SocialAuthService socialAuthService;
@@ -219,7 +230,7 @@ class AuthControllerTest {
     @Test
     void socialCodeExchangeReturnsAccessToken() throws Exception {
         doReturn(new SocialLoginResult("google:109876", "SK Lim"))
-                .when(socialAuthService).authenticate("google", "auth-code", "http://localhost:5173/");
+                .when(socialAuthService).authenticate("google", "auth-code", "http://localhost:5173/", null);
 
         JsonNode body = postJson("/api/auth/google", """
                 {"code": "auth-code", "redirectUri": "http://localhost:5173/"}
@@ -227,7 +238,7 @@ class AuthControllerTest {
 
         assertThat(body.path("userId").asText()).isEqualTo("google:109876");
         assertThat(body.path("displayName").asText()).isEqualTo("SK Lim");
-        assertTokenFields(body, "google:109876");
+        assertReadSessionFields(body, "google:109876");
     }
 
     @Test
@@ -293,7 +304,7 @@ class AuthControllerTest {
         assertThat(body.path("userId").asText()).isEqualTo("kakao:4242");
         assertThat(body.path("displayName").asText()).isEqualTo("카카오친구");
         assertTokenFields(body, "kakao:4242");
-        verify(socialAuthService, never()).authenticate(anyString(), any(), any());
+        verify(socialAuthService, never()).authenticate(anyString(), any(), any(), any());
     }
 
     @Test
@@ -307,7 +318,7 @@ class AuthControllerTest {
 
         assertThat(body.path("userId").asText()).isEqualTo("naver:nv-abc");
         assertTokenFields(body, "naver:nv-abc");
-        verify(socialAuthService, never()).authenticate(anyString(), any(), any());
+        verify(socialAuthService, never()).authenticate(anyString(), any(), any(), any());
     }
 
     @Test
@@ -339,13 +350,13 @@ class AuthControllerTest {
     @Test
     void codeExchangeStillRoutesSingleSegmentProvider() throws Exception {
         doReturn(new SocialLoginResult("kakao:4242", "카카오친구"))
-                .when(socialAuthService).authenticate("kakao", "auth-code", "http://localhost:5173/");
+                .when(socialAuthService).authenticate("kakao", "auth-code", "http://localhost:5173/", null);
 
         JsonNode body = postJson("/api/auth/kakao", """
                 {"code": "auth-code", "redirectUri": "http://localhost:5173/"}
                 """);
 
-        assertTokenFields(body, "kakao:4242");
+        assertReadSessionFields(body, "kakao:4242");
         verify(kakaoNativeAuthService, never()).authenticate(anyString());
     }
 
@@ -440,6 +451,154 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response);
+    }
+
+    /** #106 가입 검증: 닉네임 64자, 비밀번호 UTF-8 72바이트. */
+    @Test
+    void signUpRejectsTooLongDisplayNameAndPasswordOver72Utf8Bytes() throws Exception {
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\": \"long_name\", \"password\": \"password1\", \"displayName\": \""
+                                + "가".repeat(65) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", org.hamcrest.Matchers.containsString("닉네임은 64자 이하")));
+
+        // 25자지만 75바이트(한글 3바이트). 글자 수 제한(72자)은 통과하고 바이트 제한에 걸린다.
+        mockMvc.perform(post("/api/auth/signup")
+                        .header("Accept-Language", "en")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\": \"long_pw\", \"password\": \"" + "가".repeat(25) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", org.hamcrest.Matchers.containsString("at most 72 bytes")));
+
+        // 경계값: 정확히 64자 닉네임, 72바이트 비밀번호(한글 24자)는 통과한다.
+        postJson("/api/auth/signup", "{\"username\": \"edge_ok\", \"password\": \"" + "가".repeat(24)
+                + "\", \"displayName\": \"" + "a".repeat(64) + "\"}");
+    }
+
+    /** #106 아이디는 소문자로 저장하고, 대소문자와 무관하게 로그인된다. */
+    @Test
+    void usernameIsStoredLowercaseAndLoginIsCaseInsensitive() throws Exception {
+        JsonNode signedUp = postJson("/api/auth/signup", """
+                {"username": "Mixed_Case", "password": "password1"}
+                """);
+        assertThat(credentialRepository.findByUsername("mixed_case")).isPresent();
+        assertThat(signedUp.path("displayName").asText()).isEqualTo("mixed_case");
+
+        JsonNode login = postJson("/api/auth/login", """
+                {"username": "MIXED_case", "password": "password1"}
+                """);
+        assertThat(login.path("userId").asText()).isEqualTo(signedUp.path("userId").asText());
+
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\": \"mixed_CASE\", \"password\": \"password1\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("이미 사용 중인 아이디입니다.")));
+    }
+
+    /** 소문자 정규화 이전에 대소문자를 섞어 가입한 계정도 로그인되고, 같은 아이디로 새로 가입할 수 없다. */
+    @Test
+    void legacyMixedCaseAccountCanStillLogIn() throws Exception {
+        credentialRepository.save(new UserCredential("Legacy_User", passwordEncoder.encode("password1"),
+                "legacy-identifier", "Legacy"));
+
+        for (String typed : new String[]{"Legacy_User", "legacy_user", "LEGACY_USER"}) {
+            JsonNode login = postJson("/api/auth/login",
+                    "{\"username\": \"" + typed + "\", \"password\": \"password1\"}");
+            assertThat(login.path("userIdentifier").asText()).as(typed).isEqualTo("legacy-identifier");
+        }
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\": \"legacy_user\", \"password\": \"password1\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /** #105 웹 코드 교환: 조회 전용 세션이고, 회전해도 조회 전용으로만 다시 발급된다. */
+    @Test
+    void webCodeExchangeIssuesReadScopeSessionThatStaysReadOnlyAcrossRefresh() throws Exception {
+        doReturn(new SocialLoginResult("google:read-1", "Reader"))
+                .when(socialAuthService).authenticate("google", "auth-code", "http://localhost:5173/", null);
+        JsonNode login = postJson("/api/auth/google", """
+                {"code": "auth-code", "redirectUri": "http://localhost:5173/"}
+                """);
+        assertReadOnlyAccess(login.path("accessToken").asText());
+
+        JsonNode refreshed = postJson("/api/auth/refresh",
+                "{\"refreshToken\": \"" + login.path("refreshToken").asText() + "\"}");
+        assertThat(refreshed.path("refreshExpiresIn").asLong()).isEqualTo(Duration.ofDays(7).toSeconds());
+        assertReadOnlyAccess(refreshed.path("accessToken").asText());
+    }
+
+    /** #103 웹(조회 전용) family 로그아웃은 같은 사용자의 Watch 토큰을 끊지 않는다(앱 로그아웃만 끊음). */
+    @Test
+    void webLogoutDoesNotInvalidateWatchTokens() throws Exception {
+        doReturn(new SocialLoginResult("google:web-logout", "Web"))
+                .when(socialAuthService).authenticate("google", "auth-code", "http://localhost:5173/", null);
+        String watch = tokenService.issueReadOnly("google:web-logout").accessToken();
+        JsonNode web = postJson("/api/auth/google", """
+                {"code": "auth-code", "redirectUri": "http://localhost:5173/"}
+                """);
+
+        mockMvc.perform(post("/api/auth/logout").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\": \"" + web.path("refreshToken").asText() + "\"}"))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/characters/me").with(bearerToken(watch)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\": \"" + web.path("refreshToken").asText() + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /** 앱 로그인(아이디·네이티브)은 계속 전체 권한이다. */
+    @Test
+    void appLoginStillIssuesFullScope() throws Exception {
+        JsonNode body = postJson("/api/auth/signup", """
+                {"username": "full_scope_01", "password": "password1"}
+                """);
+        assertThat(tokenService.authenticate(body.path("accessToken").asText()).scope()).isEqualTo(TokenScope.FULL);
+    }
+
+    @Test
+    void webCodeExchangePassesValidCodeVerifierAndRejectsMalformedOne() throws Exception {
+        String verifier = "aZ09-._~".repeat(6); // 48자, RFC 7636 허용 문자만
+        doReturn(new SocialLoginResult("kakao:pkce", "PKCE"))
+                .when(socialAuthService).authenticate("kakao", "auth-code", "http://localhost:5173/", verifier);
+        postJson("/api/auth/kakao",
+                "{\"code\": \"auth-code\", \"redirectUri\": \"http://localhost:5173/\", \"codeVerifier\": \"" + verifier + "\"}");
+        verify(socialAuthService).authenticate("kakao", "auth-code", "http://localhost:5173/", verifier);
+
+        for (String bad : new String[]{"short", "a".repeat(129), "a".repeat(42) + "+", "a".repeat(43) + " "}) {
+            mockMvc.perform(post("/api/auth/kakao")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"code\": \"c\", \"redirectUri\": \"http://localhost:5173/\", \"codeVerifier\": \""
+                                    + bad + "\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message", org.hamcrest.Matchers.containsString("codeVerifier")));
+        }
+    }
+
+    private void assertReadOnlyAccess(String accessToken) throws Exception {
+        assertThat(tokenService.authenticate(accessToken).scope()).isEqualTo(TokenScope.READ);
+        mockMvc.perform(get("/api/characters/me").with(bearerToken(accessToken)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/health-activities/sync").with(bearerToken(accessToken))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/auth/watch-token").with(bearerToken(accessToken)))
+                .andExpect(status().isForbidden());
+    }
+
+    /** 웹 조회 전용 세션: 액세스 토큰 수명은 앱과 같고, 리프레시는 조회 전용 수명(7일)이다. */
+    private void assertReadSessionFields(JsonNode body, String expectedSubject) {
+        assertThat(body.path("tokenType").asText()).isEqualTo("Bearer");
+        assertThat(body.path("expiresIn").asLong()).isEqualTo(tokenService.ttl().toSeconds());
+        AccessTokenPrincipal principal = tokenService.authenticate(body.path("accessToken").asText());
+        assertThat(principal.userId()).isEqualTo(expectedSubject);
+        assertThat(principal.scope()).isEqualTo(TokenScope.READ);
+        assertThat(body.path("refreshToken").asText()).matches("[A-Za-z0-9_-]{43}");
+        assertThat(body.path("refreshExpiresIn").asLong()).isEqualTo(Duration.ofDays(7).toSeconds());
     }
 
     private void assertTokenFields(JsonNode body, String expectedSubject) {

@@ -130,7 +130,7 @@ class HealthActivitySyncServiceTest {
         for (String userId : userIds) {
             HealthActivitySyncResponse response = syncService.sync(new HealthActivitySyncRequest(
                     userId,
-                    LocalDate.of(2026, 6, 18),
+                    LocalDate.of(2026, 6, 17), // 서버 기준 오늘(미래 날짜 걸음 수는 반영하지 않음, #107)
                     List.of(steps(2_000))
             ));
 
@@ -249,7 +249,15 @@ class HealthActivitySyncServiceTest {
 
         assertThat(first.gainedXp()).isZero();
         assertThat(first.activityResults().get(0).duplicate()).isFalse();
-        assertThat(first.character().stats().discipline()).isEqualTo(1);
+        // #107: 스탯은 XP 가 지급된 항목에만 준다. 기본 DISCIPLINE 은 처음 XP 가 지급될 때로 미뤄진다.
+        assertThat(first.character().stats().discipline()).isZero();
+
+        HealthActivitySyncResponse later = syncSteps(3_000);
+        assertThat(later.gainedXp()).isEqualTo(15);
+        assertThat(later.character().stats().discipline()).isEqualTo(1);
+
+        HealthActivitySyncResponse goal = syncSteps(8_000);
+        assertThat(goal.character().stats().discipline()).isEqualTo(2); // 기본 재지급 없이 목표 +1
     }
 
     @Test

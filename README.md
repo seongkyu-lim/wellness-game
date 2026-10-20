@@ -140,7 +140,14 @@ cd backend
 - 빈 DB에 V1부터 순서대로 실행합니다. #87에서 운영 적용 전에 V1~V3를 PostgreSQL 문법으로 다시 썼습니다(MySQL 데이터 이전·baseline 없음).
 - 컬럼 타입은 Hibernate의 PostgreSQL 기본 매핑과 같습니다: UUID → `uuid`, Instant → `timestamp(6) with time zone`,
   BigDecimal → `numeric(38,2)`, 문자열 enum → `varchar(255)` + check 제약. H2 PostgreSQL 모드에서도 실행되도록 공통 문법만 씁니다.
-- 스키마를 바꿀 때는 기존 파일을 고치지 말고 `V5__설명.sql`처럼 새 버전을 추가하세요. 적용된 마이그레이션을 고치면 체크섬 검증에 실패합니다.
+- 스키마를 바꿀 때는 기존 파일을 고치지 말고 `V7__설명.sql`처럼 새 버전을 추가하세요. 적용된 마이그레이션을 고치면 체크섬 검증에 실패합니다.
+- V5(Java, #103·#105)는 `refresh_token.scope`·`grace_reissued`, `user_auth_state.read_tokens_valid_after`를 추가합니다. PostgreSQL에서는 `set local lock_timeout = '5s'`를 먼저 걸어 잠금을 오래 기다리지 않습니다(넘으면 실패·롤백 후 재배포). V5 이전에 만들어진 리프레시 family는 기본값 `'full'`이 되어 계속 전체 권한으로 회전합니다(출시 전이라 그대로 둠).
+- V6(Java, #104)는 Supabase 데이터 API 역할(`anon`, `authenticated`)이 있으면 마이그레이션 역할이 소유한 테이블·시퀀스·함수의 권한과 기본 권한을 걷어 냅니다.
+- **`flyway_schema_history`는 V4(RLS)·V6(권한 회수)에서 제외합니다.** 마이그레이션 중 Flyway가 이 테이블을 잡고 있어 ALTER/REVOKE가 교착될 수 있기 때문입니다. 새 Supabase DB에서는 첫 배포 뒤 SQL Editor에서 한 번 실행하거나, 데이터 API를 끕니다:
+  ```sql
+  alter table flyway_schema_history enable row level security;
+  revoke all on flyway_schema_history from anon, authenticated;
+  ```
 
 #### 최신 전체 스키마 (`backend/db/schema.sql`)
 
@@ -159,14 +166,20 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 
 | 환경변수 | 쓰는 엔드포인트 | 값 |
 |---|---|---|
-| `OAUTH_GOOGLE_IOS_CLIENT_ID` | `POST /api/auth/google/native` | iOS OAuth 클라이언트 ID(ID 토큰의 `aud`·`azp`) |
-| `OAUTH_GOOGLE_CLIENT_ID`, `OAUTH_GOOGLE_CLIENT_SECRET` | `POST /api/auth/google`(웹), google/native 허용 `aud`·`azp` | 웹 OAuth 클라이언트 |
+| `OAUTH_GOOGLE_NATIVE_CLIENT_IDS` | `POST /api/auth/google/native` | 허용 `aud`·`azp` 전체(쉼표 구분): iOS OAuth 클라이언트 ID, Android OAuth 클라이언트 ID, Android 전용 **웹 유형 서버 클라이언트** ID. 비우면 `OAUTH_GOOGLE_IOS_CLIENT_ID`(iOS 클라이언트 ID 하나)를 씁니다 |
+| `OAUTH_GOOGLE_CLIENT_ID`, `OAUTH_GOOGLE_CLIENT_SECRET` | `POST /api/auth/google`(웹 로그인 **전용**) | 웹 OAuth 클라이언트. google/native 의 허용 `aud`에 **넣지 않습니다** |
 | `OAUTH_KAKAO_NATIVE_APP_ID` | `POST /api/auth/kakao/native` | Kakao Developers의 **숫자 앱 ID**(`access_token_info`의 `app_id`) |
 | `OAUTH_KAKAO_CLIENT_ID`, `OAUTH_KAKAO_CLIENT_SECRET` | `POST /api/auth/kakao`(웹) | REST API 키와 client secret |
-| `OAUTH_NAVER_CLIENT_ID`, `OAUTH_NAVER_CLIENT_SECRET` | `POST /api/auth/naver`(웹), `POST /api/auth/naver/native` | 네이버 애플리케이션의 클라이언트 아이디·시크릿(iOS 앱과 같은 애플리케이션) |
+| `OAUTH_NAVER_CLIENT_ID`, `OAUTH_NAVER_CLIENT_SECRET` | `POST /api/auth/naver`(웹), `POST /api/auth/naver/native` | 네이버 애플리케이션의 클라이언트 아이디·시크릿(iOS 앱과 같은 애플리케이션. 앱 시크릿은 추출 가능하므로 [docs/naver-oauth-apps.md](docs/naver-oauth-apps.md) 참고) |
 | `OAUTH_APPLE_BUNDLE_ID` | `POST /api/auth/apple/native` | 앱 Bundle Identifier(identity token의 `aud`) |
 | `OAUTH_APPLE_REQUIRE_NONCE` | `POST /api/auth/apple/native` | 기본 `false`. `true`면 `nonce` 없는 요청을 401로 거부(nonce를 보내는 앱 배포 후 켬) |
 
+> **구글 클라이언트 분리(#115):** 웹 로그인 클라이언트 ID는 네이티브 허용 목록에 자동으로 들어가지 않습니다. 웹 출처에 XSS가 있으면 공격자가 웹 클라이언트로 Google ID 토큰을 받아 `google/native`로 전체 권한 세션을 얻을 수 있기 때문입니다(웹 로그인은 조회 전용). Android Credential Manager의 `serverClientId`는 Google 요구로 웹 유형이어야 하지만, 웹 로그인 클라이언트와 **다른 웹 유형 OAuth 클라이언트를 따로 만들어** 그 ID를 쓰고 `OAUTH_GOOGLE_NATIVE_CLIENT_IDS`에 넣습니다.
+>
+> **웹 코드 교환 PKCE(#105):** `POST /api/auth/google`·`/api/auth/kakao`는 `codeVerifier`(RFC 7636, `[A-Za-z0-9-._~]` 43~128자)가 필수이고 없거나 형식이 틀리면 `400`입니다. 서버는 이를 토큰 교환의 `code_verifier`로 넘깁니다. 네이버는 PKCE를 지원하지 않아 받지 않습니다. 웹 로그인 세션은 조회 전용(`scope: "read"`)입니다.
+>
+> **카카오 client secret 강제:** 카카오는 웹 코드 교환과 iOS·Android 네이티브가 한 앱을 함께 씁니다. Kakao Developers → 보안 → Client Secret을 **사용함**으로 켜고 활성화 상태를 "사용"으로 두어, secret 없는 토큰 요청(앱에서 추출한 REST 키만으로 인가 코드를 교환하는 요청)이 거부되게 합니다. secret 은 서버(`OAUTH_KAKAO_CLIENT_SECRET`)에만 둡니다.
+>
 > **카카오 키 주의:** iOS Build Settings의 `KAKAO_NATIVE_APP_KEY`(네이티브 앱 **키**, 문자열)와 서버의 `OAUTH_KAKAO_NATIVE_APP_ID`(앱 **ID**, 숫자)는 서로 다른 값입니다. 앱 ID는 Kakao Developers → 내 애플리케이션 → 앱 설정 → 요약 정보의 "앱 ID"입니다. 서버는 iOS가 보낸 액세스 토큰의 `app_id`가 이 값과 같은지 확인해 다른 앱에서 발급된 토큰을 거부합니다.
 
 - 네이버 네이티브 교환은 `{"accessToken", "refreshToken"}`을 받습니다. 네이버에는 토큰의 발급 앱을 확인하는 API가 없어서, 서버가 `refreshToken`을 자기 client ID·secret으로 갱신해 이 앱에 발급된 토큰인지 확인하고, 새로 받은 access token으로만 프로필을 조회합니다.
@@ -187,9 +200,9 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 | `POST /api/auth/watch-token` | Bearer(전체 권한) | 없음 | `200 {accessToken, tokenType, expiresIn}`(`scope: "read"`, 7일) |
 
 - **리프레시 토큰:** 32바이트 무작위 값의 base64url(43자)입니다. 서버 DB(`refresh_token`, Flyway V3)에는 SHA-256 hex만 저장합니다. 로그인마다 새 *family*가 생기고, `/refresh`가 성공하면 기존 토큰을 폐기(`revoked_at`, `replaced_by`)하고 같은 family로 새 토큰과 새 액세스 토큰을 줍니다. 새 토큰 만료는 `min(지금 + 30일, family 생성 + 90일)`이라 회전을 계속해도 한 로그인은 90일(`auth.refresh.absolute-ttl`)을 넘지 못합니다(`refreshExpiresIn`이 30일보다 짧아질 수 있음).
-- **회전 유예 구간:** 회전된 지 30초(`auth.refresh.reuse-grace`) 안의 토큰이 다시 오면(응답 유실 후 재시도, 같은 토큰의 동시 요청) 같은 family에 *형제 토큰*을 하나 더 발급해 `200`으로 응답합니다. 먼저 발급된 후계 토큰도 그대로 유효합니다. 같은 토큰의 동시 회전은 행 잠금으로 직렬화됩니다. 그래도 클라이언트는 refresh를 한 번에 하나만 보내는 것이 좋습니다.
+- **회전 유예 구간:** 회전된 지 30초(`auth.refresh.reuse-grace`, 일시 정지됐다 돌아온 모바일 앱의 재시도까지 받도록) 안의 토큰이 다시 오면(응답 유실 후 재시도, 같은 토큰의 동시 요청) 같은 family에 *형제 토큰*을 하나 더 발급해 `200`으로 응답합니다. 유예 재발급은 회전된 토큰당 **1회만**이고(`grace_reissued`), 두 번째는 유예 구간 안이라도 재사용 공격으로 보고 family를 폐기합니다. 먼저 발급된 후계 토큰도 그대로 유효합니다. 회전과 로그아웃은 family 행 잠금으로 직렬화됩니다. 그래도 클라이언트는 refresh를 한 번에 하나만 보내는 것이 좋습니다.
 - **재사용 감지:** 유예 구간이 지난 *회전된* 토큰이 다시 오면 탈취로 보고 그 family 전체를 폐기하고, 그 사용자에게 이미 발급된 액세스 토큰도 무효로 만든 뒤 `401`입니다(다른 기기는 자기 리프레시로 다시 받으면 됨). 로그아웃으로 폐기된 토큰은 그냥 `401`입니다.
-- **액세스 토큰 무효화 기준:** 사용자별 `tokens_valid_after`(`user_auth_state`, V3)보다 이전에 발급된(`iat`) 액세스 토큰은 scope와 무관하게(기존 형식 토큰 포함) `401`입니다. `logout-all`과 재사용 감지 때 갱신합니다. `iat`이 초 단위라 같은 초에 발급된 토큰은 통과합니다. 서버는 사용자별 값을 30초 메모리 캐시하므로, 인스턴스가 여러 대면 다른 인스턴스는 최대 30초 늦게 반영합니다.
+- **액세스 토큰 무효화 기준:** 사용자별 `tokens_valid_after`(`user_auth_state`, V3)보다 이전에 발급된(`iat`) 액세스 토큰은 scope와 무관하게(기존 형식 토큰 포함) `401`입니다. `logout-all`과 재사용 감지 때 갱신합니다. `iat`이 초 단위라 같은 초에 발급된 토큰은 통과합니다. 조회 전용(`scope: "read"`) 토큰은 `read_tokens_valid_after`(V5)도 보며, 이 기준은 **앱(전체 권한) family의 `/logout`** 때만 옮기고 경계 초에 발급된 토큰까지 거부합니다. 웹(조회 전용) family의 로그아웃은 Watch 토큰을 끊지 않습니다. 무효화 값은 트랜잭션 커밋 뒤에 캐시에 반영합니다. 서버는 사용자별 값을 30초 메모리 캐시하므로, 인스턴스가 여러 대면 다른 인스턴스는 최대 30초 늦게 반영합니다.
 - `/refresh`·`/logout`은 공개 경로라 `/api/auth/**` IP 레이트 리밋이 적용됩니다. `logout`은 액세스 토큰이 만료된 뒤에도 할 수 있고, 토큰이 유효한지 드러내지 않도록 항상 `204`입니다. `logout-all`·`watch-token`은 Bearer가 필요합니다. 이 기기 로그아웃 뒤에도 이미 발급된 액세스 토큰은 만료(최대 1시간)까지 유효합니다.
 - **Watch 조회 토큰(#76):** JWT에 `scope: "read"`가 실린 토큰(기본 7일, `AUTH_WATCH_TOKEN_TTL`)은 `GET /api/characters/me`, `GET /api/characters/{userId}`, `GET /api/health-activities`만 쓸 수 있고, 그 밖의 요청(동기화, `watch-token` 재발급, `logout-all` 등)은 `403`입니다. `scope`가 없는 기존 토큰은 전체 권한입니다. 리프레시 토큰은 주지 않으므로 iPhone이 앱을 열 때마다 다시 받아 Watch에 전달합니다(iPhone 앱을 7일 넘게 열지 않으면 Watch가 끊김). `logout-all` 하면 Watch 토큰도 무효가 됩니다.
 - 만료 행과 폐기된 지 7일(`auth.refresh.revoked-retention`)이 지난 행은 매일 04:00(`app.timezone`) 정리 작업이 지웁니다.
@@ -206,9 +219,12 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 | 설정 키 (환경변수) | 기본값 | 설명 |
 |---|---|---|
 | `app.rate-limit.sync-per-minute` (`APP_RATE_LIMIT_SYNC_PER_MINUTE`) | `30` | `POST /api/health-activities/sync`, 인증 주체(userId)별 분당 한도 |
-| `app.rate-limit.auth-per-minute` (`APP_RATE_LIMIT_AUTH_PER_MINUTE`) | `30` | `/api/auth/**` 전체(소셜 로그인·`/api/auth/{provider}` 포함), 클라이언트 IP별 분당 한도 |
+| `app.rate-limit.auth-per-minute` (`APP_RATE_LIMIT_AUTH_PER_MINUTE`) | `30` | `/api/auth/**`(소셜 로그인·`/api/auth/{provider}` 포함, `/api/auth/refresh` 제외), 클라이언트 IP별 분당 한도 |
+| `app.rate-limit.refresh-per-minute` (`APP_RATE_LIMIT_REFRESH_PER_MINUTE`) | `120` | `/api/auth/refresh` 전용 IP별 분당 한도. 토큰 소유가 곧 권한이라 로그인 한도와 분리(#102) |
 | `app.rate-limit.login-per-minute` (`APP_RATE_LIMIT_LOGIN_PER_MINUTE`) | `10` | `/api/auth/login`·`/api/auth/signup`, IP별 분당 한도(위 한도와 함께 적용) |
-| `app.rate-limit.trust-forwarded-header` (`APP_RATE_LIMIT_TRUST_FORWARDED_HEADER`) | `false` | `true`면 `X-Forwarded-For`의 **마지막 줄의 마지막 값**을 클라이언트 IP로 사용. 신뢰하는 리버스 프록시 한 단 뒤에서만 켤 것 |
+| `app.rate-limit.trust-forwarded-header` (`APP_RATE_LIMIT_TRUST_FORWARDED_HEADER`) | `false` | `true`면 `X-Forwarded-For`(한 줄일 때만. 여러 줄로 오면 믿지 않고 모두 고정 키 `multi-xff` 하나로 셈)에서 오른쪽부터 `trusted-proxy-hops`개를 건너뛴 값을 클라이언트 IP로 사용. 신뢰하는 리버스 프록시 뒤에서만 켤 것 |
+| `app.rate-limit.trusted-proxy-hops` (`APP_RATE_LIMIT_TRUSTED_PROXY_HOPS`) | `0` | 오른쪽에서 건너뛸 신뢰 프록시 항목 수. 0이면 마지막 값. 그 위치가 없거나 IP가 아니면 연결 주소(더 왼쪽 값은 위조 가능해 쓰지 않음) |
+| `app.rate-limit.log-forwarded-chain` (`APP_RATE_LIMIT_LOG_FORWARDED_CHAIN`) | `false` | 연결 주소와 `X-Forwarded-For` 원문을 10초에 한 번 INFO로 기록. 배포 후 hops 보정용으로만 잠시 켬 |
 | `app.rate-limit.max-keys` (`APP_RATE_LIMIT_MAX_KEYS`) | `100000` | 레이트 리밋 카운터·로그인 실패 기록이 각각 메모리에 두는 최대 키 수. 넘으면 만료 키를 먼저 지우고, 그래도 가득 차면 가장 오래된 항목을 내보냄 |
 | `app.auth.max-failed-logins` (`APP_AUTH_MAX_FAILED_LOGINS`) | `5` | 같은 (아이디, IP) 연속 로그인 실패 허용 횟수 |
 | `app.auth.max-failed-logins-per-username` (`APP_AUTH_MAX_FAILED_LOGINS_PER_USERNAME`) | `50` | IP와 무관한 아이디 전체 실패 허용 횟수(분산 공격 방어) |
@@ -217,7 +233,8 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 | `auth.jwt.watch-ttl` (`AUTH_WATCH_TOKEN_TTL`) | `7d` | Watch 조회 토큰 유효 기간 |
 | `auth.refresh.ttl` (`AUTH_REFRESH_TTL`) | `30d` | 리프레시 토큰 유효 기간(응답 `refreshExpiresIn`), 회전마다 새로 시작 |
 | `auth.refresh.absolute-ttl` (`AUTH_REFRESH_ABSOLUTE_TTL`) | `90d` | 한 로그인(family)의 절대 수명. 회전해도 넘지 못함 |
-| `auth.refresh.reuse-grace` (`AUTH_REFRESH_REUSE_GRACE`) | `30s` | 회전된 토큰이 다시 와도 재사용으로 보지 않는 유예 구간 |
+| `auth.refresh.reuse-grace` (`AUTH_REFRESH_REUSE_GRACE`) | `30s` | 회전된 토큰이 다시 와도 재사용으로 보지 않는 유예 구간. 토큰당 유예 재발급은 1회만(#103) |
+| `auth.refresh.read-ttl`, `auth.refresh.read-absolute-ttl` | `7d`, `30d` | 웹(조회 전용 scope) 로그인 family의 리프레시 유효 기간·절대 수명(#105) |
 | `oauth.apple.jwks-stale-max`, `oauth.google-native.jwks-stale-max` | `24h` | JWKS 조회 실패 시 마지막으로 받은 키를 쓰는 최대 기간. 넘으면 503 |
 | `auth.refresh.revoked-retention` (`AUTH_REFRESH_REVOKED_RETENTION`) | `7d` | 폐기된 리프레시 행을 재사용 감지용으로 남겨 두는 기간 |
 | `auth.refresh.cleanup-cron` (`AUTH_REFRESH_CLEANUP_CRON`) | `0 0 4 * * *` | 만료·폐기 행 정리 작업 시각(`app.timezone` 기준) |
@@ -228,7 +245,7 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 - 레이트 리밋 한도를 `0` 이하로 두면 해당 제한이 꺼지고, 잠금 한도를 `0` 이하로 두면 그 단계의 잠금이 꺼집니다.
 - 한도를 넘으면 `429 Too Many Requests`, `Retry-After`(초) 헤더, 기존 오류 body(`timestamp`·`status`·`error`·`message`)로 응답합니다. CORS 응답에도 `Retry-After`를 노출합니다.
 - 1분 **고정 윈도우**라서 경계 직전·직후에 몰리면 순간적으로 한도의 최대 2배까지 통과할 수 있습니다.
-- 클라이언트 IP는 IPv4는 주소 그대로, IPv6는 **/64 접두사** 단위로 셉니다(주소를 바꿔 가며 한도를 피하는 것 방지). `X-Forwarded-For` 값이 64자를 넘거나 IP 리터럴이 아니면 연결 주소로 셉니다.
+- 클라이언트 IP는 IPv4는 주소 그대로, IPv6는 **/64 접두사** 단위로 셉니다(주소를 바꿔 가며 한도를 피하는 것 방지). `X-Forwarded-For` 값이 64자를 넘거나 IP 리터럴이 아니면 연결 주소로 셉니다. 보정 로그는 제어 문자와 줄 구분자(U+0085·U+2028·U+2029)를 `?`로 바꿔 남깁니다.
 - 로그인 잠금은 (아이디, IP) 단위라서 다른 사람이 자기 IP에서 틀려도 피해자의 다른 IP 로그인은 막히지 않습니다. 대신 여러 IP로 나눠 시도하면 아이디 전체 한도(50회)에 걸려 그 아이디가 15분 잠깁니다. 시도는 비밀번호 비교 **전에** 먼저 세므로 동시 요청이 몰려도 한도보다 많이 비교하지 않습니다. 성공하면 그 (아이디, IP)의 실패 횟수를 지우고, 아이디 전체 기록에서는 이번 시도만 되돌립니다.
 - 잠긴 동안에는 올바른 비밀번호도 기존 실패와 같은 `400 "아이디 또는 비밀번호가 올바르지 않습니다."`로 거부합니다. 없는 아이디도 같은 횟수 뒤 같은 방식으로 반응하고 bcrypt 비교를 한 번 거쳐 응답 시간으로 아이디 존재가 드러나지 않습니다. 가입의 "이미 사용 중인 아이디" 응답은 클라이언트 UX를 위해 유지하되 IP 레이트 리밋으로 열거 속도를 제한합니다.
 - `AUTH_JWT_SECRET`은 32바이트 이상이어야 하고, 서로 다른 문자가 8종류 미만인 단순한 값(같은 문자 반복 등)이면 기동에 실패합니다. `openssl rand -base64 48` 같은 무작위 값을 쓰세요.
@@ -239,7 +256,7 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 #### 배포 체크리스트
 
 - [ ] **리버스 프록시·로드 밸런서 뒤**에 배포한다면 `APP_RATE_LIMIT_TRUST_FORWARDED_HEADER=true`로 설정합니다. 끄면 서버가 보는 연결 주소가 모두 프록시 IP라서 **모든 사용자가 IP 하나를 공유**해 인증 한도(분당 30·10회)와 (아이디, IP) 잠금이 사실상 전체 사용자에게 함께 걸립니다.
-- [ ] 켜기 전에 프록시가 **항상** `X-Forwarded-For`에 클라이언트 주소를 덧붙이는지(클라이언트가 보낸 값을 그대로 넘기기만 하지 않는지) 확인합니다. 서버는 마지막 줄의 마지막 값만 믿으므로 프록시가 덧붙이지 않으면 클라이언트가 IP를 위조할 수 있습니다. 프록시가 여러 단(CDN + LB 등)이면 마지막 값이 앞단 프록시 주소가 되므로 프록시 구성을 바꾸거나 이 구현을 확장해야 합니다.
+- [ ] 켜기 전에 프록시가 **항상** `X-Forwarded-For`에 클라이언트 주소를 덧붙이는지(클라이언트가 보낸 값을 그대로 넘기기만 하지 않는지) 확인합니다. 서버는 오른쪽에서 `trusted-proxy-hops`개를 건너뛴 값만 믿으므로 프록시가 덧붙이지 않으면 클라이언트가 IP를 위조할 수 있습니다. 프록시가 여러 단(CDN + LB 등)이면 `APP_RATE_LIMIT_LOG_FORWARDED_CHAIN=true`로 체인 구조를 확인해 hops를 맞춥니다.
 - [ ] 프록시를 거치지 않고 직접 노출한다면 기본값(`false`)을 유지합니다. 켜면 누구나 헤더로 IP를 바꿔 한도를 피할 수 있습니다.
 - [ ] 모바일 통신사 CGNAT·회사·학교 NAT에서는 많은 사용자가 같은 공인 IP를 쓸 수 있습니다. 같은 IP에서 정상 로그인이 몰려 `429`가 보이면 `APP_RATE_LIMIT_AUTH_PER_MINUTE`·`APP_RATE_LIMIT_LOGIN_PER_MINUTE`를 올립니다.
 - [ ] 인스턴스를 2대 이상 띄우면 한도가 대수만큼 느슨해지므로 Redis 기반 구현을 먼저 검토합니다.
@@ -344,7 +361,7 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 2. Xcode의 `WellnessGame` target → Build Settings → User-Defined에서 다음 값을 교체합니다.
    - `GOOGLE_CLIENT_ID`: iOS OAuth 클라이언트 ID
    - `GOOGLE_REVERSED_CLIENT_ID`: Google 설정에 표시되는 reversed client ID
-3. 백엔드 인증을 추가할 때는 별도의 Web application client ID를 만들고 Google ID token의 서명, 발급자, audience를 서버에서 검증합니다.
+3. 서버(`POST /api/auth/google/native`)는 ID 토큰의 `aud`·`azp`가 `OAUTH_GOOGLE_NATIVE_CLIENT_IDS`(또는 `OAUTH_GOOGLE_IOS_CLIENT_ID`)에 있는지 확인합니다. iOS 앱은 `serverClientID`를 쓰지 않으므로 iOS 클라이언트 ID만 넣으면 됩니다. 웹 로그인 클라이언트 ID는 넣지 않습니다.
 
 공식 설정 문서: [Google Sign-In for iOS](https://developers.google.com/identity/sign-in/ios/start-integrating)
 
@@ -413,7 +430,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 - **서버 주소:** debug는 `http://10.0.2.2:8080`(에뮬레이터에서 호스트 PC의 localhost). 평문 HTTP는 debug 전용 network security config로만 허용한다. release는 `-PAPI_BASE_URL=https://...`가 필수이며, 값이 없거나 https가 아니면 빌드가 실패한다.
-- **소셜 로그인 키(gradle property, 커밋 금지):** `GOOGLE_SERVER_CLIENT_ID`(서버가 aud로 검증하는 웹 OAuth 클라이언트 ID), `KAKAO_NATIVE_APP_KEY`, `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET`/`NAVER_CLIENT_NAME`. `~/.gradle/gradle.properties`나 `-P`로 넣고, 비어 있으면 해당 버튼이 비활성화된다. 네이버 client secret은 APK에 포함되어 추출될 수 있으므로 비밀로 취급하지 않으며, 서버는 앱이 보낸 refresh token을 서버의 client ID·secret으로 갱신해 성공할 때만 이 앱이 발급받은 토큰으로 인정한다(그래서 Android도 서버와 같은 네이버 애플리케이션을 써야 한다). Google은 Google Cloud에 Android OAuth 클라이언트(패키지명 + 서명 SHA-1)도 등록해야 하고, 카카오·네이버 콘솔에도 패키지명·키 해시를 등록해야 한다.
+- **소셜 로그인 키(gradle property, 커밋 금지):** `GOOGLE_SERVER_CLIENT_ID`(서버가 aud로 검증하는 웹 OAuth 클라이언트 ID), `KAKAO_NATIVE_APP_KEY`, `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET`/`NAVER_CLIENT_NAME`. `~/.gradle/gradle.properties`나 `-P`로 넣고, 비어 있으면 해당 버튼이 비활성화된다. 네이버 client secret은 APK에 포함되어 추출될 수 있으므로 비밀로 취급하지 않으며, 서버는 앱이 보낸 refresh token을 서버의 client ID·secret으로 갱신해 성공할 때만 이 앱이 발급받은 토큰으로 인정한다(그래서 Android도 서버와 같은 네이버 애플리케이션을 써야 한다). Google은 Google Cloud에 Android OAuth 클라이언트(패키지명 + 서명 SHA-1)를 등록하고, `GOOGLE_SERVER_CLIENT_ID`에는 웹 로그인 클라이언트와 **별도로 만든 웹 유형 OAuth 클라이언트** ID를 넣는다(Google 요구로 웹 유형이지만 웹 로그인용 클라이언트를 재사용하지 않는다). 서버 `OAUTH_GOOGLE_NATIVE_CLIENT_IDS`에 이 서버 클라이언트 ID와 Android 클라이언트 ID(`azp`)를 함께 넣어야 하며, 카카오·네이버 콘솔에도 패키지명·키 해시를 등록해야 한다.
 - **로그인 노출 순서:** iOS `LoginProviderPolicy`와 같다(기기 지역 KR: 카카오·네이버·구글 / 그 외: 구글, 나머지는 "다른 방법으로 로그인"). Apple 로그인은 Android에서 제공하지 않는다.
 - **건강 데이터:** Health Connect(걸음·운동·수면·활동 칼로리·거리 읽기). Android 13 이하는 Health Connect 앱 설치가 필요하다. 로그인 후 앱 진입·새로고침 때 동기화하고, WorkManager가 1시간마다(네트워크 연결 시) 동기화한다(백그라운드 읽기 권한을 지원하는 기기만).
 - **Mock 데이터:** debug 빌드 홈 하단의 "Use mock data" 토글. 로그인 전에는 기기 안에서 미리보기만 하고 서버로 보내지 않는다.
@@ -472,8 +489,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 > 운영은 starter 이상을 쓰고, free는 출시 전 테스트에만 씁니다.
 
 > **레이트 리밋과 프록시:** Render는 프록시 뒤에서 요청을 전달합니다. `APP_RATE_LIMIT_TRUST_FORWARDED_HEADER`가 기본값(`false`)이면
-> 모든 사용자가 프록시 IP 하나로 세어져 인증 한도(분당 30·10회)를 함께 씁니다. 배포 후 `X-Forwarded-For`의 마지막 값이 실제 클라이언트 IP인지
-> 확인하고 켜세요([배포 체크리스트](#배포-체크리스트)).
+> 모든 사용자가 프록시 IP 하나로 세어져 인증 한도(분당 30·10회)를 함께 씁니다. `render.yaml`은 헤더 신뢰(hops 0)와 체인 로그를 켜 둡니다.
+> 배포 직후 로그로 실제 클라이언트 IP 위치를 확인해 hops를 맞추고 체인 로그를 끄세요([배포 체크리스트](#배포-체크리스트)).
 
 ### 3. Vercel 프로젝트·`VITE_API_BASE_URL`
 

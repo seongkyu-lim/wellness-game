@@ -36,6 +36,9 @@ class GoogleNativeAuthServiceTest {
     private static final String JWKS = "https://google.test/oauth2/v3/certs";
     private static final String IOS_CLIENT = "ios-client.apps.googleusercontent.com";
     private static final String WEB_CLIENT = "web-client.apps.googleusercontent.com";
+    /** Android 가 aud 로 쓰는 전용 웹 유형 서버 클라이언트(웹 로그인 클라이언트와 별개). */
+    private static final String ANDROID_SERVER_CLIENT = "android-server.apps.googleusercontent.com";
+    private static final String ANDROID_CLIENT = "android-client.apps.googleusercontent.com";
     private static final String KID = "google-kid-1";
 
     private static KeyPair googleKey;
@@ -62,8 +65,8 @@ class GoogleNativeAuthServiceTest {
         server = MockRestServiceServer.bindTo(builder).build();
         service = new GoogleNativeAuthService(
                 builder,
-                oauth(WEB_CLIENT),
-                new GoogleNativeProperties(List.of(IOS_CLIENT), JWKS, Duration.ofHours(1)),
+                new GoogleNativeProperties(List.of(IOS_CLIENT, ANDROID_CLIENT, ANDROID_SERVER_CLIENT), JWKS,
+                        Duration.ofHours(1)),
                 clock);
     }
 
@@ -79,12 +82,27 @@ class GoogleNativeAuthServiceTest {
     }
 
     @Test
-    void acceptsWebClientAudienceWithIosAzpAndBareIssuer() {
+    void acceptsAndroidServerAudienceWithAndroidAzpAndBareIssuer() {
         expectJwks(jwks(KID, googleKey));
 
-        String token = token(b -> b.issuer("accounts.google.com").audience().single(WEB_CLIENT).claim("azp", IOS_CLIENT));
+        String token = token(b -> b.issuer("accounts.google.com").audience().single(ANDROID_SERVER_CLIENT)
+                .claim("azp", ANDROID_CLIENT));
 
         assertThat(service.authenticate(token).userId()).isEqualTo("google:109876");
+    }
+
+    /** 웹 로그인 클라이언트로 발급된 ID 토큰(웹 출처 XSS 로 얻을 수 있음)은 네이티브 전체 권한 로그인에 쓸 수 없다. */
+    @Test
+    void rejectsWebLoginClientAudience() {
+        expectJwks(jwks(KID, googleKey));
+
+        for (UnaryOperator<JwtBuilder> claims : List.<UnaryOperator<JwtBuilder>>of(
+                b -> b.audience().single(WEB_CLIENT).claim("azp", WEB_CLIENT),
+                b -> b.audience().single(WEB_CLIENT).claim("azp", IOS_CLIENT))) {
+            assertThatThrownBy(() -> service.authenticate(token(claims)))
+                    .isInstanceOf(UnauthorizedException.class)
+                    .hasMessage("이 앱에 발급된 구글 ID 토큰이 아닙니다.");
+        }
     }
 
     @Test
@@ -230,7 +248,6 @@ class GoogleNativeAuthServiceTest {
     void reportsUnavailableWhenNoClientIdConfigured() {
         GoogleNativeAuthService unconfigured = new GoogleNativeAuthService(
                 RestClient.builder(),
-                new OAuthProperties(null, null, null),
                 new GoogleNativeProperties(null, null, null),
                 clock);
 
@@ -273,10 +290,5 @@ class GoogleNativeAuthServiceTest {
             bytes = Arrays.copyOfRange(bytes, 1, bytes.length);
         }
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    private static OAuthProperties oauth(String webClientId) {
-        return new OAuthProperties(null, null,
-                new OAuthProperties.Provider(webClientId, "secret", "https://google.test/token", "https://google.test/userinfo"));
     }
 }

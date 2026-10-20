@@ -66,10 +66,14 @@ public class WebConfig implements WebMvcConfigurer {
      * 보호 경로다(공개 목록에 없음).
      * 웹 코드 교환 {provider} 는 지원 공급자만 공개해 새 /api/auth/* 경로가 조용히 공개되지 않게 한다.
      * 레이트 리밋(#48): 인증 엔드포인트는 IP 별로 인증 전에, 동기화는 userId 별로 인증 뒤에 센다(등록 순서 = 실행 순서).
+     * /api/auth/refresh 는 앱·웹이 자동으로 부르므로 auth·login 한도를 쓰지 않고 별도의 넉넉한 IP 한도를 쓴다(#102).
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(rateLimitInterceptors.auth()).addPathPatterns("/api/auth/**");
+        registry.addInterceptor(rateLimitInterceptors.auth())
+                .addPathPatterns("/api/auth/**")
+                .excludePathPatterns("/api/auth/refresh");
+        registry.addInterceptor(rateLimitInterceptors.refresh()).addPathPatterns("/api/auth/refresh");
         registry.addInterceptor(rateLimitInterceptors.login()).addPathPatterns("/api/auth/login", "/api/auth/signup");
         registry.addInterceptor(authenticationInterceptor)
                 .addPathPatterns("/api/**")

@@ -1,5 +1,6 @@
 package com.wellnessgame.auth;
 
+import com.wellnessgame.error.BadRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -18,6 +19,8 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class SocialAuthServiceTest {
+    private static final String VERIFIER = "v".repeat(43);
+
     private MockRestServiceServer server;
     private SocialAuthService service;
 
@@ -47,7 +50,7 @@ class SocialAuthServiceTest {
                 .andExpect(header("Authorization", "Bearer kakao-token"))
                 .andRespond(withSuccess("{\"id\":12345,\"properties\":{\"nickname\":\"림\"}}", MediaType.APPLICATION_JSON));
 
-        SocialLoginResult result = service.authenticate("kakao", "auth-code", "http://localhost:5173");
+        SocialLoginResult result = service.authenticate("kakao", "auth-code", "http://localhost:5173", VERIFIER);
 
         assertThat(result.userId()).isEqualTo("kakao:12345");
         assertThat(result.displayName()).isEqualTo("림");
@@ -62,7 +65,7 @@ class SocialAuthServiceTest {
                 .andExpect(header("Authorization", "Bearer naver-token"))
                 .andRespond(withSuccess("{\"response\":{\"id\":\"nv-88\",\"name\":\"임성규\"}}", MediaType.APPLICATION_JSON));
 
-        SocialLoginResult result = service.authenticate("naver", "auth-code", "http://localhost:5173");
+        SocialLoginResult result = service.authenticate("naver", "auth-code", "http://localhost:5173", VERIFIER);
 
         assertThat(result.userId()).isEqualTo("naver:nv-88");
         assertThat(result.displayName()).isEqualTo("임성규");
@@ -77,7 +80,7 @@ class SocialAuthServiceTest {
                 .andExpect(header("Authorization", "Bearer google-token"))
                 .andRespond(withSuccess("{\"sub\":\"109876\",\"name\":\"SK Lim\"}", MediaType.APPLICATION_JSON));
 
-        SocialLoginResult result = service.authenticate("google", "auth-code", "http://localhost:5173");
+        SocialLoginResult result = service.authenticate("google", "auth-code", "http://localhost:5173", VERIFIER);
 
         assertThat(result.userId()).isEqualTo("google:109876");
         assertThat(result.displayName()).isEqualTo("SK Lim");
@@ -94,7 +97,7 @@ class SocialAuthServiceTest {
                     .andRespond(withSuccess("{\"access_token\":\"t\"}", MediaType.APPLICATION_JSON));
             server.expect(requestTo(c[2])).andRespond(withSuccess(c[3], MediaType.APPLICATION_JSON));
 
-            assertThatThrownBy(() -> service.authenticate(c[0], "auth-code", "http://localhost:5173"))
+            assertThatThrownBy(() -> service.authenticate(c[0], "auth-code", "http://localhost:5173", VERIFIER))
                     .isInstanceOf(UnauthorizedException.class)
                     .hasMessageContaining(c[0]);
         }
@@ -103,7 +106,7 @@ class SocialAuthServiceTest {
     @Test
     void rejectsUnsupportedProvider() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> service.authenticate("apple", "code", "http://localhost:5173"))
+                .isThrownBy(() -> service.authenticate("apple", "code", "http://localhost:5173", VERIFIER))
                 .withMessageContaining("apple");
     }
 
@@ -113,8 +116,54 @@ class SocialAuthServiceTest {
         SocialAuthService unconfigured = new SocialAuthService(RestClient.builder(), empty);
 
         assertThatIllegalStateException()
-                .isThrownBy(() -> unconfigured.authenticate("kakao", "code", "http://localhost:5173"))
+                .isThrownBy(() -> unconfigured.authenticate("kakao", "code", "http://localhost:5173", VERIFIER))
                 .withMessage("이 로그인 방식은 지금 사용할 수 없어요.")
                 .withMessageNotContaining("OAUTH_");
+    }
+
+    /** #105 PKCE: 카카오·구글은 code_verifier 를 토큰 교환에 넘기고, 네이버는 넘기지 않는다. */
+    @Test
+    void passesCodeVerifierToKakaoAndGoogleButNotNaver() {
+        String verifier = "v".repeat(43);
+        for (String[] c : new String[][]{
+                {"kakao", "https://kauth.test/oauth/token", "https://kapi.test/v2/user/me", "{\"id\":1}"},
+                {"google", "https://google.test/token", "https://google.test/userinfo", "{\"sub\":\"g1\"}"}}) {
+            server.reset();
+            server.expect(requestTo(c[1]))
+                    .andExpect(content().formDataContains(java.util.Map.of("code_verifier", verifier, "code", "auth-code")))
+                    .andRespond(withSuccess("{\"access_token\":\"t\"}", MediaType.APPLICATION_JSON));
+            server.expect(requestTo(c[2])).andRespond(withSuccess(c[3], MediaType.APPLICATION_JSON));
+
+            service.authenticate(c[0], "auth-code", "http://localhost:5173", verifier);
+            server.verify();
+        }
+
+        server.reset();
+        server.expect(requestTo("https://nid.test/oauth2.0/token"))
+                .andExpect(request -> assertThat(((org.springframework.mock.http.client.MockClientHttpRequest) request)
+                        .getBodyAsString()).doesNotContain("code_verifier"))
+                .andRespond(withSuccess("{\"access_token\":\"t\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://openapi.test/v1/nid/me"))
+                .andRespond(withSuccess("{\"response\":{\"id\":\"n1\"}}", MediaType.APPLICATION_JSON));
+        service.authenticate("naver", "auth-code", "http://localhost:5173", verifier);
+        server.verify();
+    }
+
+    /** #105 웹 코드 교환: 카카오·구글은 codeVerifier 필수(400), 네이버는 없이 동작한다. */
+    @Test
+    void requiresCodeVerifierForKakaoAndGoogleButNotNaver() {
+        for (String provider : new String[]{"kakao", "google"}) {
+            for (String missing : new String[]{null, " "}) {
+                assertThatThrownBy(() -> service.authenticate(provider, "auth-code", "http://localhost:5173", missing))
+                        .isInstanceOf(BadRequestException.class)
+                        .hasMessageContaining("codeVerifier");
+            }
+        }
+        server.expect(requestTo("https://nid.test/oauth2.0/token"))
+                .andRespond(withSuccess("{\"access_token\":\"t\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://openapi.test/v1/nid/me"))
+                .andRespond(withSuccess("{\"response\":{\"id\":\"n2\"}}", MediaType.APPLICATION_JSON));
+        assertThat(service.authenticate("naver", "auth-code", "http://localhost:5173", null).userId()).isEqualTo("naver:n2");
+        server.verify();
     }
 }

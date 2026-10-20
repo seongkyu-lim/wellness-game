@@ -25,4 +25,11 @@ public interface UserAuthStateRepository extends JpaRepository<UserAuthState, St
     @Query(value = "update user_auth_state set tokens_valid_after = greatest(tokens_valid_after, :at) where user_id = :userId",
             nativeQuery = true)
     int advanceTo(@Param("userId") String userId, @Param("at") Instant at);
+
+    /** 조회 전용 토큰 기준을 앞으로만 옮긴다. null 이면 이 값으로 정한다(coalesce: H2·PostgreSQL 의 greatest null 처리 차이를 피함). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "update user_auth_state set read_tokens_valid_after = greatest(coalesce(read_tokens_valid_after, :at), :at) "
+            + "where user_id = :userId",
+            nativeQuery = true)
+    int advanceReadTo(@Param("userId") String userId, @Param("at") Instant at);
 }

@@ -16,7 +16,7 @@ import java.util.List;
 
 /**
  * 보호 API 요청의 {@code Authorization: Bearer <jwt>} 를 검증하고 주체를 요청 속성에 담는다.
- * 사용자의 무효화 기준({@link TokenValidityService}) 이전에 발급된 토큰은 401 이다.
+ * 사용자의 무효화 기준({@link TokenValidityService}, 조회 토큰은 조회 전용 기준도) 이전에 발급된 토큰은 401 이다.
  * 실패하면 {@link UnauthorizedException} 을 던져 ApiExceptionHandler 가 401 로 응답하게 한다.
  * CORS preflight 는 토큰 없이 통과시킨다.
  *
@@ -58,7 +58,7 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
             throw new UnauthorizedException(Messages.get("auth.token-invalid"));
         }
         AccessTokenPrincipal principal = tokenService.authenticate(token);
-        if (tokenValidityService.isRevoked(principal.userId(), principal.issuedAt())) {
+        if (tokenValidityService.isRevoked(principal.userId(), principal.scope(), principal.issuedAt())) {
             throw new UnauthorizedException(Messages.get("auth.session-revoked"));
         }
         if (principal.scope() == TokenScope.READ && !isReadOnlyRequest(request)) {

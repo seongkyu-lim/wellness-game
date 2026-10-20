@@ -46,15 +46,20 @@ class TrustedForwardedHeaderRateLimitTest {
     }
 
     @Test
-    void usesLastLineWhenProxyAddsSeparateHeaderLine() throws Exception {
-        mockMvc.perform(fromIp(post("/api/auth/login"), PROXY)
-                        .header("X-Forwarded-For", "198.51.100.3")
-                        .header("X-Forwarded-For", "203.0.113.20")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\": \"nobody_fwd\", \"password\": \"wrong-password\"}"))
-                .andExpect(status().isBadRequest());
+    void multipleHeaderLinesShareOneKeySoAttackerCannotPickValue() throws Exception {
+        multiLineLogin("198.51.100.3", "203.0.113.20").andExpect(status().isBadRequest());
 
-        loginVia("203.0.113.20").andExpect(status().isTooManyRequests());
+        // 줄마다 다른 값을 넣어도 모두 같은 고정 키로 세어진다.
+        multiLineLogin("198.51.100.4", "203.0.113.21").andExpect(status().isTooManyRequests());
+        loginVia("203.0.113.20").andExpect(status().isBadRequest());
+    }
+
+    private ResultActions multiLineLogin(String first, String second) throws Exception {
+        return mockMvc.perform(fromIp(post("/api/auth/login"), PROXY)
+                .header("X-Forwarded-For", first)
+                .header("X-Forwarded-For", second)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\": \"nobody_fwd\", \"password\": \"wrong-password\"}"));
     }
 
     @Test
@@ -70,5 +75,13 @@ class TrustedForwardedHeaderRateLimitTest {
                 .header("X-Forwarded-For", forwardedFor)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\": \"nobody_fwd\", \"password\": \"wrong-password\"}"));
+    }
+
+    /** #102 Render 처럼 오른쪽에 덧붙이는 프록시 뒤에서 왼쪽 값을 바꿔 가며 보내도 한도를 피하지 못한다. */
+    @Test
+    void rotatingSpoofedLeftmostValuesDoesNotBypassLimit() throws Exception {
+        loginVia("1.1.1.1, 203.0.113.40").andExpect(status().isBadRequest());
+        loginVia("2.2.2.2, 203.0.113.40").andExpect(status().isTooManyRequests());
+        loginVia("203.0.113.41, 203.0.113.40").andExpect(status().isTooManyRequests());
     }
 }

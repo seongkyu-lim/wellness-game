@@ -31,7 +31,8 @@ springdoc:
     enabled: ${APP_API_DOCS_ENABLED:false}
   swagger-ui:
     enabled: ${APP_API_DOCS_ENABLED:false}
-    persist-authorization: true
+    # 토큰을 브라우저 localStorage 에 남기지 않는다(#104).
+    persist-authorization: false
 
 server:
   # Render 등 PaaS 는 PORT 환경변수로 포트를 준다. 로컬 기본은 8080.
@@ -46,8 +47,13 @@ app:
     sync-per-minute: ${APP_RATE_LIMIT_SYNC_PER_MINUTE:30}     # POST /api/health-activities/sync, userId별
     auth-per-minute: ${APP_RATE_LIMIT_AUTH_PER_MINUTE:30}     # /api/auth/** 전체(소셜 로그인 포함), IP별
     login-per-minute: ${APP_RATE_LIMIT_LOGIN_PER_MINUTE:10}   # /api/auth/login·signup, IP별(위와 함께 적용)
-    # 신뢰하는 리버스 프록시 한 단 뒤에서만 true. X-Forwarded-For 의 마지막 주소를 클라이언트 IP 로 쓴다.
+    refresh-per-minute: ${APP_RATE_LIMIT_REFRESH_PER_MINUTE:120}  # /api/auth/refresh, IP별(auth 한도와 별도, #102)
+    # 신뢰하는 리버스 프록시 뒤에서만 true. X-Forwarded-For 에서 오른쪽부터 trusted-proxy-hops 개를 건너뛴 값을 클라이언트 IP 로 쓴다.
     trust-forwarded-header: ${APP_RATE_LIMIT_TRUST_FORWARDED_HEADER:false}
+    # 0 이면 마지막 값(바로 앞단 프록시가 덧붙인 주소). 프록시가 여러 단이면 그 수만큼 늘린다. 왼쪽 값은 클라이언트가 위조할 수 있다.
+    trusted-proxy-hops: ${APP_RATE_LIMIT_TRUSTED_PROXY_HOPS:0}
+    # true 면 hops 보정용으로 연결 주소와 X-Forwarded-For 원문을 10초에 한 번 INFO 로 남긴다. 보정이 끝나면 끈다.
+    log-forwarded-chain: ${APP_RATE_LIMIT_LOG_FORWARDED_CHAIN:false}
     # 레이트 리밋 카운터·로그인 실패 기록이 각각 메모리에 둘 최대 키 수. 넘으면 오래된 항목부터 내보낸다.
     max-keys: ${APP_RATE_LIMIT_MAX_KEYS:100000}
   # 아이디 로그인 잠금(#55). 연속 실패가 한도에 닿으면 잠금 시간 동안 거부한다. 0 이하면 끈다.
@@ -75,9 +81,13 @@ auth:
     # 한 로그인(family)의 절대 수명. 회전해도 이 기간을 넘지 못한다.
     absolute-ttl: ${AUTH_REFRESH_ABSOLUTE_TTL:90d}
     # 회전된 지 이 시간 안의 토큰이 다시 오면(응답 유실·동시 요청) 재사용으로 보지 않고 형제 토큰을 준다.
+    # 토큰 하나당 유예 재발급은 한 번만이다(두 번째는 재사용 공격으로 보고 family 를 폐기, #103).
     reuse-grace: ${AUTH_REFRESH_REUSE_GRACE:30s}
     # 폐기된 행을 재사용 감지용으로 남겨 두는 기간. 만료 행과 함께 정리 작업이 지운다.
     revoked-retention: ${AUTH_REFRESH_REVOKED_RETENTION:7d}
+    # 웹 조회 전용 로그인(scope=read, #105) family 의 유휴·절대 수명. 위 ttl·absolute-ttl 보다 짧게 둔다.
+    read-ttl: ${AUTH_REFRESH_READ_TTL:7d}
+    read-absolute-ttl: ${AUTH_REFRESH_READ_ABSOLUTE_TTL:30d}
     # 정리 작업 시각(app.timezone 기준, 기본 매일 04:00)
     cleanup-cron: ${AUTH_REFRESH_CLEANUP_CRON:0 0 4 * * *}
 
@@ -107,9 +117,11 @@ oauth:
     token-uri: https://oauth2.googleapis.com/token
     profile-uri: https://openidconnect.googleapis.com/v1/userinfo
   # iOS 구글 로그인 ID 토큰 검증(POST /api/auth/google/native). Google JWKS 로 서버에서 직접 검증한다(#55).
-  # aud·azp 는 아래 client-ids(iOS) 와 oauth.google.client-id(웹) 중 하나여야 한다.
+  # aud·azp 는 아래 client-ids 중 하나여야 한다(웹 로그인 클라이언트 ID 는 허용하지 않음).
   google-native:
-    client-ids: ${OAUTH_GOOGLE_IOS_CLIENT_ID:}
+    # 허용 aud·azp 전체(쉼표 구분): iOS 클라이언트 ID, Android 클라이언트 ID, Android 용 전용 웹 유형 서버 클라이언트 ID.
+    # 웹 로그인 클라이언트 ID(OAUTH_GOOGLE_CLIENT_ID)는 넣지 않는다(웹 XSS 로 받은 ID 토큰이 전체 권한을 얻지 못하게).
+    client-ids: ${OAUTH_GOOGLE_NATIVE_CLIENT_IDS:${OAUTH_GOOGLE_IOS_CLIENT_ID:}}
     jwks-uri: https://www.googleapis.com/oauth2/v3/certs
     jwks-cache-ttl: 1h
     # JWKS 조회가 계속 실패할 때 마지막으로 받은 키를 쓰는 최대 기간(마지막 조회 기준). 넘으면 503.

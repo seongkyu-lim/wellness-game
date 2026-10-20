@@ -55,13 +55,14 @@ class LocalizedResponseControllerTest {
               "endedAt": "2026-06-17T08:30:00Z"
             }
             """;
+    // 테스트 Clock 은 UTC. 수면은 깬 날짜(endedAt)가 요청 date(06-17)와 같아야 반영된다(#107).
     private static final String SLEEP = """
             {
               "type": "SLEEP",
               "sleepMinutes": 431,
               "sleepScore": 90,
-              "startedAt": "2026-06-16T14:10:00Z",
-              "endedAt": "2026-06-16T21:45:00Z"
+              "startedAt": "2026-06-16T23:10:00Z",
+              "endedAt": "2026-06-17T06:45:00Z"
             }
             """;
 

@@ -25,6 +25,9 @@ import java.util.Set;
  *   <li>서명: RS256 만 허용하고 헤더 kid 로 JWKS 의 공개키를 고른다({@link JwksKeyCache}: 캐시·장애 격리 정책).</li>
  *   <li>클레임: iss ∈ {accounts.google.com, https://accounts.google.com}, aud ∈ 허용 클라이언트 ID,
  *       azp(있으면) ∈ 허용 클라이언트 ID, exp 필수·미래, sub 필수.</li>
+ *   <li>허용 클라이언트 ID 는 {@code oauth.google-native.client-ids} 에 명시한 값뿐이다. 웹 로그인 클라이언트 ID
+ *       ({@code oauth.google.client-id})는 넣지 않는다: 웹 출처의 XSS 로 받은 웹용 ID 토큰이 이 경로로 전체 권한 세션을
+ *       얻지 못하게 한다(웹 로그인은 조회 전용, #105). Android 는 웹 로그인과 다른 전용 웹 유형 클라이언트를 쓴다.</li>
  * </ul>
  */
 @Service
@@ -38,11 +41,10 @@ public class GoogleNativeAuthService {
 
     public GoogleNativeAuthService(
             RestClient.Builder restClientBuilder,
-            OAuthProperties oauthProperties,
             GoogleNativeProperties nativeProperties,
             Clock clock
     ) {
-        this.allowedAudiences = allowedAudiences(oauthProperties, nativeProperties);
+        this.allowedAudiences = allowedAudiences(nativeProperties);
         this.clock = clock;
         JwksKeyCache keys = new JwksKeyCache("Google", restClientBuilder.build(),
                 nativeProperties.jwksUri(), nativeProperties.jwksCacheTtl(), nativeProperties.jwksStaleMax(), clock);
@@ -55,7 +57,7 @@ public class GoogleNativeAuthService {
     public SocialLoginResult authenticate(String idToken) {
         if (allowedAudiences.isEmpty()) {
             throw NativeAuthSupport.unavailable(log, "구글",
-                    "OAUTH_GOOGLE_IOS_CLIENT_ID 또는 OAUTH_GOOGLE_CLIENT_ID 환경변수", "auth.google.unavailable");
+                    "OAUTH_GOOGLE_NATIVE_CLIENT_IDS(또는 OAUTH_GOOGLE_IOS_CLIENT_ID) 환경변수", "auth.google.unavailable");
         }
         NativeAuthSupport.requireToken(idToken, "auth.google.id-token-blank");
 
@@ -100,16 +102,12 @@ public class GoogleNativeAuthService {
         }
     }
 
-    private static Set<String> allowedAudiences(OAuthProperties oauthProperties, GoogleNativeProperties nativeProperties) {
+    private static Set<String> allowedAudiences(GoogleNativeProperties nativeProperties) {
         Set<String> audiences = new LinkedHashSet<>();
         nativeProperties.clientIds().stream()
                 .filter(id -> id != null && !id.isBlank())
                 .map(String::trim)
                 .forEach(audiences::add);
-        OAuthProperties.Provider web = oauthProperties == null ? null : oauthProperties.google();
-        if (web != null && web.configured()) {
-            audiences.add(web.clientId().trim());
-        }
         return Set.copyOf(audiences);
     }
 }

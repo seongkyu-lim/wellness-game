@@ -26,6 +26,8 @@ import java.util.Set;
 public class SocialAuthService {
     private static final Logger log = LoggerFactory.getLogger(SocialAuthService.class);
     private static final Set<String> SUPPORTED = Set.of("kakao", "naver", "google");
+    /** 웹 코드 교환에 PKCE code_verifier 가 필수인 공급자. */
+    private static final Set<String> PKCE_PROVIDERS = Set.of("kakao", "google");
 
     private final RestClient restClient;
     private final OAuthProperties properties;
@@ -35,7 +37,11 @@ public class SocialAuthService {
         this.properties = properties;
     }
 
-    public SocialLoginResult authenticate(String providerName, String code, String redirectUri) {
+    /**
+     * @param codeVerifier PKCE code_verifier(#105). 카카오·구글은 필수이며({@code code_verifier} 로 넘김), 없으면 400 이다.
+     *                     네이버는 PKCE 를 지원하지 않아 받지 않고 넘기지도 않는다. 형식은 요청 검증(AuthController)이 본다.
+     */
+    public SocialLoginResult authenticate(String providerName, String code, String redirectUri, String codeVerifier) {
         if (!SUPPORTED.contains(providerName)) {
             throw new BadRequestException(Messages.get("auth.social.unsupported-provider", providerName));
         }
@@ -50,8 +56,13 @@ public class SocialAuthService {
             throw new ServiceUnavailableException(Messages.get("auth.social.not-configured"));
         }
 
+        boolean pkce = PKCE_PROVIDERS.contains(providerName);
+        if (pkce && (codeVerifier == null || codeVerifier.isBlank())) {
+            throw new BadRequestException(Messages.get("auth.social.code-verifier-required"));
+        }
         try {
-            String accessToken = requestAccessToken(provider, code, redirectUri);
+            String verifier = pkce ? codeVerifier : null;
+            String accessToken = requestAccessToken(provider, code, redirectUri, verifier);
             return toResult(providerName, requestProfile(provider, accessToken));
         } catch (RestClientException e) {
             throw new ServiceUnavailableException(Messages.get("auth.social.failed", providerName), e);
@@ -84,7 +95,8 @@ public class SocialAuthService {
                 .body(JsonNode.class);
     }
 
-    private String requestAccessToken(OAuthProperties.Provider provider, String code, String redirectUri) {
+    private String requestAccessToken(
+            OAuthProperties.Provider provider, String code, String redirectUri, String codeVerifier) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "authorization_code");
         form.add("client_id", provider.clientId());
@@ -93,6 +105,9 @@ public class SocialAuthService {
         }
         form.add("redirect_uri", redirectUri);
         form.add("code", code);
+        if (codeVerifier != null && !codeVerifier.isBlank()) {
+            form.add("code_verifier", codeVerifier);
+        }
 
         JsonNode response = restClient.post()
                 .uri(provider.tokenUri())
