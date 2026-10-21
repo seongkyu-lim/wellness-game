@@ -128,7 +128,7 @@ class RefreshTokenServiceTest {
         assertThatThrownBy(() -> service.rotate(first))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("이미 사용된 리프레시 토큰입니다. 보안을 위해 다시 로그인해 주세요.");
-        assertThat(repository.findByUserId("u-once")).allSatisfy(row -> assertThat(row.getRevokedAt()).isNotNull());
+        assertThat(repository.findByUserId("u-once")).isNotEmpty().allSatisfy(row -> assertThat(row.getRevokedAt()).isNotNull());
     }
 
     @Test
@@ -164,10 +164,10 @@ class RefreshTokenServiceTest {
             service.revokeFamily(" ");
             service.revokeFamily("unknown");
         }).doesNotThrowAnyException();
-        assertThat(repository.findByUserId("u-rev")).allSatisfy(row -> assertThat(row.getRevokedAt()).isNull());
+        assertThat(repository.findByUserId("u-rev")).isNotEmpty().allSatisfy(row -> assertThat(row.getRevokedAt()).isNull());
 
         service.revokeFamily(raw);
-        assertThat(repository.findByUserId("u-rev")).allSatisfy(row -> assertThat(row.getRevokedAt()).isEqualTo(T0));
+        assertThat(repository.findByUserId("u-rev")).isNotEmpty().allSatisfy(row -> assertThat(row.getRevokedAt()).isEqualTo(T0));
         // 폐기 뒤 회전은 재사용 처리 없이 그냥 거부(replaced_by 없음)
         assertThatThrownBy(() -> service.rotate(raw))
                 .isInstanceOf(UnauthorizedException.class)

@@ -1,6 +1,7 @@
 package com.wellnessgame.activity;
 
 import com.wellnessgame.api.HealthActivitySyncRequest.ActivityPayload;
+import com.wellnessgame.support.ActivityPayloads;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -41,8 +42,7 @@ class ActivityXpCalculatorBoundaryTest {
     }
 
     private static ActivityPayload workout(WorkoutType type, Integer minutes, String calories) {
-        return new ActivityPayload(ActivityType.WORKOUT, type, minutes,
-                calories == null ? null : new BigDecimal(calories), null, null, null, null, null, null);
+        return ActivityPayloads.workout(type, minutes, calories == null ? null : new BigDecimal(calories), null, null, null);
     }
 
     @ParameterizedTest(name = "{0} 종목 보너스 {1}")

@@ -16,13 +16,9 @@ import com.wellnessgame.support.ActivityPayloads;
 import com.wellnessgame.support.MutableClock;
 import com.wellnessgame.support.TestClockConfig;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -55,32 +51,23 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@code ./gradlew postgresTest} 로 실행한다.
  */
 @Tag("postgres")
-@TestMethodOrder(MethodOrderer.Random.class)
 class PostgresConcurrencyScenariosTest {
     private static final LocalDate DAY = LocalDate.of(2026, 6, 17);
     private static final Instant NOW = Instant.parse("2026-06-17T23:00:00Z");
     private static final int POOL_SIZE = 4;
 
-    private String database;
-    private ConfigurableApplicationContext app;
-    private HealthActivitySyncService syncService;
-    private HealthActivityRepository activityRepository;
-    private UserCharacterRepository characterRepository;
-    private RefreshTokenService refreshTokenService;
-    private RefreshTokenRepository refreshTokenRepository;
+    // 클래스당 컨텍스트·데이터베이스 하나를 공유한다. 테스트는 서로 다른 사용자 ID 를 쓰고 사용자별로 단언하므로 순서에 무관하다.
+    private static String database;
+    private static ConfigurableApplicationContext app;
+    private static HealthActivitySyncService syncService;
+    private static HealthActivityRepository activityRepository;
+    private static UserCharacterRepository characterRepository;
+    private static RefreshTokenService refreshTokenService;
+    private static RefreshTokenRepository refreshTokenRepository;
 
     @BeforeAll
-    static void startPostgres() {
+    static void startPostgresAndApp() {
         PostgresTestServer.start();
-    }
-
-    @AfterAll
-    static void stopPostgres() {
-        PostgresTestServer.stop();
-    }
-
-    @BeforeEach
-    void setUp() {
         database = PostgresTestServer.createDatabase();
         app = new SpringApplicationBuilder(WellnessGameApplication.class, TestClockConfig.class)
                 .web(WebApplicationType.NONE)
@@ -99,10 +86,15 @@ class PostgresConcurrencyScenariosTest {
         app.getBean(MutableClock.class).setInstant(NOW);
     }
 
-    @AfterEach
-    void tearDown() {
-        app.close();
-        PostgresTestServer.dropDatabase(database);
+    @AfterAll
+    static void stopApp() {
+        if (app != null) {
+            app.close();
+        }
+        if (database != null) {
+            PostgresTestServer.dropDatabase(database);
+        }
+        PostgresTestServer.stop();
     }
 
     // ---- 리프레시 토큰: 동시 회전 ----
@@ -115,7 +107,7 @@ class PostgresConcurrencyScenariosTest {
         List<Outcome<RefreshTokenService.Rotation>> outcomes = runConcurrently(List.of(
                 () -> refreshTokenService.rotate(first), () -> refreshTokenService.rotate(first)));
 
-        assertThat(outcomes).allSatisfy(outcome -> assertThat(outcome.error()).isNull());
+        assertThat(outcomes).hasSize(2).allSatisfy(outcome -> assertThat(outcome.error()).isNull());
         List<RefreshToken> family = refreshTokenRepository.findByUserId(user);
         assertThat(family).hasSize(3);
         assertThat(family.stream().filter(RefreshToken::isGraceReissued)).hasSize(1);
@@ -139,7 +131,7 @@ class PostgresConcurrencyScenariosTest {
         assertThat(outcomes.stream().filter(o -> o.error() != null)).singleElement()
                 .satisfies(o -> assertThat(o.error()).isInstanceOf(UnauthorizedException.class));
         // 재사용 감지 결과(family 폐기)는 예외에도 불구하고 커밋된다
-        assertThat(refreshTokenRepository.findByUserId(user)).allSatisfy(token ->
+        assertThat(refreshTokenRepository.findByUserId(user)).isNotEmpty().allSatisfy(token ->
                 assertThat(token.getRevokedAt()).isNotNull());
         for (Outcome<RefreshTokenService.Rotation> ok : outcomes.stream().filter(o -> o.error() == null).toList()) {
             String issued = ok.value().refreshToken().refreshToken();
@@ -148,7 +140,7 @@ class PostgresConcurrencyScenariosTest {
     }
 
     @Test
-    void concurrentRotationsOfDifferentFamiliesDoNotBlockEachOther() throws Exception {
+    void concurrentRotationsOfDifferentFamiliesAllSucceed() throws Exception {
         List<Callable<RefreshTokenService.Rotation>> tasks = new ArrayList<>();
         for (int i = 0; i < POOL_SIZE * 2; i++) {
             String raw = refreshTokenService.issue("multi-" + i).refreshToken();
@@ -157,8 +149,11 @@ class PostgresConcurrencyScenariosTest {
 
         List<Outcome<RefreshTokenService.Rotation>> outcomes = runConcurrently(tasks);
 
-        assertThat(outcomes).allSatisfy(outcome -> assertThat(outcome.error()).isNull());
-        assertThat(refreshTokenRepository.count()).isEqualTo(POOL_SIZE * 4L);
+        assertThat(outcomes).hasSize(POOL_SIZE * 2)
+                .allSatisfy(outcome -> assertThat(outcome.error()).isNull());
+        for (int i = 0; i < POOL_SIZE * 2; i++) {
+            assertThat(refreshTokenRepository.findByUserId("multi-" + i)).hasSize(2); // 원본 + 후계
+        }
     }
 
     // ---- 로그아웃 vs 회전 ----
@@ -186,6 +181,7 @@ class PostgresConcurrencyScenariosTest {
             }
             assertThat(refreshTokenRepository.findByUserId(user))
                     .as("반복 %d: 로그아웃 뒤 살아 있는 리프레시 토큰이 없어야 함", i)
+                    .isNotEmpty()
                     .allSatisfy(token -> assertThat(token.getRevokedAt()).isNotNull());
             if (rotation.error() == null) {
                 String successor = ((RefreshTokenService.Rotation) rotation.value()).refreshToken().refreshToken();
@@ -209,12 +205,12 @@ class PostgresConcurrencyScenariosTest {
 
         List<Outcome<HealthActivitySyncResponse>> outcomes = runConcurrently(tasks);
 
-        assertThat(outcomes).allSatisfy(outcome -> assertThat(outcome.error()).isNull());
+        assertThat(outcomes).hasSize(POOL_SIZE).allSatisfy(outcome -> assertThat(outcome.error()).isNull());
         int total = outcomes.stream().mapToInt(o -> o.value().gainedXp()).sum();
         assertThat(total).as("걸음 70 + 달리기 105 + 수면 80 이 한 번만 지급").isEqualTo(70 + 105 + 80);
         assertThat(outcomes.stream().filter(o -> o.value().gainedXp() > 0)).hasSize(1);
         assertThat(characterRepository.findByUserId(user).orElseThrow().getTotalXp()).isEqualTo(255);
-        assertThat(activityRepository.count()).isEqualTo(3);
+        assertThat(activityRepository.findByUserIdAndActivityDate(user, DAY)).hasSize(3);
     }
 
     @Test
@@ -230,7 +226,7 @@ class PostgresConcurrencyScenariosTest {
         assertThat(characterRepository.findByUserId(user).orElseThrow().getTotalXp()).isEqualTo(90);
         assertThat(activityRepository.findByExternalKey(user + "|" + DAY + "|STEPS").orElseThrow().getGainedXp())
                 .isEqualTo(90);
-        assertThat(activityRepository.count()).isEqualTo(1);
+        assertThat(activityRepository.findByUserIdAndActivityDate(user, DAY)).hasSize(1);
     }
 
     @Test
@@ -241,9 +237,9 @@ class PostgresConcurrencyScenariosTest {
                 () -> sync(user, workoutAt(WorkoutType.RUNNING, 30, "08:00", "08:30")),
                 () -> sync(user, workoutAt(WorkoutType.CYCLING, 30, "08:10", "08:40"))));
 
-        assertThat(outcomes).allSatisfy(outcome -> assertThat(outcome.error()).isNull());
+        assertThat(outcomes).hasSize(2).allSatisfy(outcome -> assertThat(outcome.error()).isNull());
         assertThat(outcomes.stream().filter(o -> o.value().gainedXp() > 0)).hasSize(1);
-        assertThat(activityRepository.count()).isEqualTo(1);
+        assertThat(activityRepository.findByUserIdAndActivityDate(user, DAY)).hasSize(1);
     }
 
     @Test
@@ -256,8 +252,10 @@ class PostgresConcurrencyScenariosTest {
 
         List<Outcome<HealthActivitySyncResponse>> outcomes = runConcurrently(tasks);
 
-        assertThat(outcomes).allSatisfy(o -> assertThat(o.value().gainedXp()).isEqualTo(70));
-        assertThat(characterRepository.count()).isEqualTo(POOL_SIZE * 2L);
+        assertThat(outcomes).hasSize(POOL_SIZE * 2).allSatisfy(o -> assertThat(o.value().gainedXp()).isEqualTo(70));
+        for (int i = 0; i < POOL_SIZE * 2; i++) {
+            assertThat(characterRepository.findByUserId("independent-" + i)).isPresent();
+        }
     }
 
     // ---- helpers ----
@@ -267,7 +265,7 @@ class PostgresConcurrencyScenariosTest {
     }
 
     private static ActivityPayload workoutAt(WorkoutType type, Integer minutes, String start, String end) {
-        return ActivityPayloads.workout(type, minutes, "2026-06-17T" + start + ":00Z", "2026-06-17T" + end + ":00Z");
+        return ActivityPayloads.workoutOn(DAY, type, minutes, start, end);
     }
 
     /** 작업 결과 또는 던진 예외. 예외를 숨기지 않고 테스트가 직접 판단하게 한다. */
@@ -291,7 +289,7 @@ class PostgresConcurrencyScenariosTest {
                     }
                 }));
             }
-            ready.await(10, TimeUnit.SECONDS);
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
             start.countDown();
             List<Outcome<T>> results = new ArrayList<>();
             for (Future<Outcome<T>> future : futures) {

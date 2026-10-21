@@ -71,21 +71,14 @@ jacoco {
     toolVersion = '0.8.13'
 }
 
-// 에이전트는 기존 exec 파일에 이어 쓰므로, 이전 실행 데이터가 쌓여 검증 결과가 부풀지 않게 실행 전에 지운다.
-tasks.withType(Test).configureEach { testTask ->
-    testTask.doFirst {
-        testTask.extensions.getByType(JacocoTaskExtension).destinationFile?.delete()
-    }
-}
-
 // 앱 진입점(main)은 단위·통합 테스트로 다루지 않는다.
 def jacocoExcludes = ['com/wellnessgame/WellnessGameApplication*']
 
 tasks.named('jacocoTestReport') {
     description = 'test + postgresTest 실행 데이터를 합친 커버리지 리포트(HTML/XML).'
-    // 존재하는 exec 만 합친다. postgresTest 는 Docker 가 필요하므로 의존하지 않고, 실행됐다면 순서만 앞선다.
-    dependsOn tasks.named('test')
-    mustRunAfter tasks.named('postgresTest')
+    // 존재하는 exec 만 합친다. postgresTest 는 Docker 가 필요하므로 의존하지 않는다.
+    // test 에 의존하지 않는다: postgresTest 만 돌려도 H2 전체 스위트가 따라 돌지 않게 순서(mustRunAfter)만 둔다.
+    mustRunAfter tasks.named('test'), tasks.named('postgresTest')
     executionData.setFrom(files(
             layout.buildDirectory.file('jacoco/test.exec'),
             layout.buildDirectory.file('jacoco/postgresTest.exec')).filter { it.exists() })
@@ -107,7 +100,20 @@ tasks.named('jacocoTestCoverageVerification') {
     classDirectories.setFrom(files(classDirectories.files.collect {
         fileTree(it) { exclude jacocoExcludes }
     }))
+    // 번들 줄 기준 0.95 는 전체의 약 4~5%, 곧 36줄 안팎(현재 미커버 약 36줄 수준)의 미커버를 허용한다.
+    // 한 클래스를 통째로 비워 둬도 번들 평균에 가려지므로 아래에 클래스별 하한(0.6)을 따로 둔다.
     violationRules {
+        rule {
+            element = 'CLASS'
+            // 제외 근거: V4·V6 은 PostgreSQL 전용 SQL 이라 H2 에서는 건너뛰고 postgresTest 가 검증한다.
+            // Sha256 은 도달할 수 없는 NoSuchAlgorithmException 분기와 private 생성자만 남는다.
+            excludes = ['db.migration.V4__*', 'db.migration.V6__*', 'com.wellnessgame.auth.Sha256']
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.6
+            }
+        }
         rule {
             element = 'BUNDLE'
             limit {

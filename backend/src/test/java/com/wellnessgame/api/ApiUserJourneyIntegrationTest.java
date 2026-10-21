@@ -25,6 +25,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import java.time.Duration;
 
 import static com.wellnessgame.support.TestAuth.bearerToken;
+import static com.wellnessgame.support.TestRequests.refreshBody;
+import static com.wellnessgame.support.TestRequests.stepsSyncBody;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -170,7 +172,7 @@ class ApiUserJourneyIntegrationTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/characters/me").with(bearerToken(otherRotated.path("accessToken").asText())))
                 .andExpect(status().isUnauthorized());
-        assertThat(refreshTokenRepository.findByUserId(userId)).allSatisfy(token -> assertThat(token.getRevokedAt()).isNotNull());
+        assertThat(refreshTokenRepository.findByUserId(userId)).isNotEmpty().allSatisfy(token -> assertThat(token.getRevokedAt()).isNotNull());
 
         // 11. 로그아웃 뒤 같은 자격 증명으로 다시 로그인하면 이전 진행도가 그대로다(진행도는 계정에 묶인다)
         clock.setInstant(TestClockConfig.DEFAULT_NOW.plusSeconds(3_800));
@@ -315,14 +317,8 @@ class ApiUserJourneyIntegrationTest {
                 """.formatted(username, PASSWORD)).path("refreshToken").asText();
     }
 
-    private static String refreshBody(String token) {
-        return "{\"refreshToken\":\"" + token + "\"}";
-    }
-
     private static String syncBody(int steps) {
-        return """
-                {"date":"%s","activities":[{"type":"STEPS","steps":%d}]}
-                """.formatted(DATE, steps);
+        return stepsSyncBody(DATE, steps);
     }
 
     /** 200 을 확인하고 본문 JSON 을 돌려준다. body 가 null 이면 본문 없이 보낸다. */

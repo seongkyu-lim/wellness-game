@@ -34,6 +34,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static com.wellnessgame.support.TestAuth.bearerToken;
+import static com.wellnessgame.support.TestRequests.refreshBody;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -431,10 +432,6 @@ class AuthSessionIntegrationTest {
 
     private RefreshToken row(String refreshToken) {
         return refreshTokenRepository.findByTokenHash(sha256Hex(refreshToken)).orElseThrow();
-    }
-
-    private static String refreshBody(String refreshToken) {
-        return "{\"refreshToken\": \"" + refreshToken + "\"}";
     }
 
     private static String sha256Hex(String value) {

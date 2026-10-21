@@ -147,6 +147,6 @@ class HealthActivitySyncStatsTest {
     }
 
     private static ActivityPayload workout(WorkoutType type, int minutes, String start, String end) {
-        return ActivityPayloads.workout(type, minutes, "2026-06-17T" + start + ":00Z", "2026-06-17T" + end + ":00Z");
+        return ActivityPayloads.workoutOn(DAY, type, minutes, start, end);
     }
 }
