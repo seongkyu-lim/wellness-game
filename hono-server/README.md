@@ -71,6 +71,19 @@ npm run deploy              # wrangler deploy(사람이 확인 후 실행. Hyper
 DB 테스트는 `DATABASE_URL_TEST` 의 **public 스키마를 지우고** `backend/db/schema.sql` 로
 다시 만든다. 전용 DB 를 쓴다. 예: `docker run --rm -d -p 55432:5432 -e POSTGRES_USER=wellness -e POSTGRES_PASSWORD=wellness -e POSTGRES_DB=wellness_test postgres:16-alpine`
 
+### Render(Node) 배포 (#137)
+
+루트 `render.yaml` 의 `wellness-game-hono` 서비스. Spring 서비스(`wellness-game-api`)와 병행한다.
+
+1. 서비스 생성: Node 런타임, Root Directory `hono-server`, Build `npm ci && npm run build`, Start `npm start`, Health Check `/healthz`, 리전 Singapore, `NODE_VERSION=22`.
+2. 비밀값(대시보드에서 직접 입력):
+   - `DATABASE_URL` — Spring 과 같은 Supabase pooler. `postgres://<user>:<password>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require`
+     (또는 Spring 과 같은 `jdbc:postgresql://...` + `DATABASE_USERNAME`·`DATABASE_PASSWORD`)
+   - `AUTH_JWT_SECRET` — **Spring 서비스의 값을 그대로 복사**. 다르면 두 서버의 토큰이 서로 통하지 않는다.
+   - `CORS_ALLOWED_ORIGINS`, 소셜 로그인 키 — Spring 서비스와 같은 값.
+3. 스키마는 Spring Flyway 가 관리한다. Hono 는 마이그레이션을 하지 않으므로 Spring 을 먼저 배포해 최신 스키마를 만든다.
+4. 확인: `GET /healthz` 200, `/swagger-ui`, 토큰 없는 `GET /api/characters/me` 401.
+
 ### Workers 배포 준비(실행은 별도 확인)
 
 1. `wrangler hyperdrive create wellness-db --caching-disabled --connection-string="postgres://...supabase...:5432/postgres?sslmode=require"` → `wrangler.toml` 의 `id` 교체
