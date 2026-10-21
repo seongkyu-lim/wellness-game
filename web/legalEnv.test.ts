@@ -59,7 +59,13 @@ describe('legalEnvPlugin', () => {
   it('Vercel 빌드에서는 문제가 된 환경변수 이름을 모두 담아 실패한다', () => {
     vi.stubEnv('VERCEL', '1')
     expect(() => run({})).toThrow(/VITE_PRIVACY_CONTACT_EMAIL.*VITE_PRIVACY_EFFECTIVE_DATE/)
-    expect(() => run({ ...REAL, VITE_PRIVACY_EFFECTIVE_DATE: '2026-02-30x' })).toThrow(/VITE_PRIVACY_EFFECTIVE_DATE/)
+    expect(() => run({ ...REAL, VITE_PRIVACY_EFFECTIVE_DATE: '2026-13-01' })).toThrow(/VITE_PRIVACY_EFFECTIVE_DATE/)
+  })
+
+  // findLegalPlaceholders의 2월 30일 버그(위 it.fails)와 같은 원인으로 빌드도 통과해 버린다. 고치면 it으로 바꾼다.
+  it.fails('Vercel 빌드에서 존재하지 않는 날짜(2026-02-30)도 실패시킨다', () => {
+    vi.stubEnv('VERCEL', '1')
+    expect(() => run({ ...REAL, VITE_PRIVACY_EFFECTIVE_DATE: '2026-02-30' })).toThrow(/VITE_PRIVACY_EFFECTIVE_DATE/)
   })
 
   it('Vercel 빌드라도 실제 값이면 통과한다', () => {

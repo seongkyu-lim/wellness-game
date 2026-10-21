@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TokenResponse } from '../api/authApi'
 import { ApiError } from '../api/http'
+import { tokenResponse } from '../test/fixtures'
 import { ACCESS_KEY, SESSION_KEY, SessionManager, type ChannelLike, type KeyValueStore } from './session'
 
 /** 같은 이름의 BroadcastChannel처럼, 보낸 인스턴스를 뺀 나머지에 비동기로 복사본을 전달한다. */
@@ -32,17 +33,6 @@ function memoryStore(): KeyValueStore {
   }
 }
 
-function tokens(n: number, expiresIn = 3600): TokenResponse {
-  return {
-    userId: 'kakao:1',
-    displayName: null,
-    accessToken: `acc-${n}`,
-    tokenType: 'Bearer',
-    expiresIn,
-    refreshToken: `ref-${n}`,
-    refreshExpiresIn: 2_592_000,
-  }
-}
 
 /** 서버처럼 리프레시 토큰을 회전하고, 이미 회전된 토큰이 다시 오면 401(재사용)로 응답한다. */
 function fakeServer(delayMs = 5) {
@@ -53,7 +43,7 @@ function fakeServer(delayMs = 5) {
       throw new ApiError(401, { raw: 'reused' })
     }
     current++
-    return tokens(current)
+    return tokenResponse(current)
   })
   return { refresh }
 }
@@ -77,7 +67,7 @@ function createTabs(count: number, refresh: (token: string) => Promise<TokenResp
 
 /** 첫 탭에서 로그인하고, 나머지 탭은 저장소에서 세션을 읽는다(새 탭: 액세스 토큰 없음). */
 function signInAll(tabs: SessionManager[], expiresIn = 3600) {
-  tabs[0].start('kakao', tokens(1, expiresIn))
+  tabs[0].start('kakao', tokenResponse(1, expiresIn))
   tabs.slice(1).forEach((tab) => tab.load())
 }
 
@@ -87,7 +77,7 @@ describe('저장 위치', () => {
   it('리프레시 토큰은 localStorage, 액세스 토큰은 메모리와 탭 저장소에만 둔다', () => {
     const tab = memoryStore()
     const manager = new SessionManager({ local: localStorage, tab, channel: null })
-    manager.start('naver', tokens(1))
+    manager.start('naver', tokenResponse(1))
 
     const stored = JSON.parse(localStorage.getItem(SESSION_KEY)!)
     expect(stored).toMatchObject({ provider: 'naver', userId: 'kakao:1', refreshToken: 'ref-1' })
@@ -164,7 +154,7 @@ describe('탭 간 갱신 조율', () => {
     const local = memoryStore()
     const a = new SessionManager({ local, tab: memoryStore(), channel: null, refresh: server.refresh })
     const b = new SessionManager({ local, tab: memoryStore(), channel: null, refresh: server.refresh })
-    a.start('kakao', tokens(1))
+    a.start('kakao', tokenResponse(1))
     b.load()
 
     await a.refresh() // ref-1 → ref-2 (b는 모름)
@@ -247,7 +237,7 @@ describe('저장값 검증', () => {
   })
 
   it('탭 사본이 다른 사용자 것이거나 손상됐으면 쓰지 않고 액세스 토큰 없이 시작한다', () => {
-    new SessionManager({ local: localStorage, tab: memoryStore(), channel: null }).start('kakao', tokens(1))
+    new SessionManager({ local: localStorage, tab: memoryStore(), channel: null }).start('kakao', tokenResponse(1))
     for (const copy of [JSON.stringify({ userId: 'other', accessToken: 'x', expiresAt: Date.now() + 1e6 }), '{broken']) {
       const tab = memoryStore()
       tab.setItem(ACCESS_KEY, copy)
@@ -257,7 +247,7 @@ describe('저장값 검증', () => {
 
   it('refreshExpiresIn이 없는 응답은 리프레시 토큰을 즉시 만료로 저장해 다음 로드에서 로그아웃된다', () => {
     const manager = new SessionManager({ local: localStorage, tab: memoryStore(), channel: null })
-    manager.start('kakao', { ...tokens(1), refreshExpiresIn: undefined })
+    manager.start('kakao', { ...tokenResponse(1), refreshExpiresIn: undefined })
     expect(new SessionManager({ local: localStorage, tab: memoryStore(), channel: null }).load()).toBeNull()
   })
 })
@@ -267,7 +257,7 @@ describe('만료 처리', () => {
     let now = 1_000_000
     const channel = controlledChannel()
     const manager = new SessionManager({ local: localStorage, tab: memoryStore(), channel, now: () => now })
-    manager.start('kakao', { ...tokens(1, 60), refreshToken: undefined })
+    manager.start('kakao', { ...tokenResponse(1, 60), refreshToken: undefined })
 
     await expect(manager.accessToken()).resolves.toBe('acc-1') // 60초 안이지만 갱신 수단이 없으니 그대로 쓴다.
     now += 61_000
@@ -280,7 +270,7 @@ describe('만료 처리', () => {
     let now = 1_000_000
     const refresh = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
     const manager = new SessionManager({ local: localStorage, tab: memoryStore(), channel: null, refresh, now: () => now })
-    manager.start('kakao', tokens(1, 60))
+    manager.start('kakao', tokenResponse(1, 60))
     now += 61_000
 
     await expect(manager.accessToken()).rejects.toBeInstanceOf(TypeError)
@@ -290,15 +280,15 @@ describe('만료 처리', () => {
   it('refresh가 400(잘못된 토큰)이어도 401처럼 세션을 끝낸다', async () => {
     const refresh = vi.fn().mockRejectedValue(new ApiError(400, { raw: 'bad' }))
     const manager = new SessionManager({ local: localStorage, tab: memoryStore(), channel: null, refresh })
-    manager.start('kakao', tokens(1))
+    manager.start('kakao', tokenResponse(1))
     await expect(manager.refresh()).rejects.toMatchObject({ status: 401 })
     expect(manager.current()).toBeNull()
   })
 
   it('401을 받았는데 그 사이 다른 요청이 이미 갱신했으면 다시 갱신하지 않고 새 토큰을 준다', async () => {
-    const refresh = vi.fn(async () => tokens(2))
+    const refresh = vi.fn(async () => tokenResponse(2))
     const manager = new SessionManager({ local: localStorage, tab: memoryStore(), channel: null, refresh })
-    manager.start('kakao', tokens(1))
+    manager.start('kakao', tokenResponse(1))
     await manager.refresh()
 
     await expect(manager.handleUnauthorized('acc-1')).resolves.toBe('acc-2')
@@ -309,12 +299,12 @@ describe('만료 처리', () => {
     let resolveRefresh!: (value: TokenResponse) => void
     const refresh = vi.fn(() => new Promise<TokenResponse>((resolve) => (resolveRefresh = resolve)))
     const manager = new SessionManager({ local: localStorage, tab: memoryStore(), channel: null, refresh, logout: vi.fn() })
-    manager.start('kakao', tokens(1))
+    manager.start('kakao', tokenResponse(1))
 
     const pending = manager.refresh().catch((e: unknown) => e)
     await vi.waitFor(() => expect(refresh).toHaveBeenCalled())
     await manager.logout()
-    resolveRefresh(tokens(2))
+    resolveRefresh(tokenResponse(2))
 
     expect(await pending).toMatchObject({ status: 401 })
     expect(manager.current()).toBeNull()
@@ -325,11 +315,11 @@ describe('만료 처리', () => {
     let rejectRefresh!: (e: unknown) => void
     const refresh = vi.fn(() => new Promise<TokenResponse>((_, reject) => (rejectRefresh = reject)))
     const manager = new SessionManager({ local: localStorage, tab: memoryStore(), channel: null, refresh })
-    manager.start('kakao', tokens(1))
+    manager.start('kakao', tokenResponse(1))
 
     const pending = manager.refresh().catch((e: unknown) => e)
     await vi.waitFor(() => expect(refresh).toHaveBeenCalled())
-    manager.start('google', { ...tokens(7), userId: 'google:7' })
+    manager.start('google', { ...tokenResponse(7), userId: 'google:7' })
     rejectRefresh(new ApiError(401, { raw: 'reused' }))
 
     expect(await pending).toMatchObject({ status: 401 })
@@ -343,7 +333,7 @@ describe('탭 간 메시지 처리', () => {
 
   function setup(options: { tabId?: string; remoteWaitMs?: number; claimWindowMs?: number } = {}) {
     const channel = controlledChannel()
-    const refresh = vi.fn(async () => tokens(2))
+    const refresh = vi.fn(async () => tokenResponse(2))
     const manager = new SessionManager({
       local: localStorage,
       tab: memoryStore(),
@@ -353,7 +343,7 @@ describe('탭 간 메시지 처리', () => {
       remoteWaitMs: options.remoteWaitMs ?? 1_000,
       claimWindowMs: options.claimWindowMs ?? 20,
     })
-    manager.start('kakao', tokens(1))
+    manager.start('kakao', tokenResponse(1))
     return { channel, refresh, manager }
   }
 
@@ -423,17 +413,23 @@ describe('탭 간 메시지 처리', () => {
   it.fails('다른 탭의 갱신 결과가 저장소 반영보다 먼저 와도 폐기된 리프레시 토큰을 다시 보내지 않는다', async () => {
     vi.useFakeTimers()
     const { channel, refresh, manager } = setup({ tabId: 'tab-m' })
-    const result = manager.refresh()
+    // 결과를 기다리지 않고 상태만 기록한다. 고친 뒤 결과가 영영 안 와도 타임아웃이 아니라 아래 단언에서 실패하게 한다.
+    let outcome: { value: string } | { error: unknown } | null = null
+    manager.refresh().then(
+      (value) => (outcome = { value }),
+      (error: unknown) => (outcome = { error }),
+    )
     await vi.advanceTimersByTimeAsync(0)
     channel.deliver({ type: 'refresh-start', tabId: 'tab-a' })
     await vi.advanceTimersByTimeAsync(20)
 
     const rotated = { ...manager.current()!, accessToken: 'acc-2', expiresAt: Date.now() + 3_600_000, refreshToken: 'ref-2' }
     channel.deliver({ type: 'refreshed', tabId: 'tab-a', session: rotated }) // 저장소는 아직 ref-1
-    await vi.advanceTimersByTimeAsync(100)
+    await vi.advanceTimersByTimeAsync(1_000) // 선점 대기·다른 탭 대기 기한보다 넉넉히
 
-    expect(refresh).not.toHaveBeenCalledWith('ref-1')
-    await expect(result).resolves.toBe('acc-2')
+    // 의도한 실패 지점: 현재 구현은 여기서 폐기된 ref-1을 보낸다.
+    expect(refresh.mock.calls).toEqual([])
+    expect(outcome).toEqual({ value: 'acc-2' })
   })
 
   it('tabId가 더 큰 탭의 선점 메시지에는 양보하지 않는다', async () => {

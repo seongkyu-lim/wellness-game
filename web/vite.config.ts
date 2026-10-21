@@ -28,6 +28,9 @@ export default defineConfig({
         branches: 93,
         functions: 96,
         lines: 97,
+        // 핵심 흐름 파일은 전체 평균 뒤에 숨지 않도록 파일별 하한을 따로 둔다(달성치보다 조금 낮게).
+        'src/App.tsx': { statements: 92, branches: 80, functions: 85, lines: 93 },
+        'src/lib/session.ts': { statements: 97, branches: 94, functions: 100, lines: 97 },
       },
     },
   },

@@ -1,30 +1,12 @@
-import { render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 import type { Character } from '../api/types'
-import { I18nProvider } from '../i18n/I18nProvider'
+import type { Language } from '../i18n/core'
+import { character } from '../test/fixtures'
+import { renderWithI18n } from '../test/render'
 import { CharacterCard, xpProgress } from './CharacterCard'
 
-function character(overrides: Partial<Character> = {}): Character {
-  return {
-    level: 4,
-    currentXp: 30,
-    totalXp: 12_345,
-    nextLevelXp: 120,
-    stats: { str: 11, vit: 12, intStat: 13, discipline: 14, recovery: 15 },
-    ...overrides,
-  }
-}
-
-function renderCard(value: Character | null, lang: 'ko' | 'en' = 'ko') {
-  localStorage.setItem('wellness.lang', lang)
-  return render(
-    <I18nProvider>
-      <CharacterCard character={value} />
-    </I18nProvider>,
-  )
-}
-
-beforeEach(() => localStorage.clear())
+const renderCard = (value: Character | null, lang: Language = 'ko') => renderWithI18n(<CharacterCard character={value} />, { lang })
 
 describe('xpProgress', () => {
   it.each([
@@ -52,10 +34,11 @@ describe('CharacterCard', () => {
     expect(screen.getByText('Lv.4 · 새싹 단계')).toBeTruthy()
     expect(screen.getByText('Lv.6이 되면 줄기 단계로 자랄 거야!')).toBeTruthy()
     expect(screen.getByText('줄기까지 Lv.6')).toBeTruthy()
+    expect(screen.getByRole('img', { name: '새싹 단계 캐릭터' })).toBeTruthy()
   })
 
   it('경험치 막대는 접근 가능한 값(백분율·원래 수치)을 노출한다', () => {
-    renderCard(character({ currentXp: 1_050, nextLevelXp: 4_000 }))
+    renderCard(character({ currentXp: 1_050, nextLevelXp: 4_000, totalXp: 12_345 }))
     const bar = screen.getByRole('progressbar', { name: '다음 레벨까지 경험치' })
     expect(bar.getAttribute('aria-valuenow')).toBe('26')
     expect(bar.getAttribute('aria-valuetext')).toBe('1,050 / 4,000 XP')
@@ -64,13 +47,8 @@ describe('CharacterCard', () => {
 
   it('스탯 네 개를 순서대로 보이고 INT는 표시하지 않는다', () => {
     renderCard(character())
-    const tiles = Array.from(screen.getByRole('region', { name: '스탯' }).querySelectorAll('.stat-tile'))
-    expect(tiles.map((tile) => [tile.querySelector('.stat-value')?.textContent, tile.querySelector('.stat-name')?.textContent])).toEqual([
-      ['11', 'STR 근력'],
-      ['12', 'VIT 활력'],
-      ['14', 'DISC 절제'],
-      ['15', 'REC 회복'],
-    ])
+    // 아이콘은 글자가 없으므로 영역 글자는 "값 + 이름"의 나열이다.
+    expect(screen.getByRole('region', { name: '스탯' }).textContent).toBe('11STR 근력12VIT 활력14DISC 절제15REC 회복')
   })
 
   it('최종 단계에서는 다음 단계 대신 완료 문구를 보인다', () => {

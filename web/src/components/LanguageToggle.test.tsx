@@ -1,21 +1,14 @@
 import { act, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { getLanguage } from '../i18n/core'
 import { I18nProvider } from '../i18n/I18nProvider'
+import { renderWithI18n } from '../test/render'
 import { LanguageToggle } from './LanguageToggle'
 
-function renderToggle() {
-  return render(
-    <I18nProvider>
-      <LanguageToggle />
-    </I18nProvider>,
-  )
-}
+const renderToggle = () => renderWithI18n(<LanguageToggle />)
 
 const pressed = () =>
   screen.getAllByRole('button').map((b) => [b.textContent, b.getAttribute('aria-pressed')])
-
-beforeEach(() => localStorage.setItem('wellness.lang', 'ko'))
 
 describe('LanguageToggle', () => {
   it('현재 언어 버튼만 눌림 상태이고, 그룹 이름과 버튼 설명도 현재 언어로 보인다', () => {
@@ -40,7 +33,12 @@ describe('LanguageToggle', () => {
     expect(getLanguage()).toBe('en')
 
     unmount()
-    renderToggle()
+    // 저장값을 덮어쓰지 않고 다시 그려, 저장된 선택이 복원되는지 본다.
+    render(
+      <I18nProvider>
+        <LanguageToggle />
+      </I18nProvider>,
+    )
     expect(screen.getByRole('button', { name: 'EN' }).getAttribute('aria-pressed')).toBe('true')
   })
 })

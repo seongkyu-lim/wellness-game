@@ -1,20 +1,13 @@
-import { act, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
-import { I18nProvider } from '../i18n/I18nProvider'
+import { act, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import type { Language } from '../i18n/core'
 import { LEGAL_DOCUMENTS, LEGAL_EFFECTIVE_DATE, PRIVACY_CONTACT_EMAIL, type LegalDocument } from '../legal/legal'
+import { renderWithI18n } from '../test/render'
 import { LegalPage } from './LegalPage'
 
-function renderPage(document: LegalDocument) {
-  return render(
-    <I18nProvider>
-      <LegalPage document={document} />
-    </I18nProvider>,
-  )
-}
+const renderPage = (document: LegalDocument, lang: Language = 'ko') => renderWithI18n(<LegalPage document={document} />, { lang })
 
 const sectionHeadings = () => screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
-
-beforeEach(() => localStorage.setItem('wellness.lang', 'ko'))
 
 describe.each(['privacy', 'terms'] as const)('LegalPage(%s)', (document) => {
   it('모든 조항을 순서대로 그리고, 두 언어 모두 번호 순서와 조항 수가 같다', () => {
@@ -30,8 +23,7 @@ describe.each(['privacy', 'terms'] as const)('LegalPage(%s)', (document) => {
   })
 
   it.each(['ko', 'en'] as const)('%s 본문에 치환되지 않은 자리표시자나 빈 문단이 없고 시행일·연락처가 들어간다', (lang) => {
-    localStorage.setItem('wellness.lang', lang)
-    renderPage(document)
+    renderPage(document, lang)
     const article = window.document.querySelector('article')!
     expect(article.textContent).not.toMatch(/\{\w+\}/)
     expect(Array.from(article.querySelectorAll('p')).filter((p) => !p.textContent?.trim())).toEqual([])

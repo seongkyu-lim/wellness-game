@@ -1,6 +1,7 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '../i18n/I18nProvider'
+import type { Language } from '../i18n/core'
+import { renderWithI18n } from '../test/render'
 import { startLogin, type Session } from '../lib/auth'
 import { AccountSection } from './AccountSection'
 
@@ -11,16 +12,9 @@ vi.mock('../lib/auth', () => ({
 
 const startLoginMock = vi.mocked(startLogin)
 
-function renderSignedOut() {
-  return render(
-    <I18nProvider>
-      <AccountSection session={null} onLogout={() => {}} />
-    </I18nProvider>,
-  )
-}
+const renderSignedOut = (lang: Language = 'ko') => renderWithI18n(<AccountSection session={null} onLogout={() => {}} />, { lang })
 
 beforeEach(() => {
-  localStorage.setItem('wellness.lang', 'ko')
   startLoginMock.mockReset()
 })
 
@@ -54,11 +48,7 @@ const SESSION: Session = {
 
 describe('AccountSection 로그인 상태', () => {
   it('provider·사용자 ID를 보이고, 이름이 없으면 기본 호칭을 쓰며 로그인 버튼은 숨긴다', () => {
-    render(
-      <I18nProvider>
-        <AccountSection session={SESSION} onLogout={() => {}} />
-      </I18nProvider>,
-    )
+    renderWithI18n(<AccountSection session={SESSION} onLogout={() => {}} />)
     expect(screen.getByText('Naver 로그인')).toBeTruthy()
     expect(screen.getByText('naver:42')).toBeTruthy()
     expect(document.body.textContent).toContain('회원님,')
@@ -67,11 +57,7 @@ describe('AccountSection 로그인 상태', () => {
 
   it('로그아웃 버튼은 onLogout만 부르고 로그인을 시작하지 않는다', () => {
     const onLogout = vi.fn()
-    render(
-      <I18nProvider>
-        <AccountSection session={{ ...SESSION, displayName: '홍길동' }} onLogout={onLogout} />
-      </I18nProvider>,
-    )
+    renderWithI18n(<AccountSection session={{ ...SESSION, displayName: '홍길동' }} onLogout={onLogout} />)
     expect(document.body.textContent).toContain('홍길동님,')
     act(() => screen.getByRole('button', { name: '로그아웃' }).click())
     expect(onLogout).toHaveBeenCalledTimes(1)
@@ -89,8 +75,7 @@ describe('AccountSection 언어별 로그인 버튼 배치', () => {
   })
 
   it('영어는 구글만 펼치고 카카오·네이버는 "다른 방법" 아래에 접어 둔다', () => {
-    localStorage.setItem('wellness.lang', 'en')
-    renderSignedOut()
+    renderSignedOut('en')
     const details = document.querySelector('details')!
     expect(details.querySelector('summary')?.textContent).toBe('Other sign-in options')
     expect(buttonNames(details)).toEqual(['Sign in with Kakao', 'Sign in with Naver'])

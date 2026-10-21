@@ -1,101 +1,85 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ActivityEntry } from '../api/types'
-import { I18nProvider } from '../i18n/I18nProvider'
+import { act, fireEvent, screen, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Language } from '../i18n/core'
+import { activityEntry } from '../test/fixtures'
+import { renderWithI18n } from '../test/render'
 import { KST_EARLY_MORNING, KST_NOON, useTimeZone } from '../test/timezone'
 import { TodayActivities } from './TodayActivities'
 
-function entry(overrides: Partial<ActivityEntry>): ActivityEntry {
-  return {
-    type: 'STEPS',
-    source: 'HEALTHKIT',
-    durationMinutes: null,
-    calories: null,
-    distanceMeters: null,
-    steps: null,
-    sleepMinutes: null,
-    sleepScore: null,
-    gainedXp: 0,
-    startedAt: null,
-    endedAt: null,
-    ...overrides,
-  }
-}
+type Props = Parameters<typeof TodayActivities>[0]
 
-function renderActivities(props: Partial<Parameters<typeof TodayActivities>[0]> = {}) {
+function renderActivities(props: Partial<Props> = {}, lang: Language = 'ko') {
   const handlers = { onDateChange: vi.fn(), onRefresh: vi.fn() }
-  const view = render(
-    <I18nProvider>
-      <TodayActivities date="2026-10-21" activities={[]} loading={false} {...handlers} {...props} />
-    </I18nProvider>,
-  )
+  const view = renderWithI18n(<TodayActivities date="2026-10-21" activities={[]} loading={false} {...handlers} {...props} />, {
+    lang,
+  })
   return { ...view, ...handlers }
 }
 
-/** 퀘스트 한 줄의 제목·부제·XP 칩 */
-function quests() {
-  return Array.from(document.querySelectorAll('.quest')).map((q) => ({
-    title: q.querySelector('.quest-title')?.textContent,
-    sub: q.querySelector('.quest-sub')?.textContent,
-    xp: q.querySelector('.chip')?.textContent ?? null,
-  }))
+/** 활동 기록 영역(aria-label로 찾는다). */
+const section = (name = '활동 기록') => screen.getByRole('region', { name })
+/** 영역 안의 XP 칩 문구(+N XP), 화면 순서대로. 마지막은 합계다. */
+const xpChips = () => within(section()).queryAllByText(/^\+\d+ XP$/).map((el) => el.textContent)
+
+/** 문구들이 영역 안에서 주어진 순서대로 나온다. */
+function expectInOrder(texts: string[]) {
+  const content = section().textContent ?? ''
+  const positions = texts.map((text) => content.indexOf(text))
+  expect(positions.every((p) => p >= 0)).toBe(true)
+  expect([...positions].sort((a, b) => a - b)).toEqual(positions)
 }
 
-beforeEach(() => localStorage.setItem('wellness.lang', 'ko'))
-
 describe('TodayActivities 표시', () => {
-  it('기록이 없으면 빈 상태 안내를 보이고 퀘스트 목록을 그리지 않는다', () => {
+  it('기록이 없으면 빈 상태 안내를 보이고 퀘스트·XP 합계를 그리지 않는다', () => {
     renderActivities()
     expect(screen.getByRole('heading', { name: '아직 동기화된 기록이 없어요' })).toBeTruthy()
-    expect(quests()).toEqual([])
+    expect(within(section()).queryByText('걸음 수')).toBeNull()
+    expect(xpChips()).toEqual([])
   })
 
   it('걸음·수면·운동을 사람이 읽는 단위로 그리고 XP 합계를 보인다', () => {
     renderActivities({
       activities: [
-        entry({ type: 'STEPS', steps: 12_345, gainedXp: 12 }),
-        entry({ type: 'SLEEP', sleepMinutes: 425, sleepScore: 88, gainedXp: 20 }),
-        entry({ type: 'WORKOUT', source: 'RUNNING', durationMinutes: 30, calories: 250.6, distanceMeters: 5_040, gainedXp: 15 }),
+        activityEntry({ type: 'STEPS', steps: 12_345, gainedXp: 12 }),
+        activityEntry({ type: 'SLEEP', sleepMinutes: 425, sleepScore: 88, gainedXp: 20 }),
+        activityEntry({ type: 'WORKOUT', source: 'RUNNING', durationMinutes: 30, calories: 250.6, distanceMeters: 5_040, gainedXp: 15 }),
       ],
     })
-    expect(quests()).toEqual([
-      { title: '걸음 수', sub: '12,345걸음', xp: '+12 XP' },
-      { title: '수면 7시간 5분', sub: '수면 점수 88', xp: '+20 XP' },
-      { title: '달리기 30분', sub: '251 kcal · 5.0 km', xp: '+15 XP' },
-    ])
-    expect(document.querySelector('.quest-total .chip')?.textContent).toBe('+47 XP')
+    expectInOrder(['걸음 수', '12,345걸음', '수면 7시간 5분', '수면 점수 88', '달리기 30분', '251 kcal · 5.0 km'])
+    expect(xpChips()).toEqual(['+12 XP', '+20 XP', '+15 XP', '+47 XP'])
   })
 
   it('값이 빠진 기록은 기록 없음·점수 없음으로, XP가 0이면 칩 없이 그린다', () => {
-    renderActivities({ activities: [entry({ type: 'WORKOUT', source: 'SWIMMING', gainedXp: 0 })] })
-    expect(quests()).toEqual([
-      { title: '걸음 수', sub: '기록 없음', xp: null },
-      { title: '수면 기록 없음', sub: '수면 점수 없음', xp: null },
-      // 시간·칼로리·거리가 모두 없으면 출처(Apple 건강)를 부제로 쓴다.
-      { title: '수영', sub: 'Apple 건강', xp: null },
-    ])
+    renderActivities({ activities: [activityEntry({ type: 'WORKOUT', source: 'SWIMMING' })] })
+    expect(screen.getByText('기록 없음')).toBeTruthy()
+    expect(screen.getByText('수면 기록 없음')).toBeTruthy()
+    expect(screen.getByText('수면 점수 없음')).toBeTruthy()
+    // 시간·칼로리·거리가 모두 없으면 출처(Apple 건강)를 부제로 쓴다.
+    expectInOrder(['수영', 'Apple 건강'])
+    expect(xpChips()).toEqual(['+0 XP']) // 합계만 남는다.
   })
 
   it('알 수 없는 운동 종류는 일반 운동으로 보이고 0 이하 칼로리·거리는 생략한다', () => {
     renderActivities({
       activities: [
-        entry({ type: 'WORKOUT', source: 'YOGA', durationMinutes: 45, calories: 0, distanceMeters: 1_200, gainedXp: 3 }),
-        entry({ type: 'WORKOUT', source: 'CYCLING', calories: 120, distanceMeters: 0, startedAt: '2026-10-21T07:00:00Z' }),
+        activityEntry({ type: 'WORKOUT', source: 'YOGA', durationMinutes: 45, calories: 0, distanceMeters: 1_200, gainedXp: 3 }),
+        activityEntry({ type: 'WORKOUT', source: 'CYCLING', calories: 120, distanceMeters: 0, startedAt: '2026-10-21T07:00:00Z' }),
       ],
     })
-    expect(quests().slice(2)).toEqual([
-      { title: '운동 45분', sub: '1.2 km', xp: '+3 XP' },
-      { title: '자전거', sub: '120 kcal', xp: null },
-    ])
+    expect(screen.getByText('운동 45분')).toBeTruthy()
+    expect(screen.getByText('1.2 km')).toBeTruthy()
+    expect(screen.getByText('자전거')).toBeTruthy()
+    expect(screen.getByText('120 kcal')).toBeTruthy()
+    expect(screen.queryByText(/(^|· )0 kcal/)).toBeNull()
+    expect(screen.queryByText(/\b0\.0 km/)).toBeNull()
   })
 
   it('영어에서는 단위와 문구가 영어 사전을 따른다', () => {
-    localStorage.setItem('wellness.lang', 'en')
-    renderActivities({
-      activities: [entry({ type: 'STEPS', steps: 9_876 }), entry({ type: 'SLEEP', sleepMinutes: 61 })],
-    })
-    expect(quests().map((q) => q.sub)).toEqual(['9,876 steps', 'No sleep score'])
-    expect(quests()[1].title).toBe('Sleep 1h 1m')
+    renderActivities({ activities: [activityEntry({ type: 'STEPS', steps: 9_876 }), activityEntry({ type: 'SLEEP', sleepMinutes: 61 })] }, 'en')
+    const region = screen.getByRole('region', { name: 'Activity' })
+    expect(within(region).getByText('9,876 steps')).toBeTruthy()
+    expect(within(region).getByText('Sleep 1h 1m')).toBeTruthy()
+    expect(within(region).getByText('No sleep score')).toBeTruthy()
   })
 })
 
@@ -111,11 +95,7 @@ describe('TodayActivities 조작', () => {
     act(() => screen.getByRole('button', { name: '새로고침' }).click())
     expect(onRefresh).toHaveBeenCalledTimes(1)
 
-    rerender(
-      <I18nProvider>
-        <TodayActivities date="2026-10-21" activities={[]} loading onDateChange={vi.fn()} onRefresh={onRefresh} />
-      </I18nProvider>,
-    )
+    rerender(<TodayActivities date="2026-10-21" activities={[]} loading onDateChange={vi.fn()} onRefresh={onRefresh} />)
     const button = screen.getByRole<HTMLButtonElement>('button', { name: '새로고침' })
     expect(button.disabled).toBe(true)
     act(() => button.click())

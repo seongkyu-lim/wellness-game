@@ -1,9 +1,10 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from './i18n/I18nProvider'
 import { setLanguage } from './i18n/core'
 import Root from './Root'
-import { createFakeBackend, json, stepsEntry, storeV2Session, type FakeBackend } from './test/fakeBackend'
+import { createFakeBackend, json, storeV2Session, type FakeBackend } from './test/fakeBackend'
+import { activityEntry } from './test/fixtures'
+import { renderWithI18n } from './test/render'
 import { KST_EARLY_MORNING, KST_NOON, useTimeZone } from './test/timezone'
 
 /**
@@ -23,8 +24,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
   vi.setSystemTime(NOW)
   window.history.replaceState(null, '', '/')
-  localStorage.setItem('wellness.lang', 'ko')
-  server = createFakeBackend().install()
+  server = createFakeBackend()
 })
 
 afterEach(() => {
@@ -34,11 +34,7 @@ afterEach(() => {
 
 function renderAt(path: string) {
   window.history.replaceState(null, '', path)
-  return render(
-    <I18nProvider>
-      <Root />
-    </I18nProvider>,
-  )
+  return renderWithI18n(<Root />)
 }
 
 /** 조건이 맞을 때까지 실제 시간으로 조금씩 기다린다(최대 2초). */
@@ -56,6 +52,9 @@ async function eventually(assertion: () => void, timeoutMs = 2_000): Promise<voi
     }
   }
 }
+
+/** 대기 중인 마이크로태스크와 그로 인한 React 갱신을 흘려보낸다(시간 지연 없음). */
+const flushMicrotasks = () => act(async () => {})
 
 /** 자동 새로고침 한 주기를 흘려보낸다. */
 async function tickPoll(times = 1) {
@@ -124,7 +123,7 @@ describe('자동 새로고침', () => {
     await renderSignedIn()
     expect(screen.getByText('아직 동기화된 기록이 없어요')).toBeTruthy()
 
-    server.state.activities = [stepsEntry(5_000, 10)]
+    server.state.activities = [activityEntry({ steps: 5_000, gainedXp: 10 })]
     await tickPoll()
     await eventually(() => expect(screen.getByText('5,000걸음')).toBeTruthy())
     expect(dataRequests()).toHaveLength(4)
@@ -200,27 +199,14 @@ describe('토큰 갱신', () => {
 
   it('서버가 아직 유효해 보이는 토큰을 401로 거부하면 refresh 한 번으로 두 조회를 모두 재시도한다', async () => {
     await renderSignedIn()
-    // 서버 쪽에서 토큰을 회전해(예: 다른 기기 동작) acc-1이 무효가 된 상황. ref-1은 아직 유효하다.
-    const refresh = server.routes['POST /api/auth/refresh']
-    let rejectedOnce = false
-    for (const route of ['GET /api/characters/me', 'GET /api/health-activities'] as const) {
-      const original = server.routes[route]
-      server.routes[route] = (req) => {
-        if (!rejectedOnce && req.headers.Authorization === 'Bearer acc-1') {
-          return json(401, { message: '인증이 필요합니다.' })
-        }
-        return original(req)
-      }
-    }
-    server.routes['POST /api/auth/refresh'] = (req) => {
-      rejectedOnce = true
-      return refresh(req)
-    }
+    // 서버가 acc-1만 무효화한 상황(리프레시 토큰 ref-1은 아직 유효). 두 조회가 동시에 401을 받는다.
+    server.revokeAccess()
 
     await tickPoll()
     await eventually(() => expect(dataRequests().filter((r) => r.headers.Authorization === 'Bearer acc-2')).toHaveLength(2))
 
     expect(server.requestsTo('/api/auth/refresh')).toHaveLength(1)
+    expect(dataRequests().slice(2, 4).map((r) => r.headers.Authorization)).toEqual(['Bearer acc-1', 'Bearer acc-1'])
     expect(alertText()).toBeNull()
   })
 
@@ -265,7 +251,15 @@ describe('로그아웃', () => {
   it('로그아웃 전에 보낸 조회의 늦은 응답(성공·실패)은 로그아웃 화면을 덮어쓰지 않는다', async () => {
     await renderSignedIn()
     const held: Array<() => void> = []
-    const hold = (response: () => Response) => () => new Promise<Response>((resolve) => held.push(() => resolve(response())))
+    const released: Response[] = []
+    const hold = (response: () => Response) => () =>
+      new Promise<Response>((resolve) =>
+        held.push(() => {
+          const res = response()
+          released.push(res)
+          resolve(res)
+        }),
+      )
     server.routes['GET /api/characters/me'] = hold(() => json(200, { userId: 'kakao:1', character: { ...server.state.character, level: 20 } }))
     server.routes['GET /api/health-activities'] = hold(() => json(500, { message: '늦은 오류' }))
 
@@ -273,7 +267,9 @@ describe('로그아웃', () => {
     await eventually(() => expect(held).toHaveLength(2))
     act(() => screen.getByRole('button', { name: '로그아웃' }).click())
     await act(async () => held.forEach((release) => release()))
-    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 20)))
+    // 앱이 두 응답 본문을 모두 읽어 처리를 마칠 때까지 기다린다.
+    await eventually(() => expect(released.map((res) => res.bodyUsed)).toEqual([true, true]))
+    await flushMicrotasks()
 
     expect(alertText()).toBeNull()
     // 대시보드 전용 요소(경험치 막대·활동 기록)가 되살아나지 않는다.
@@ -344,7 +340,8 @@ describe('법적 고지 라우트', () => {
   it('법적 고지 주소에 code·state가 붙어 있어도 로그인 교환을 시도하지 않는다', async () => {
     sessionStorage.setItem('wellness.oauth-state', 'kakao:s')
     renderAt('/privacy?code=c&state=kakao:s')
-    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 20)))
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('개인정보 처리방침')
+    await flushMicrotasks()
     expect(server.requests).toHaveLength(0)
     expect(sessionStorage.getItem('wellness.oauth-state')).toBe('kakao:s')
   })
@@ -379,7 +376,7 @@ describe('읽기 전용 규칙(회귀 방지)', () => {
     if (last) {
       act(() => last.click())
     }
-    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)))
+    await flushMicrotasks()
   }
 
   it('대시보드에는 폼이 없고 입력은 조회 날짜뿐이다', async () => {
@@ -390,11 +387,13 @@ describe('읽기 전용 규칙(회귀 방지)', () => {
   })
 
   it('대시보드의 모든 컨트롤을 눌러도 인증 경로 밖으로 쓰기 요청을 보내지 않는다', async () => {
-    server.state.activities = [stepsEntry(1_000, 5)]
+    server.state.activities = [activityEntry({ steps: 1_000, gainedXp: 5 })]
     await renderSignedIn()
     await exerciseEveryControl('로그아웃')
+    // 양성 신호: 바꾼 날짜로 다시 조회했고, 마지막에 누른 로그아웃 요청이 나갔다.
+    await eventually(() => expect(server.requestsTo('/api/auth/logout')).toHaveLength(1))
+    expect(server.requests.some((r) => r.path.includes('date=2026-10-02'))).toBe(true)
 
-    expect(server.requests.length).toBeGreaterThan(2)
     expect(writesOutsideAuth()).toEqual([])
     expect(server.requests.filter((r) => isWrite(r.method)).map((r) => r.path)).toEqual(['/api/auth/logout'])
   })
@@ -403,25 +402,53 @@ describe('읽기 전용 규칙(회귀 방지)', () => {
     renderAt('/')
     expect(document.querySelectorAll('form')).toHaveLength(0)
     await exerciseEveryControl()
+    // 양성 신호: 언어 버튼까지 눌려 화면이 영어로 바뀌었다(모든 클릭이 처리됨).
+    expect(document.documentElement.lang).toBe('en')
     expect(server.requests.filter((r) => isWrite(r.method))).toEqual([])
   })
 
-  it('소스 코드에서 쓰기 메서드는 인증 API 모듈에만 있고 그 요청은 모두 /api/auth/ 경로다', () => {
+  it('소스 코드의 쓰기 요청은 모두 /api/auth/ 경로의 fetch이고 다른 전송 수단·폼은 없다', () => {
     const sources = import.meta.glob<string>(['./**/*.{ts,tsx}', '!./**/*.test.{ts,tsx}', '!./test/**'], {
       query: '?raw',
       import: 'default',
       eager: true,
     })
     expect(Object.keys(sources).length).toBeGreaterThan(10)
-    const writeMethod = /method:\s*['"`](POST|PUT|PATCH|DELETE)['"`]/i
-    const offenders = Object.entries(sources)
-      .filter(([file, code]) => file !== './api/authApi.ts' && (writeMethod.test(code) || /<form[\s>]/.test(code)))
-      .map(([file]) => file)
-    expect(offenders).toEqual([])
+    const writeMethod = /method:\s*['"`](POST|PUT|PATCH|DELETE)['"`]/gi
+    const otherTransport = /\bsendBeacon\b|\bXMLHttpRequest\b|\bnew\s+Request\s*\(|<form[\s>]/
 
-    const authApi = sources['./api/authApi.ts']
-    const writeCalls = authApi.match(/fetch\(`[^`]+`,\s*\{\s*method:\s*'(POST|PUT|PATCH|DELETE)'/g) ?? []
-    expect(writeCalls.length).toBeGreaterThan(0)
-    writeCalls.forEach((call) => expect(call).toMatch(/\/api\/auth\//))
+    const problems: string[] = []
+    let authWrites = 0
+    for (const [file, code] of Object.entries(sources)) {
+      if (otherTransport.test(code)) {
+        problems.push(`${file}: fetch 밖의 전송 수단 또는 폼`)
+      }
+      // 각 fetch( 호출의 첫 인자(주소)와 바로 뒤 옵션 일부를 본다.
+      let writesInFetch = 0
+      for (const match of code.matchAll(/\bfetch\(\s*([^,)]+)/g)) {
+        const target = match[1]
+        const options = code.slice(match.index, match.index + 200)
+        const isWrite = new RegExp(writeMethod.source, 'i').test(options)
+        if (isWrite) {
+          writesInFetch++
+          if (!target.includes('/api/auth/')) {
+            problems.push(`${file}: 인증 경로 밖 쓰기 요청 ${target}`)
+          }
+        }
+        if (file === './api/authApi.ts' && !target.includes('/api/auth/')) {
+          problems.push(`${file}: 인증 API 모듈의 fetch가 /api/auth/ 밖을 호출 ${target}`)
+        }
+      }
+      // fetch 호출 밖에 놓인 쓰기 메서드(다른 래퍼로 넘기는 경우 등)도 잡는다.
+      if ((code.match(writeMethod) ?? []).length !== writesInFetch) {
+        problems.push(`${file}: fetch 호출 밖의 쓰기 메서드`)
+      }
+      if (file === './api/authApi.ts') {
+        authWrites = writesInFetch
+      }
+    }
+    expect(problems).toEqual([])
+    // 로그인 교환·갱신·로그아웃 세 가지가 실제로 검사 대상이었다(정규식이 아무것도 못 찾는 상황 방지).
+    expect(authWrites).toBe(3)
   })
 })

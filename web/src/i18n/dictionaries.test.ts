@@ -49,10 +49,13 @@ describe('보간', () => {
     expect(format('{a}', { a: '$& $1 \\d+' })).toBe('$& $1 \\d+')
   })
 
-  it('실제 사전 문구에 파라미터를 넣으면 자리표시자가 남지 않는다', () => {
-    for (const lang of ['ko', 'en'] as const) {
-      expect(translate(lang, 'error.request', { status: 503 })).not.toMatch(/\{status\}/)
-      expect(translate(lang, 'character.bubbleNext', { level: 6, stage: 'X' })).toContain('6')
-    }
+  it.each([
+    ['ko', 'error.request', { status: 503 }, '요청에 실패했습니다. (503)'],
+    ['en', 'error.request', { status: 503 }, 'Request failed (503).'],
+    ['ko', 'character.bubbleNext', { level: 6, stage: '줄기' }, 'Lv.6이 되면 줄기 단계로 자랄 거야!'],
+    ['en', 'character.bubbleNext', { level: 6, stage: 'Stem' }, "Reach Lv.6 and I'll grow into the Stem stage!"],
+    ['ko', 'activity.sleepDuration', { hours: 7, minutes: 0 }, '7시간 0분'],
+  ] as const)('%s %s에 파라미터를 넣은 전체 문구', (lang, key, params, expected) => {
+    expect(translate(lang, key, params)).toBe(expected)
   })
 })
