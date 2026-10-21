@@ -70,7 +70,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Typecheck
         run: npm run typecheck
-      - name: Test (unit + PostgreSQL API)
-        run: npm test
+      - name: Test (unit + PostgreSQL API, 커버리지 기준선 검사)
+        # DATABASE_URL_TEST 가 있어 DB 기준 임계값(vitest.config.ts, #153)으로 검사한다.
+        run: npm run test:coverage
       - name: Build (Node)
         run: npm run build
