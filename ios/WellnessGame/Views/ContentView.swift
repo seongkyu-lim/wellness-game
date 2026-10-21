@@ -9,15 +9,20 @@ struct ContentView: View {
     @State private var showLoginSheet = false
 
     init() {
-        // 세션과 네트워크가 같은 자격 증명 저장소를 공유해야 로그인·리프레시 직후 토큰이 헤더에 실리고,
-        // 리프레시가 한 번에 하나만 나간다.
-        let credentials = SessionCredentialStore()
-        let networkClient = NetworkClient(credentials: credentials)
-        let userSession = UserSession(credentials: credentials)
-        _userSession = StateObject(wrappedValue: userSession)
+        // 백그라운드 동기화와 같은 세션·네트워크 객체를 쓴다(AppEnvironment 참고).
+        let environment = AppEnvironment.shared
+        let networkClient = environment.networkClient
+        _userSession = StateObject(wrappedValue: environment.userSession)
         _socialLogin = StateObject(wrappedValue: SocialLoginService(networkClient: networkClient))
         _credentialLogin = StateObject(wrappedValue: CredentialAuthService(networkClient: networkClient))
-        _viewModel = StateObject(wrappedValue: DashboardViewModel(networkClient: networkClient, userSession: userSession))
+        let backgroundSync = environment.backgroundSync
+        _viewModel = StateObject(wrappedValue: DashboardViewModel(
+            networkClient: networkClient,
+            userSession: environment.userSession,
+            syncService: environment.syncService,
+            // 첫 실행에서 권한을 요청한 직후부터 백그라운드 동기화를 켠다.
+            onHealthAuthorizationRequested: { await backgroundSync.startIfAuthorized() }
+        ))
     }
 
     var body: some View {
