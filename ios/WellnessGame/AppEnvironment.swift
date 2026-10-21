@@ -21,34 +21,55 @@ final class AppEnvironment {
     lazy var syncService = HealthSyncService(networkClient: networkClient, userSession: userSession)
 
     lazy var backgroundSync: HealthBackgroundSync = {
+        let credentials = credentials
         let runner = BackgroundHealthSyncRunner(
+            isAppActive: { UIApplication.shared.applicationState == .active },
             isProtectedDataAvailable: { UIApplication.shared.isProtectedDataAvailable },
-            checkCredentialsReadable: { [credentials] in try credentials.checkReadable() },
+            checkCredentialsReadable: { try credentials.checkReadable() },
             syncService: { [unowned self] in self.syncService },
             // 백그라운드는 항상 실제 HealthKit 데이터를 보낸다(Mock 토글은 개발 화면 전용).
-            provider: AppleHealthKitProvider(manager: healthKitManager)
+            provider: AppleHealthKitProvider(manager: healthKitManager),
+            backgroundTasks: UIKitBackgroundTasks()
         )
-        let coordinator = BackgroundSyncCoordinator {
+        let coordinator = BackgroundSyncCoordinator(
+            isRefreshInFlight: { credentials.refreshCoordinator.isRefreshing }
+        ) {
             _ = await runner.run()
         }
         return HealthBackgroundSync(
             observer: HealthKitUpdateObserver(manager: healthKitManager),
-            coordinator: coordinator
+            coordinator: coordinator,
+            protectedDataNotification: UIApplication.protectedDataDidBecomeAvailableNotification
         )
     }()
 
     private init() {}
 }
 
-/// iOS가 HealthKit 백그라운드 전달로 앱을 다시 실행할 때도 관찰을 등록하도록 실행 시점에 시작한다.
+/// iOS가 HealthKit 백그라운드 전달로 앱을 다시 실행할 때도 관찰 쿼리를 실행 시점에 바로 등록한다.
 /// Apple은 관찰 쿼리를 `application(_:didFinishLaunchingWithOptions:)`에서 등록하라고 안내한다.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        let backgroundSync = AppEnvironment.shared.backgroundSync
-        Task { await backgroundSync.startIfAuthorized() }
+        AppEnvironment.shared.backgroundSync.start()
         return true
+    }
+}
+
+/// `UIApplication.beginBackgroundTask` 구현.
+@MainActor
+struct UIKitBackgroundTasks: BackgroundTaskProviding {
+    func begin(name: String, expiration: @escaping @MainActor () -> Void) -> Int {
+        UIApplication.shared.beginBackgroundTask(withName: name) {
+            MainActor.assumeIsolated { expiration() }
+        }.rawValue
+    }
+
+    func end(_ identifier: Int) {
+        let task = UIBackgroundTaskIdentifier(rawValue: identifier)
+        guard task != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(task)
     }
 }

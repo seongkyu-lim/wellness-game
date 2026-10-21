@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import UIKit
 
 enum LoginProvider: String {
     case apple
@@ -43,6 +44,10 @@ final class UserSession: ObservableObject {
         static let provider = "auth.provider"
         static let userId = "auth.userId"
         static let displayName = "auth.displayName"
+        /// 마지막으로 발급한 Watch 조회 토큰의 사용자·만료 시각(토큰 자체는 저장하지 않는다).
+        /// 백그라운드 재실행마다 새로 발급하지 않도록 남긴다.
+        static let watchTokenUserId = "auth.watchToken.userId"
+        static let watchTokenExpiresAt = "auth.watchToken.expiresAt"
 
         // 이전 버전(게스트·클라이언트 조합 userId) 세션 키. 발견되면 정리한다.
         static let legacyGuestIdentifier = "auth.guestIdentifier"
@@ -57,8 +62,10 @@ final class UserSession: ObservableObject {
     private let credentials: SessionCredentialStore
     private let now: () -> Date
     private let watchPublisher: WatchAuthPublishing
-    /// 마지막으로 Watch에 보낸 조회 토큰. 앱을 다시 실행하면 비어 있어 첫 동기화 때 다시 발급한다.
-    private var watchToken: WatchAuthContext?
+    /// 첫 잠금 해제 전이라 복원을 건너뛰었으면 true. 잠금이 풀리면(`protectedDataDidBecomeAvailable`) 다시 복원한다.
+    private var restoreSkippedWhileLocked = false
+    private var protectedDataObserver: NSObjectProtocol?
+    private let notificationCenter: NotificationCenter
     private var isIssuingWatchToken = false
     /// 로그인 직후 첫 발급을 아직 시도하지 않았으면 true. 그 발급이 실패하면 한 번만 지연 재시도한다.
     private var isAwaitingFirstWatchToken = false
@@ -73,14 +80,39 @@ final class UserSession: ObservableObject {
         credentials: SessionCredentialStore? = nil,
         watchPublisher: WatchAuthPublishing = WatchAuthRelay.shared,
         watchTokenRetryDelay: TimeInterval = 30,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        notificationCenter: NotificationCenter = .default,
+        protectedDataNotification: Notification.Name = UIApplication.protectedDataDidBecomeAvailableNotification
     ) {
         self.watchTokenRetryDelay = watchTokenRetryDelay
         self.defaults = defaults
         self.credentials = credentials ?? SessionCredentialStore(defaults: defaults)
         self.watchPublisher = watchPublisher
         self.now = now
+        self.notificationCenter = notificationCenter
         restore()
+        if restoreSkippedWhileLocked {
+            protectedDataObserver = notificationCenter.addObserver(
+                forName: protectedDataNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.retryRestoreIfNeeded()
+                }
+            }
+        }
+    }
+
+    /// 잠금 때문에 건너뛴 복원을 다시 시도한다. 그사이 로그인·재로그인 안내가 생겼으면 건드리지 않는다.
+    func retryRestoreIfNeeded() {
+        guard restoreSkippedWhileLocked, !isSignedIn, reloginNotice == nil else { return }
+        restoreSkippedWhileLocked = false
+        restore()
+        if !restoreSkippedWhileLocked, let protectedDataObserver {
+            notificationCenter.removeObserver(protectedDataObserver)
+            self.protectedDataObserver = nil
+        }
     }
 
     var isSignedIn: Bool {
@@ -111,7 +143,7 @@ final class UserSession: ObservableObject {
             defaults.removeObject(forKey: Key.displayName)
         }
         // 새 세션이므로 Watch 토큰도 다음 동기화 때 새로 발급한다.
-        watchToken = nil
+        clearIssuedWatchToken()
         watchTokenRetryTask?.cancel()
         watchTokenRetryTask = nil
         isAwaitingFirstWatchToken = true
@@ -142,8 +174,8 @@ final class UserSession: ObservableObject {
     /// 리프레시까지 거절(401)되면 세션이 끝난 것이므로 재로그인을 안내한다.
     func refreshWatchTokenIfNeeded(issue: @escaping () async throws -> WatchTokenResponse) async {
         guard let userId, !isIssuingWatchToken else { return }
-        if let watchToken, watchToken.userId == userId {
-            guard let expiresAt = watchToken.expiresAt,
+        if defaults.string(forKey: Key.watchTokenUserId) == userId {
+            guard let expiresAt = defaults.object(forKey: Key.watchTokenExpiresAt) as? Date,
                   expiresAt.timeIntervalSince(now()) <= Self.watchTokenRenewalLeadTime else {
                 return
             }
@@ -163,7 +195,12 @@ final class UserSession: ObservableObject {
                 expiresAt: response.expiresIn > 0 ? now().addingTimeInterval(TimeInterval(response.expiresIn)) : nil,
                 language: AppLanguage.acceptLanguage()
             )
-            watchToken = context
+            defaults.set(userId, forKey: Key.watchTokenUserId)
+            if let expiresAt = context.expiresAt {
+                defaults.set(expiresAt, forKey: Key.watchTokenExpiresAt)
+            } else {
+                defaults.removeObject(forKey: Key.watchTokenExpiresAt)
+            }
             watchPublisher.publish(context)
         } catch NetworkError.unauthorized {
             guard self.userId == userId else { return }
@@ -188,7 +225,10 @@ final class UserSession: ObservableObject {
     private func restore() {
         // 첫 잠금 해제 전 백그라운드 실행이면 Keychain을 읽을 수 없다. 토큰이 없다고 보고 세션을 지우면
         // 로그인이 풀리므로, 이번 실행에서는 로그아웃 상태로만 두고 저장값은 건드리지 않는다.
-        guard (try? credentials.checkReadable()) != nil else { return }
+        guard (try? credentials.checkReadable()) != nil else {
+            restoreSkippedWhileLocked = true
+            return
+        }
 
         // 게스트 식별자는 더 이상 쓰지 않는다.
         let hadGuestSession = defaults.string(forKey: Key.legacyGuestIdentifier) != nil
@@ -229,12 +269,17 @@ final class UserSession: ObservableObject {
         }
     }
 
+    private func clearIssuedWatchToken() {
+        defaults.removeObject(forKey: Key.watchTokenUserId)
+        defaults.removeObject(forKey: Key.watchTokenExpiresAt)
+    }
+
     private func clearStoredSession() {
         credentials.clear()
         provider = nil
         userId = nil
         displayName = nil
-        watchToken = nil
+        clearIssuedWatchToken()
         isAwaitingFirstWatchToken = false
         watchTokenRetryTask?.cancel()
         watchTokenRetryTask = nil

@@ -188,29 +188,41 @@ final class AppleHealthKitProvider: HealthDataProvider {
                     continuation.resume(throwing: error)
                     return
                 }
-                let asleep = (samples as? [HKCategorySample] ?? [])
-                    .filter { self.isAsleepValue($0.value) && $0.endDate <= window.end }
-                guard !asleep.isEmpty else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-
-                let intervals = self.mergeIntervals(asleep.map { ($0.startDate, $0.endDate) })
-                let seconds = intervals.reduce(0.0) { $0 + $1.1.timeIntervalSince($1.0) }
-                let minutes = Int((seconds / 60).rounded())
-                continuation.resume(returning: HealthActivityDTO(
-                    type: .sleep,
-                    sleepMinutes: minutes,
-                    sleepScore: self.sleepScore(minutes: minutes),
-                    startedAt: intervals.first?.0,
-                    endedAt: intervals.last?.1
-                ))
+                let sleepSamples = (samples as? [HKCategorySample] ?? [])
+                    .map { SleepSample(value: $0.value, start: $0.startDate, end: $0.endDate) }
+                continuation.resume(returning: Self.sleepActivity(from: sleepSamples, in: window))
             }
             manager.store.execute(query)
         }
     }
 
-    private func isAsleepValue(_ value: Int) -> Bool {
+    /// HKCategorySample 없이 테스트할 수 있게 수면 샘플의 값만 담는다.
+    struct SleepSample {
+        let value: Int
+        let start: Date
+        let end: Date
+    }
+
+    /// 수면 샘플을 하루치 수면 항목으로 만든다. 잠든 상태 샘플 중 `window.end` 이전에 깬 것만 합친다
+    /// (서버는 수면을 깬 시각의 날짜로 본다. `DayWindow` 참고).
+    static func sleepActivity(from samples: [SleepSample], in window: DayWindow) -> HealthActivityDTO? {
+        let asleep = samples.filter { isAsleepValue($0.value) && $0.end <= window.end }
+        guard !asleep.isEmpty else {
+            return nil
+        }
+        let intervals = mergeIntervals(asleep.map { ($0.start, $0.end) })
+        let seconds = intervals.reduce(0.0) { $0 + $1.1.timeIntervalSince($1.0) }
+        let minutes = Int((seconds / 60).rounded())
+        return HealthActivityDTO(
+            type: .sleep,
+            sleepMinutes: minutes,
+            sleepScore: sleepScore(minutes: minutes),
+            startedAt: intervals.first?.0,
+            endedAt: intervals.last?.1
+        )
+    }
+
+    private static func isAsleepValue(_ value: Int) -> Bool {
         let asleepValues: Set<Int> = [
             HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
             HKCategoryValueSleepAnalysis.asleepCore.rawValue,
@@ -220,7 +232,7 @@ final class AppleHealthKitProvider: HealthDataProvider {
         return asleepValues.contains(value)
     }
 
-    private func mergeIntervals(_ intervals: [(Date, Date)]) -> [(Date, Date)] {
+    private static func mergeIntervals(_ intervals: [(Date, Date)]) -> [(Date, Date)] {
         intervals.sorted { $0.0 < $1.0 }.reduce(into: []) { merged, interval in
             guard let last = merged.last else {
                 merged.append(interval)
@@ -234,7 +246,7 @@ final class AppleHealthKitProvider: HealthDataProvider {
         }
     }
 
-    private func sleepScore(minutes: Int) -> Int {
+    private static func sleepScore(minutes: Int) -> Int {
         switch minutes {
         case 420...540:
             return 90

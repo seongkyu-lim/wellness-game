@@ -48,16 +48,20 @@ final class DashboardViewModel: ObservableObject {
     /// 앱 실행·포그라운드 복귀 시 호출되며, 잦은 복귀로 서버를 반복 호출하지 않도록
     /// 최소 간격(AutoSyncPolicy)을 지킨다. 당겨서 새로고침은 force로 간격을 무시한다.
     /// 로그인하지 않았으면 건강 데이터를 읽지도, 서버에 보내지도 않는다.
-    /// 동기화 간격과 무관하게 Watch 조회 토큰이 만료 1시간 전이면 다시 발급해 보낸다.
+    /// 동기화 간격과 무관하게, 동기화를 마친 뒤 Watch 조회 토큰이 만료 1일 전이면 다시 발급해 보낸다.
+    /// 백그라운드 동기화가 진행 중이면 그 결과를 함께 받는다(`HealthSyncService` 단일 비행).
     func autoSync(force: Bool = false) async {
-        await syncService.refreshWatchTokenIfNeeded()
         guard let userId = userSession.userId else {
             statusMessage = userSession.reloginNotice ?? UserSession.signInPrompt
             return
         }
-        guard force || AutoSyncPolicy.shouldSync(lastSyncedAt: lastSyncedAt, now: Date()) else {
-            return
+        if force || AutoSyncPolicy.shouldSync(lastSyncedAt: lastSyncedAt, now: Date()) {
+            await sync(userId: userId)
         }
+        await syncService.refreshWatchTokenIfNeeded()
+    }
+
+    private func sync(userId: String) async {
         await perform {
             try await activeProvider.requestAuthorization()
             await onHealthAuthorizationRequested()
@@ -65,8 +69,9 @@ final class DashboardViewModel: ObservableObject {
             guard let result = try await syncService.sync(
                 provider: activeProvider,
                 userId: userId,
-                todayLoaded: { snapshot = $0 }
+                todayLoaded: { [weak self] in self?.snapshot = $0 }
             ) else { return }
+            snapshot = result.snapshot
             let response = result.response
             syncResponse = response
             lastSyncedAt = Date()

@@ -1,3 +1,4 @@
+import HealthKit
 import XCTest
 
 // MARK: - Test doubles
@@ -30,21 +31,59 @@ final class RecordingHealthProvider: HealthDataProvider, @unchecked Sendable {
     }
 }
 
-/// HealthKit 없이 관찰 콜백을 흉내 낸다.
-final class FakeHealthUpdateObserver: HealthUpdateObserving, @unchecked Sendable {
-    var authorizationRequested = true
-    private(set) var startCount = 0
-    private var handler: (@Sendable (HealthObservedType, Error?, @escaping @Sendable () -> Void) -> Void)?
-
-    func isAuthorizationRequested() async -> Bool {
-        authorizationRequested
+/// HealthKit 없이 관찰 콜백·권한 확인을 흉내 낸다. 권한 확인은 `answers` 순서대로 답하고,
+/// `holdAuthorization`이면 `releaseAuthorization()` 전까지 답하지 않는다.
+@MainActor
+final class FakeHealthUpdateObserver: HealthUpdateObserving {
+    enum Answer {
+        case requested
+        case notRequested
+        case unknown
     }
 
-    func startObserving(
+    var answers: [Answer] = [.requested]
+    var holdAuthorization = false
+    private(set) var startCount = 0
+    private(set) var enableCount = 0
+    private(set) var authorizationChecks = 0
+    private var held: [CheckedContinuation<Void, Never>] = []
+    private var handler: (@Sendable (HealthObservedType, Error?, @escaping @Sendable () -> Void) -> Void)?
+
+    nonisolated func startObserving(
         _ handler: @escaping @Sendable (HealthObservedType, Error?, @escaping @Sendable () -> Void) -> Void
     ) {
-        startCount += 1
-        self.handler = handler
+        MainActor.assumeIsolated {
+            startCount += 1
+            self.handler = handler
+        }
+    }
+
+    nonisolated func isAuthorizationRequested() async throws -> Bool {
+        try await answer()
+    }
+
+    nonisolated func enableBackgroundDelivery() {
+        MainActor.assumeIsolated { enableCount += 1 }
+    }
+
+    private func answer() async throws -> Bool {
+        authorizationChecks += 1
+        if holdAuthorization {
+            await withCheckedContinuation { held.append($0) }
+        }
+        let next = answers.count > 1 ? answers.removeFirst() : (answers.first ?? .notRequested)
+        switch next {
+        case .requested: return true
+        case .notRequested: return false
+        case .unknown: throw HealthDataError.unavailable
+        }
+    }
+
+    func releaseAuthorization() {
+        holdAuthorization = false
+        let pending = held
+        held = []
+        pending.forEach { $0.resume() }
     }
 
     func fire(_ type: HealthObservedType, error: Error? = nil, completion: @escaping @Sendable () -> Void) {
@@ -70,6 +109,31 @@ final class GatedPerform {
     }
 }
 
+/// 시간을 직접 흘려보내는 sleep. 벽시계를 기다리지 않는다.
+@MainActor
+final class ManualSleeper {
+    private var sleepers: [(seconds: TimeInterval, continuation: CheckedContinuation<Void, Never>)] = []
+
+    var pendingDelays: [TimeInterval] {
+        sleepers.map(\.seconds)
+    }
+
+    nonisolated func sleep(_ seconds: TimeInterval) async {
+        await enqueue(seconds)
+    }
+
+    private func enqueue(_ seconds: TimeInterval) async {
+        await withCheckedContinuation { sleepers.append((seconds, $0)) }
+    }
+
+    /// 조건에 맞는 sleep을 깨운다.
+    func wake(where matches: (TimeInterval) -> Bool) {
+        let woken = sleepers.filter { matches($0.seconds) }
+        sleepers.removeAll { matches($0.seconds) }
+        woken.forEach { $0.continuation.resume() }
+    }
+}
+
 /// completion 호출 횟수를 센다.
 final class CompletionCounter: @unchecked Sendable {
     private let lock = NSLock()
@@ -82,11 +146,68 @@ final class CompletionCounter: @unchecked Sendable {
     }
 }
 
+/// 시작·종료를 기록하는 백그라운드 작업.
 @MainActor
-private func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) async {
-    let deadline = Date().addingTimeInterval(timeout)
-    while !condition(), Date() < deadline {
-        try? await Task.sleep(nanoseconds: 5_000_000)
+final class FakeBackgroundTasks: BackgroundTaskProviding {
+    private(set) var begun = 0
+    private(set) var ended: [Int] = []
+
+    nonisolated init() {}
+
+    func begin(name: String, expiration: @escaping @MainActor () -> Void) -> Int {
+        begun += 1
+        return begun
+    }
+
+    func end(_ identifier: Int) {
+        ended.append(identifier)
+    }
+}
+
+/// 잠금 상태를 흉내 내는 토큰 저장소. 잠겨 있으면 읽지 못하고 `checkReadable()`이 던진다.
+final class LockableTokenStore: AccessTokenStore, @unchecked Sendable {
+    private let lock = NSLock()
+    private var token: String?
+    private var _isLocked = false
+
+    init(token: String?) {
+        self.token = token
+    }
+
+    var isLocked: Bool {
+        get { lock.withLock { _isLocked } }
+        set { lock.withLock { _isLocked = newValue } }
+    }
+
+    var storedToken: String? {
+        lock.withLock { token }
+    }
+
+    func loadToken() -> String? {
+        lock.withLock { _isLocked ? nil : token }
+    }
+
+    func saveToken(_ token: String) throws {
+        lock.withLock { self.token = token }
+    }
+
+    func deleteToken() {
+        lock.withLock {
+            // 잠겨 있으면 Keychain 삭제도 실패한다.
+            if !_isLocked { token = nil }
+        }
+    }
+
+    func checkReadable() throws {
+        if isLocked { throw KeychainError.locked }
+    }
+}
+
+/// 대기 중인 MainActor 작업이 진행되도록 양보한다(벽시계를 기다리지 않는다).
+@MainActor
+private func settle() async {
+    for _ in 0..<50 {
+        await Task.yield()
     }
 }
 
@@ -110,28 +231,36 @@ private func seoulDate(_ text: String) -> Date {
 final class SyncDayPlannerTests: XCTestCase {
     func test_noHistory_syncsTodayOnly() {
         XCTAssertFalse(SyncDayPlanner.shouldResendPreviousDay(
-            lastSuccessAt: nil, now: seoulDate("2026-10-21 09:00"), calendar: seoul
+            lastSuccessAt: nil, now: seoulDate("2026-10-21 09:00")
         ))
     }
 
-    func test_sameDay_syncsTodayOnly() {
+    func test_sameServerDay_syncsTodayOnly() {
         XCTAssertFalse(SyncDayPlanner.shouldResendPreviousDay(
-            lastSuccessAt: seoulDate("2026-10-21 00:01"), now: seoulDate("2026-10-21 23:59"), calendar: seoul
+            lastSuccessAt: seoulDate("2026-10-21 00:01"), now: seoulDate("2026-10-21 23:59")
         ))
     }
 
-    func test_lastSuccessOnEarlierDay_resendsPreviousDay() {
+    func test_lastSuccessOnEarlierServerDay_resendsPreviousDay() {
         XCTAssertTrue(SyncDayPlanner.shouldResendPreviousDay(
-            lastSuccessAt: seoulDate("2026-10-20 23:59"), now: seoulDate("2026-10-21 00:01"), calendar: seoul
+            lastSuccessAt: seoulDate("2026-10-20 23:59"), now: seoulDate("2026-10-21 00:01")
         ))
         XCTAssertTrue(SyncDayPlanner.shouldResendPreviousDay(
-            lastSuccessAt: seoulDate("2026-10-15 12:00"), now: seoulDate("2026-10-21 09:00"), calendar: seoul
+            lastSuccessAt: seoulDate("2026-10-15 12:00"), now: seoulDate("2026-10-21 09:00")
         ))
+    }
+
+    func test_decisionUsesServerTimeZone_notDeviceTimeZone() {
+        // UTC로는 같은 날(10/20 14:00Z → 15:30Z)이지만 한국 시간으로는 10/20 23:00 → 10/21 00:30이다.
+        XCTAssertTrue(SyncDayPlanner.shouldResendPreviousDay(
+            lastSuccessAt: seoulDate("2026-10-20 23:00"), now: seoulDate("2026-10-21 00:30")
+        ))
+        XCTAssertEqual(SyncDayPlanner.serverCalendar.timeZone.identifier, "Asia/Seoul")
     }
 
     func test_futureLastSuccess_syncsTodayOnly() {
         XCTAssertFalse(SyncDayPlanner.shouldResendPreviousDay(
-            lastSuccessAt: seoulDate("2026-10-22 09:00"), now: seoulDate("2026-10-21 09:00"), calendar: seoul
+            lastSuccessAt: seoulDate("2026-10-22 09:00"), now: seoulDate("2026-10-21 09:00")
         ))
     }
 
@@ -141,9 +270,22 @@ final class SyncDayPlannerTests: XCTestCase {
             seoulDate("2026-10-20 00:00")
         )
     }
+
+    func test_previousDay_outsideServerRange_isNotSent() {
+        var losAngeles = Calendar(identifier: .gregorian)
+        losAngeles.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        // 한국 10/22 12:00 = LA 10/21 20:00. LA 기준 전날(10/20)은 서버 기준 오늘(10/22)에서 이틀 전이다.
+        let now = seoulDate("2026-10-22 12:00")
+        let laYesterday = SyncDayPlanner.previousDay(of: now, calendar: losAngeles)!
+
+        XCTAssertFalse(SyncDayPlanner.isAcceptedByServer(day: laYesterday, deviceCalendar: losAngeles, now: now))
+        XCTAssertTrue(SyncDayPlanner.isAcceptedByServer(
+            day: SyncDayPlanner.previousDay(of: now, calendar: seoul)!, deviceCalendar: seoul, now: now
+        ))
+    }
 }
 
-// MARK: - 하루 구간
+// MARK: - 하루 구간·수면
 
 final class HealthDayWindowTests: XCTestCase {
     func test_today_endsNow() throws {
@@ -171,6 +313,38 @@ final class HealthDayWindowTests: XCTestCase {
             for: seoulDate("2026-10-22 00:00"), now: seoulDate("2026-10-21 23:00"), calendar: seoul
         ))
     }
+
+    func test_pastDaySleep_excludesSleepWakingAfterDayEnd() throws {
+        let window = try AppleHealthKitProvider.dayWindow(
+            for: seoulDate("2026-10-20 00:00"), now: seoulDate("2026-10-21 09:00"), calendar: seoul
+        )
+        let core = HKCategoryValueSleepAnalysis.asleepCore.rawValue
+        let samples: [AppleHealthKitProvider.SleepSample] = [
+            .init(value: core, start: seoulDate("2026-10-19 23:00"), end: seoulDate("2026-10-20 06:00")),
+            .init(value: HKCategoryValueSleepAnalysis.awake.rawValue,
+                  start: seoulDate("2026-10-20 06:00"), end: seoulDate("2026-10-20 06:30")),
+            // 자정을 넘겨 다음 날 아침에 깬 수면은 다음 날 몫이다.
+            .init(value: core, start: seoulDate("2026-10-20 23:30"), end: seoulDate("2026-10-21 07:00")),
+        ]
+
+        let sleep = try XCTUnwrap(AppleHealthKitProvider.sleepActivity(from: samples, in: window))
+
+        XCTAssertEqual(sleep.sleepMinutes, 420)
+        XCTAssertEqual(sleep.startedAt, seoulDate("2026-10-19 23:00"))
+        XCTAssertEqual(sleep.endedAt, seoulDate("2026-10-20 06:00"))
+    }
+
+    func test_sleep_endingExactlyAtDayEnd_isIncluded() throws {
+        let window = try AppleHealthKitProvider.dayWindow(
+            for: seoulDate("2026-10-20 00:00"), now: seoulDate("2026-10-21 09:00"), calendar: seoul
+        )
+        let samples: [AppleHealthKitProvider.SleepSample] = [
+            .init(value: HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
+                  start: seoulDate("2026-10-20 22:00"), end: seoulDate("2026-10-21 00:00")),
+        ]
+
+        XCTAssertEqual(AppleHealthKitProvider.sleepActivity(from: samples, in: window)?.sleepMinutes, 120)
+    }
 }
 
 // MARK: - 동기화 서비스·백그라운드 실행
@@ -178,9 +352,10 @@ final class HealthDayWindowTests: XCTestCase {
 @MainActor
 final class HealthSyncServiceTests: XCTestCase {
     private static let syncPath = "/api/health-activities/sync"
+    private static let watchTokenPath = "/api/auth/watch-token"
     private static let syncResponse = """
-    {"userId":"password:alice","date":"2026-10-21","gainedXp":10,"levelUp":false,
-     "character":{"level":1,"currentXp":10,"totalXp":10,"nextLevelXp":100,
+    {"userId":"password:alice","date":"2026-10-21","gainedXp":10,"levelUp":true,
+     "character":{"level":2,"currentXp":10,"totalXp":110,"nextLevelXp":200,
        "stats":{"str":1,"vit":1,"intStat":1,"discipline":1,"recovery":1}},
      "activityResults":[]}
     """
@@ -196,14 +371,20 @@ final class HealthSyncServiceTests: XCTestCase {
         defaults = UserDefaults(suiteName: suiteName)
         store = InMemoryTokenStore()
         clock = TestClock(seoulDate("2026-10-21 09:00"))
-        StubURLProtocol.setStubs([
-            Self.syncPath: .init(status: 200, json: Self.syncResponse),
-            "/api/auth/watch-token": .init(status: 200, json: Self.watchToken),
-        ])
+        stubServer(syncStatus: 200)
     }
 
     override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    private func stubServer(syncStatus: Int) {
+        StubURLProtocol.setStubs([
+            Self.syncPath: syncStatus == 200
+                ? .init(status: 200, json: Self.syncResponse)
+                : .init(status: syncStatus, json: #"{"message":"error"}"#),
+            Self.watchTokenPath: .init(status: 200, json: Self.watchToken),
+        ])
     }
 
     private func makeSession(signedIn: Bool) throws -> UserSession {
@@ -235,7 +416,24 @@ final class HealthSyncServiceTests: XCTestCase {
             userSession: session,
             history: HealthSyncHistory(defaults: defaults),
             calendar: seoul,
+            serverCalendar: seoul,
             now: { clock.now }
+        )
+    }
+
+    private func makeRunner(
+        service: HealthSyncService,
+        tasks: FakeBackgroundTasks = FakeBackgroundTasks(),
+        provider: RecordingHealthProvider = RecordingHealthProvider(),
+        isAppActive: Bool = false
+    ) -> BackgroundHealthSyncRunner {
+        BackgroundHealthSyncRunner(
+            isAppActive: { isAppActive },
+            isProtectedDataAvailable: { true },
+            checkCredentialsReadable: {},
+            syncService: { service },
+            provider: provider,
+            backgroundTasks: tasks
         )
     }
 
@@ -245,6 +443,10 @@ final class HealthSyncServiceTests: XCTestCase {
             .compactMap { StubURLProtocol.bodyData(of: $0) }
             .compactMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
             .compactMap { $0["date"] as? String }
+    }
+
+    private var requestPaths: [String] {
+        StubURLProtocol.requests.compactMap { $0.url?.path }
     }
 
     func test_sync_whenLastSuccessYesterday_sendsYesterdayThenToday() async throws {
@@ -286,47 +488,97 @@ final class HealthSyncServiceTests: XCTestCase {
         XCTAssertEqual(HealthSyncHistory(defaults: defaults).lastSuccessAt, clock.now)
     }
 
-    func test_backgroundRun_whenSignedOut_skipsWithoutRequests() async throws {
+    func test_sync_401DuringPreviousDay_stopsAndThrows() async throws {
+        let service = makeService(session: try makeSession(signedIn: true))
+        let lastSuccess = seoulDate("2026-10-20 22:00")
+        HealthSyncHistory(defaults: defaults).recordSuccess(at: lastSuccess)
+        stubServer(syncStatus: 401)
+        let provider = RecordingHealthProvider()
+
+        do {
+            _ = try await service.sync(provider: provider, userId: "password:alice")
+            XCTFail("401은 호출한 쪽으로 던져야 한다")
+        } catch NetworkError.unauthorized {
+        }
+
+        XCTAssertEqual(syncedDates, ["2026-10-20"], "전날 401이면 오늘 요청을 보내지 않는다")
+        XCTAssertEqual(provider.todayLoads, 0)
+        XCTAssertEqual(HealthSyncHistory(defaults: defaults).lastSuccessAt, lastSuccess)
+    }
+
+    func test_concurrentForegroundAndBackgroundSync_shareOneRequestAndResponse() async throws {
+        let service = makeService(session: try makeSession(signedIn: true))
+        let provider = RecordingHealthProvider()
+
+        async let foreground = service.sync(provider: provider, userId: "password:alice")
+        async let background = service.sync(provider: provider, userId: "password:alice")
+        let (first, second) = try await (foreground, background)
+
+        XCTAssertEqual(provider.todayLoads, 1)
+        XCTAssertEqual(syncedDates.count, 1)
+        XCTAssertEqual(first?.response.levelUp, true)
+        XCTAssertEqual(second?.response.levelUp, true, "합류한 호출자도 레벨업 결과를 받는다")
+
+        // 끝난 뒤의 새 호출은 다시 보낸다.
+        _ = try await service.sync(provider: provider, userId: "password:alice")
+        XCTAssertEqual(syncedDates.count, 2)
+    }
+
+    func test_backgroundRun_whenSignedOut_skipsWithoutRequests_andEndsTask() async throws {
         let service = makeService(session: try makeSession(signedIn: false))
         let provider = RecordingHealthProvider()
-        let runner = BackgroundHealthSyncRunner(
-            isProtectedDataAvailable: { true },
-            checkCredentialsReadable: {},
-            syncService: { service },
-            provider: provider
-        )
+        let tasks = FakeBackgroundTasks()
 
-        let outcome = await runner.run()
+        let outcome = await makeRunner(service: service, tasks: tasks, provider: provider).run()
 
         XCTAssertEqual(outcome, .skippedSignedOut)
         XCTAssertTrue(StubURLProtocol.requests.isEmpty)
         XCTAssertEqual(provider.todayLoads, 0)
+        XCTAssertEqual(tasks.begun, 1)
+        XCTAssertEqual(tasks.ended, [1])
     }
 
-    func test_backgroundRun_whenLocked_skipsBeforeTouchingSession() async {
+    func test_backgroundRun_whenAppActive_leavesItToForeground() async throws {
+        let service = makeService(session: try makeSession(signedIn: true))
+        let tasks = FakeBackgroundTasks()
+
+        let outcome = await makeRunner(service: service, tasks: tasks, isAppActive: true).run()
+
+        XCTAssertEqual(outcome, .skippedForeground)
+        XCTAssertTrue(StubURLProtocol.requests.isEmpty)
+        XCTAssertEqual(tasks.begun, 0)
+    }
+
+    func test_backgroundRun_whenLocked_skipsBeforeTouchingSession_andEndsTask() async {
         var serviceCreated = false
+        let tasks = FakeBackgroundTasks()
         let runner = BackgroundHealthSyncRunner(
+            isAppActive: { false },
             isProtectedDataAvailable: { true },
             checkCredentialsReadable: { throw KeychainError.locked },
             syncService: {
                 serviceCreated = true
                 fatalError("잠금 상태에서는 세션을 만들지 않아야 한다")
             },
-            provider: RecordingHealthProvider()
+            provider: RecordingHealthProvider(),
+            backgroundTasks: tasks
         )
 
         let outcome = await runner.run()
 
         XCTAssertEqual(outcome, .skippedLocked)
         XCTAssertFalse(serviceCreated)
+        XCTAssertEqual(tasks.ended, [1])
     }
 
     func test_backgroundRun_whenProtectedDataUnavailable_skips() async {
         let runner = BackgroundHealthSyncRunner(
+            isAppActive: { false },
             isProtectedDataAvailable: { false },
             checkCredentialsReadable: {},
             syncService: { fatalError("잠금 상태에서는 세션을 만들지 않아야 한다") },
-            provider: RecordingHealthProvider()
+            provider: RecordingHealthProvider(),
+            backgroundTasks: FakeBackgroundTasks()
         )
 
         let outcome = await runner.run()
@@ -334,133 +586,279 @@ final class HealthSyncServiceTests: XCTestCase {
         XCTAssertEqual(outcome, .skippedLocked)
     }
 
-    func test_backgroundRun_whenSignedIn_syncs() async throws {
-        let session = try makeSession(signedIn: true)
-        let service = makeService(session: session)
-        let runner = BackgroundHealthSyncRunner(
-            isProtectedDataAvailable: { true },
-            checkCredentialsReadable: {},
-            syncService: { service },
-            provider: RecordingHealthProvider()
-        )
+    func test_backgroundRun_whenSignedIn_syncsThenRefreshesWatchToken() async throws {
+        let service = makeService(session: try makeSession(signedIn: true))
+        let tasks = FakeBackgroundTasks()
 
-        let outcome = await runner.run()
+        let outcome = await makeRunner(service: service, tasks: tasks).run()
 
         XCTAssertEqual(outcome, .synced)
-        XCTAssertEqual(syncedDates.count, 1)
+        XCTAssertEqual(requestPaths, [Self.syncPath, Self.watchTokenPath], "Watch 토큰은 동기화 뒤에 갱신한다")
         XCTAssertNotNil(HealthSyncHistory(defaults: defaults).lastSuccessAt)
+        XCTAssertEqual(tasks.ended, [1])
     }
 
-    func test_backgroundRun_on401_signsOut() async throws {
+    func test_backgroundRelaunch_doesNotReissueWatchToken() async throws {
+        let service = makeService(session: try makeSession(signedIn: true))
+        _ = await makeRunner(service: service).run()
+        XCTAssertEqual(requestPaths.filter { $0 == Self.watchTokenPath }.count, 1)
+
+        // 앱을 다시 실행: 같은 저장소로 새 세션을 복원한다.
+        let relaunched = makeService(session: try makeSession(signedIn: false))
+        XCTAssertTrue(relaunched.userSession.isSignedIn)
+        _ = await makeRunner(service: relaunched).run()
+
+        XCTAssertEqual(requestPaths.filter { $0 == Self.watchTokenPath }.count, 1, "만료가 멀면 다시 발급하지 않는다")
+    }
+
+    func test_backgroundRun_on401_signsOut_andEndsTask() async throws {
         let session = try makeSession(signedIn: true)
         let service = makeService(session: session)
-        StubURLProtocol.setStubs([
-            Self.syncPath: .init(status: 401, json: #"{"message":"invalid"}"#),
-            "/api/auth/watch-token": .init(status: 200, json: Self.watchToken),
-        ])
-        let runner = BackgroundHealthSyncRunner(
-            isProtectedDataAvailable: { true },
-            checkCredentialsReadable: {},
-            syncService: { service },
-            provider: RecordingHealthProvider()
-        )
+        stubServer(syncStatus: 401)
+        let tasks = FakeBackgroundTasks()
 
-        let outcome = await runner.run()
+        let outcome = await makeRunner(service: service, tasks: tasks).run()
 
         XCTAssertEqual(outcome, .failed)
         XCTAssertFalse(session.isSignedIn)
         XCTAssertEqual(session.reloginNotice, UserSession.reloginMessage)
+        XCTAssertEqual(tasks.ended, [1])
     }
 }
 
-// MARK: - 콜백 묶기·최소 간격
+// MARK: - 잠금 중 세션 복원
+
+@MainActor
+final class LockedRestoreTests: XCTestCase {
+    func test_restoreWhileLocked_keepsCredentials_andRestoresAfterUnlock() throws {
+        let suiteName = "LockedRestoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("password", forKey: "auth.provider")
+        defaults.set("password:alice", forKey: "auth.userId")
+        let accessStore = LockableTokenStore(token: "jwt")
+        let refreshStore = LockableTokenStore(token: "refresh")
+        accessStore.isLocked = true
+        refreshStore.isLocked = true
+        let center = NotificationCenter()
+        let unlocked = Notification.Name("test.protectedDataDidBecomeAvailable")
+
+        let session = UserSession(
+            defaults: defaults,
+            credentials: SessionCredentialStore(accessStore: accessStore, refreshStore: refreshStore, defaults: defaults),
+            watchPublisher: NoopWatchPublisher(),
+            notificationCenter: center,
+            protectedDataNotification: unlocked
+        )
+
+        XCTAssertFalse(session.isSignedIn)
+        XCTAssertNil(session.reloginNotice)
+        XCTAssertEqual(accessStore.storedToken, "jwt", "잠금 중에는 저장된 토큰을 지우지 않는다")
+        XCTAssertEqual(refreshStore.storedToken, "refresh")
+        XCTAssertEqual(defaults.string(forKey: "auth.userId"), "password:alice")
+
+        accessStore.isLocked = false
+        refreshStore.isLocked = false
+        center.post(name: unlocked, object: nil)
+
+        XCTAssertTrue(session.isSignedIn)
+        XCTAssertEqual(session.userId, "password:alice")
+    }
+}
+
+// MARK: - 콜백 묶기·최소 간격·시간 초과
 
 @MainActor
 final class BackgroundSyncCoordinatorTests: XCTestCase {
+    private static let timeout: TimeInterval = 100
+
+    private var clock: TestClock!
+    private var gate: GatedPerform!
+    private var sleeper: ManualSleeper!
+    private var refreshInFlight = false
+
+    override func setUp() async throws {
+        clock = TestClock(Date(timeIntervalSince1970: 1_800_000_000))
+        gate = GatedPerform()
+        sleeper = ManualSleeper()
+        refreshInFlight = false
+    }
+
+    override func tearDown() async throws {
+        // 남은 sleep·실행을 모두 풀어 continuation이 새지 않게 한다.
+        refreshInFlight = false
+        for _ in 0..<3 {
+            sleeper.wake { _ in true }
+            gate.release()
+            await settle()
+        }
+    }
+
+    private func makeCoordinator() -> BackgroundSyncCoordinator {
+        let clock = clock!
+        let gate = gate!
+        let sleeper = sleeper!
+        return BackgroundSyncCoordinator(
+            completionTimeout: Self.timeout,
+            now: { clock.now },
+            sleep: { await sleeper.sleep($0) },
+            isRefreshInFlight: { [unowned self] in self.refreshInFlight },
+            perform: { await gate.perform() }
+        )
+    }
+
+    /// 실행 하나를 끝내 최소 간격 기준 시각을 만든다.
+    private func finishFirstRun(_ coordinator: BackgroundSyncCoordinator, _ completions: CompletionCounter) async {
+        coordinator.handleUpdate { completions() }
+        await settle()
+        gate.release()
+        await settle()
+    }
+
     func test_concurrentCallbacks_runOneSync_andCallAllCompletions() async {
-        let clock = TestClock(Date(timeIntervalSince1970: 1_800_000_000))
-        let gate = GatedPerform()
-        let coordinator = BackgroundSyncCoordinator(now: { clock.now }, perform: { await gate.perform() })
+        let coordinator = makeCoordinator()
         let completions = CompletionCounter()
 
         coordinator.handleUpdate { completions() }
         coordinator.handleUpdate { completions() }
         coordinator.handleUpdate { completions() }
-        await waitUntil { gate.startCount == 1 }
+        await settle()
 
-        XCTAssertTrue(coordinator.isRunning)
+        XCTAssertEqual(gate.startCount, 1)
         XCTAssertTrue(coordinator.hasQueuedRun)
         XCTAssertEqual(completions.count, 0)
 
         gate.release()
-        await waitUntil { completions.count == 3 }
+        await settle()
 
         XCTAssertEqual(gate.startCount, 1, "60초 안에 몰린 콜백은 동기화 한 번으로 처리한다")
         XCTAssertEqual(completions.count, 3)
         XCTAssertFalse(coordinator.isRunning)
         XCTAssertFalse(coordinator.hasQueuedRun)
+        XCTAssertFalse(coordinator.hasTrailingRun)
     }
 
     func test_queuedRun_executesOnce_whenIntervalElapsedDuringRun() async {
-        let clock = TestClock(Date(timeIntervalSince1970: 1_800_000_000))
-        let gate = GatedPerform()
-        let coordinator = BackgroundSyncCoordinator(now: { clock.now }, perform: { await gate.perform() })
+        let coordinator = makeCoordinator()
         let completions = CompletionCounter()
 
         coordinator.handleUpdate { completions() }
-        await waitUntil { gate.startCount == 1 }
+        await settle()
         coordinator.handleUpdate { completions() }
         coordinator.handleUpdate { completions() }
         clock.advance(61)
         gate.release()
-        await waitUntil { gate.startCount == 2 }
+        await settle()
 
+        XCTAssertEqual(gate.startCount, 2)
         XCTAssertEqual(completions.count, 1)
         gate.release()
-        await waitUntil { completions.count == 3 }
+        await settle()
 
         XCTAssertEqual(gate.startCount, 2, "대기 중인 실행은 하나로 묶인다")
         XCTAssertEqual(completions.count, 3)
     }
 
-    func test_minimumInterval_skipsSecondSyncWithin60Seconds() async {
-        let clock = TestClock(Date(timeIntervalSince1970: 1_800_000_000))
-        let gate = GatedPerform()
-        let coordinator = BackgroundSyncCoordinator(now: { clock.now }, perform: { await gate.perform() })
+    func test_updateNearEndOfInterval_runsTrailingSync_andHoldsCompletion() async {
+        let coordinator = makeCoordinator()
         let completions = CompletionCounter()
+        await finishFirstRun(coordinator, completions)
 
+        clock.advance(55)
         coordinator.handleUpdate { completions() }
-        await waitUntil { gate.startCount == 1 }
+        coordinator.handleUpdate { completions() }
+        await settle()
+
+        XCTAssertTrue(coordinator.hasTrailingRun)
+        XCTAssertEqual(completions.count, 1, "뒤따르는 실행이 끝날 때까지 completion을 기다린다")
+        XCTAssertTrue(sleeper.pendingDelays.contains(5))
+
+        clock.advance(5)
+        sleeper.wake { $0 == 5 }
+        await settle()
+        XCTAssertEqual(gate.startCount, 2)
+
         gate.release()
-        await waitUntil { completions.count == 1 }
+        await settle()
+        XCTAssertEqual(gate.startCount, 2, "간격 안의 콜백은 뒤따르는 실행 하나로 묶인다")
+        XCTAssertEqual(completions.count, 3)
+    }
+
+    func test_updateEarlyInInterval_beyondTimeBudget_completesWithoutSync() async {
+        let coordinator = makeCoordinator()
+        let completions = CompletionCounter()
+        await finishFirstRun(coordinator, completions)
 
         clock.advance(30)
         coordinator.handleUpdate { completions() }
-        XCTAssertEqual(completions.count, 2, "실행하지 않으면 completion을 바로 부른다")
-        XCTAssertFalse(coordinator.isRunning)
+
+        XCTAssertEqual(completions.count, 2, "기다릴 수 없으면 completion을 바로 부른다")
+        XCTAssertFalse(coordinator.hasTrailingRun)
+        XCTAssertEqual(gate.startCount, 1)
 
         clock.advance(31)
         coordinator.handleUpdate { completions() }
-        await waitUntil { gate.startCount == 2 }
+        await settle()
         XCTAssertEqual(gate.startCount, 2)
         gate.release()
-        await waitUntil { completions.count == 3 }
+        await settle()
         XCTAssertEqual(completions.count, 3)
     }
 
     func test_timeout_callsCompletion_evenIfSyncHangs_andOnlyOnce() async {
-        let gate = GatedPerform()
-        let coordinator = BackgroundSyncCoordinator(completionTimeout: 0.05, perform: { await gate.perform() })
+        let coordinator = makeCoordinator()
         let completions = CompletionCounter()
 
         coordinator.handleUpdate { completions() }
-        await waitUntil { completions.count == 1 }
+        await settle()
+        sleeper.wake { $0 == Self.timeout }
+        await settle()
         XCTAssertEqual(completions.count, 1)
 
         gate.release()
-        await waitUntil { !coordinator.isRunning }
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        await settle()
         XCTAssertEqual(completions.count, 1, "시간 초과 뒤 동기화가 끝나도 completion은 한 번만 부른다")
+    }
+
+    func test_timeout_waitsWhileTokenRefreshInFlight() async {
+        let coordinator = makeCoordinator()
+        let completions = CompletionCounter()
+        refreshInFlight = true
+
+        coordinator.handleUpdate { completions() }
+        await settle()
+        sleeper.wake { $0 == Self.timeout }
+        await settle()
+
+        XCTAssertEqual(completions.count, 0, "리프레시 응답을 저장하기 전에는 completion을 부르지 않는다")
+        XCTAssertEqual(sleeper.pendingDelays, [BackgroundSyncCoordinator.refreshHoldStep])
+
+        refreshInFlight = false
+        sleeper.wake { $0 == BackgroundSyncCoordinator.refreshHoldStep }
+        await settle()
+        XCTAssertEqual(completions.count, 1)
+        gate.release()
+        await settle()
+    }
+
+    func test_timeoutHold_isBounded() async {
+        let coordinator = makeCoordinator()
+        let completions = CompletionCounter()
+        refreshInFlight = true
+
+        coordinator.handleUpdate { completions() }
+        await settle()
+        sleeper.wake { $0 == Self.timeout }
+        await settle()
+        let steps = Int(BackgroundSyncCoordinator.defaultRefreshHoldLimit / BackgroundSyncCoordinator.refreshHoldStep)
+        for _ in 0..<steps {
+            sleeper.wake { $0 == BackgroundSyncCoordinator.refreshHoldStep }
+            await settle()
+        }
+
+        XCTAssertEqual(completions.count, 1, "리프레시가 끝나지 않아도 한도가 지나면 completion을 부른다")
+        gate.release()
+        await settle()
     }
 }
 
@@ -469,41 +867,124 @@ final class BackgroundSyncCoordinatorTests: XCTestCase {
 @MainActor
 final class HealthBackgroundSyncTests: XCTestCase {
     private struct ObserverError: Error {}
+    private let unlocked = Notification.Name("test.protectedDataDidBecomeAvailable")
+    private var center: NotificationCenter!
 
-    func test_start_skipsQuietly_whenAuthorizationNotRequested() async {
-        let observer = FakeHealthUpdateObserver()
-        observer.authorizationRequested = false
-        let sync = HealthBackgroundSync(observer: observer, coordinator: BackgroundSyncCoordinator(perform: {}))
-
-        await sync.startIfAuthorized()
-
-        XCTAssertEqual(observer.startCount, 0)
-        XCTAssertFalse(sync.isObserving)
+    override func setUp() async throws {
+        center = NotificationCenter()
     }
 
-    func test_start_registersOnlyOnce() async {
-        let observer = FakeHealthUpdateObserver()
-        let sync = HealthBackgroundSync(observer: observer, coordinator: BackgroundSyncCoordinator(perform: {}))
+    private func makeSync(
+        observer: FakeHealthUpdateObserver,
+        perform: @escaping @MainActor () async -> Void = {}
+    ) -> HealthBackgroundSync {
+        HealthBackgroundSync(
+            observer: observer,
+            coordinator: BackgroundSyncCoordinator(perform: perform),
+            notificationCenter: center,
+            protectedDataNotification: unlocked
+        )
+    }
 
-        await sync.startIfAuthorized()
-        await sync.startIfAuthorized()
+    func test_start_registersObserversSynchronously_evenBeforeAuthorization() async {
+        let observer = FakeHealthUpdateObserver()
+        observer.answers = [.notRequested]
+        var performCount = 0
+        let sync = makeSync(observer: observer) { performCount += 1 }
+
+        sync.start()
+        XCTAssertEqual(observer.startCount, 1, "관찰 쿼리는 실행 시점에 바로 등록한다")
+        await settle()
+
+        XCTAssertFalse(sync.isDeliveryEnabled)
+        XCTAssertEqual(observer.enableCount, 0)
+
+        let completions = CompletionCounter()
+        observer.fire(.steps) { completions() }
+        await settle()
+        XCTAssertEqual(completions.count, 1, "전달을 켜기 전 콜백도 completion을 부른다")
+        XCTAssertEqual(performCount, 0)
+    }
+
+    func test_start_enablesDeliveryOnce() async {
+        let observer = FakeHealthUpdateObserver()
+        let sync = makeSync(observer: observer)
+
+        sync.start()
+        sync.start()
+        await sync.enableDeliveryIfAuthorized()
+        await settle()
 
         XCTAssertEqual(observer.startCount, 1)
-        XCTAssertTrue(sync.isObserving)
+        XCTAssertEqual(observer.enableCount, 1)
+        XCTAssertTrue(sync.isDeliveryEnabled)
+    }
+
+    func test_concurrentEnableCall_isNotLost() async {
+        let observer = FakeHealthUpdateObserver()
+        observer.answers = [.notRequested, .requested]
+        observer.holdAuthorization = true
+        let sync = makeSync(observer: observer)
+
+        sync.start()
+        await settle()
+        XCTAssertEqual(observer.authorizationChecks, 1)
+
+        // 첫 확인이 진행 중일 때 포그라운드에서 권한을 요청하고 다시 부른다.
+        let second = Task { await sync.enableDeliveryIfAuthorized() }
+        await settle()
+        observer.releaseAuthorization()
+        await second.value
+
+        XCTAssertEqual(observer.authorizationChecks, 2, "진행 중 확인이 끝난 뒤 한 번 더 확인한다")
+        XCTAssertTrue(sync.isDeliveryEnabled)
+    }
+
+    func test_unknownAuthorization_retriesWhenProtectedDataBecomesAvailable() async {
+        let observer = FakeHealthUpdateObserver()
+        observer.answers = [.unknown, .requested]
+        let sync = makeSync(observer: observer)
+
+        sync.start()
+        await settle()
+        XCTAssertFalse(sync.isDeliveryEnabled)
+
+        center.post(name: unlocked, object: nil)
+        await settle()
+
+        XCTAssertTrue(sync.isDeliveryEnabled)
+        XCTAssertEqual(observer.enableCount, 1)
+    }
+
+    func test_callbackDuringAuthorizationCheck_waitsThenSyncs() async {
+        let observer = FakeHealthUpdateObserver()
+        observer.holdAuthorization = true
+        var performCount = 0
+        let sync = makeSync(observer: observer) { performCount += 1 }
+        let completions = CompletionCounter()
+
+        sync.start()
+        observer.fire(.workouts) { completions() }
+        await settle()
+        XCTAssertEqual(completions.count, 0)
+
+        observer.releaseAuthorization()
+        await settle()
+
+        XCTAssertEqual(performCount, 1, "백그라운드 재실행의 밀린 전달을 버리지 않는다")
+        XCTAssertEqual(completions.count, 1)
     }
 
     func test_observerError_callsCompletion_withoutSync() async {
         let observer = FakeHealthUpdateObserver()
         var performCount = 0
-        let sync = HealthBackgroundSync(
-            observer: observer,
-            coordinator: BackgroundSyncCoordinator(perform: { performCount += 1 })
-        )
-        await sync.startIfAuthorized()
+        let sync = makeSync(observer: observer) { performCount += 1 }
+        sync.start()
+        await settle()
         let completions = CompletionCounter()
 
         observer.fire(.sleep, error: ObserverError()) { completions() }
-        await waitUntil { completions.count == 1 }
+        await settle()
 
         XCTAssertEqual(completions.count, 1)
         XCTAssertEqual(performCount, 0)
@@ -512,17 +993,15 @@ final class HealthBackgroundSyncTests: XCTestCase {
     func test_update_callsCompletion_afterSync() async {
         let observer = FakeHealthUpdateObserver()
         var performCount = 0
-        let sync = HealthBackgroundSync(
-            observer: observer,
-            coordinator: BackgroundSyncCoordinator(perform: { performCount += 1 })
-        )
-        await sync.startIfAuthorized()
+        let sync = makeSync(observer: observer) { performCount += 1 }
+        sync.start()
+        await settle()
         let completions = CompletionCounter()
 
         observer.fire(.workouts) { completions() }
         observer.fire(.steps) { completions() }
         observer.fire(.sleep) { completions() }
-        await waitUntil { completions.count == 3 }
+        await settle()
 
         XCTAssertEqual(completions.count, 3)
         XCTAssertEqual(performCount, 1)
@@ -536,21 +1015,21 @@ final class HealthBackgroundSyncTests: XCTestCase {
         let session = UserSession(defaults: defaults, tokenStore: InMemoryTokenStore(), watchPublisher: NoopWatchPublisher())
         let service = HealthSyncService(networkClient: NetworkClient(), userSession: session, history: HealthSyncHistory(defaults: defaults))
         let runner = BackgroundHealthSyncRunner(
+            isAppActive: { false },
             isProtectedDataAvailable: { true },
             checkCredentialsReadable: {},
             syncService: { service },
-            provider: RecordingHealthProvider()
+            provider: RecordingHealthProvider(),
+            backgroundTasks: FakeBackgroundTasks()
         )
         var outcome: BackgroundSyncOutcome?
-        let sync = HealthBackgroundSync(
-            observer: observer,
-            coordinator: BackgroundSyncCoordinator(perform: { outcome = await runner.run() })
-        )
-        await sync.startIfAuthorized()
+        let sync = makeSync(observer: observer) { outcome = await runner.run() }
+        sync.start()
+        await settle()
         let completions = CompletionCounter()
 
         observer.fire(.steps) { completions() }
-        await waitUntil { completions.count == 1 }
+        await settle()
 
         XCTAssertEqual(completions.count, 1)
         XCTAssertEqual(outcome, .skippedSignedOut)

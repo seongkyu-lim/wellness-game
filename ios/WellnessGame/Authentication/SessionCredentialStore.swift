@@ -127,6 +127,13 @@ final class SessionCredentialStore: @unchecked Sendable {
 /// 교체됐으면(늦게 도착한 401) 다시 보내지 않고 저장된 새 토큰을 돌려준다.
 actor TokenRefreshCoordinator {
     private var inflight: Task<String, Error>?
+    private nonisolated let inflightFlag = RefreshInFlightFlag()
+
+    /// 리프레시 요청이 나가 있는지. 백그라운드 동기화가 회전된 토큰을 저장하기 전에 HealthKit completion을 부르지 않도록
+    /// (앱이 정지돼 새 리프레시 토큰을 잃지 않도록) 동기적으로 확인한다.
+    nonisolated var isRefreshing: Bool {
+        inflightFlag.value
+    }
 
     /// - Parameters:
     ///   - rejectedToken: 서버가 거절했거나 곧 만료될 액세스 토큰.
@@ -145,7 +152,22 @@ actor TokenRefreshCoordinator {
         }
         let task = Task { try await perform() }
         inflight = task
-        defer { inflight = nil }
+        inflightFlag.value = true
+        defer {
+            inflight = nil
+            inflightFlag.value = false
+        }
         return try await task.value
+    }
+}
+
+/// 액터 밖에서 동기적으로 읽는 리프레시 진행 여부.
+private final class RefreshInFlightFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value = false
+
+    var value: Bool {
+        get { lock.withLock { _value } }
+        set { lock.withLock { _value = newValue } }
     }
 }

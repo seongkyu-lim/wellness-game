@@ -21,7 +21,7 @@ struct ContentView: View {
             userSession: environment.userSession,
             syncService: environment.syncService,
             // 첫 실행에서 권한을 요청한 직후부터 백그라운드 동기화를 켠다.
-            onHealthAuthorizationRequested: { await backgroundSync.startIfAuthorized() }
+            onHealthAuthorizationRequested: { await backgroundSync.enableDeliveryIfAuthorized() }
         ))
     }
 
