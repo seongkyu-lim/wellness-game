@@ -453,6 +453,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## 운영 배포
 
 웹은 **Vercel**, 백엔드는 **Render**(Docker, `render.yaml` Blueprint), DB는 **Supabase PostgreSQL**입니다.
+`main`에 머지되면 `.github/workflows/deploy.yml`이 바뀐 대상만 검증 후 배포합니다. 시크릿 설정·수동 재배포·롤백은 [배포 파이프라인 문서](docs/deploy.md)를 보세요.
 아래 순서대로 진행합니다. (개인정보 처리방침·이용약관 페이지 문구는 일반적인 서비스 고지를 바탕으로 쓴 초안이며 **법률 자문이 아닙니다.**
 출시 전 실제 운영 방식에 맞는지 검토하고, 필요하면 전문가 확인을 받으세요.)
 
@@ -469,7 +470,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ### 2. Render 서비스·환경변수
 
 1. Render 대시보드 **New › Blueprint**에서 이 저장소를 고르면 루트의 `render.yaml`로 `wellness-game-api` 웹 서비스가 만들어집니다
-   (Docker, `rootDir: backend`, `main` 브랜치 자동 배포, region `singapore`, plan `free` — 앱 심사 제출 전 `starter`로 변경).
+   (Docker, `rootDir: backend`, `main` 브랜치, region `singapore`, plan `free` — 앱 심사 제출 전 `starter`로 변경).
+   자체 자동 배포는 `autoDeploy: false`로 끄고 `deploy.yml`이 배포 훅으로 배포합니다. Blueprint로 만들지 않은 서비스는 대시보드 Auto-Deploy도 Off로 바꿉니다([docs/deploy.md](docs/deploy.md)).
 2. `sync: false` 항목은 생성 화면에서 값을 입력합니다: `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`,
    `CORS_ALLOWED_ORIGINS`(3단계 후 채워도 됨), 소셜 로그인 키([소셜 로그인 서버 환경변수](#소셜-로그인-서버-환경변수) 표).
    `AUTH_JWT_SECRET`은 Render가 256비트 무작위 값을 생성합니다(바꾸면 모든 로그인 세션이 끊김).
@@ -498,7 +500,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
    (`npm ci` → `npm run build` → `dist`, SPA 라우팅, 보안 헤더, `/assets` 장기 캐시).
 2. 환경변수(Production·Preview): `VITE_API_BASE_URL=https://<서비스>.onrender.com`(필수 — 없으면 Vercel 빌드가 실패),
    `VITE_GOOGLE_CLIENT_ID`, `VITE_KAKAO_CLIENT_ID`, `VITE_NAVER_CLIENT_ID`. 값은 빌드에 박히므로(CSP `connect-src` 포함) 바꾸면 재배포합니다.
-3. Production Branch를 `main`으로 둡니다. 자세한 내용은 [`web/README.md`](web/README.md)의 "Vercel 배포".
+3. Production Branch를 `main`으로 둡니다. `main` 배포는 `web/vercel.json`(`git.deploymentEnabled.main: false`)으로 Git 연동에서 끄고 `deploy.yml`이 `vercel deploy --prod`로 배포합니다. 자세한 내용은 [`web/README.md`](web/README.md)의 "Vercel 배포".
 
 ### 4. CORS에 Vercel 도메인 추가
 
@@ -525,14 +527,14 @@ Render의 `CORS_ALLOWED_ORIGINS`에 Vercel 운영 도메인(예: `https://wellne
 
 ## CI (GitHub Actions)
 
-`.github/workflows/`의 워크플로는 해당 디렉터리(또는 워크플로 파일 자체)가 바뀐 `dev`·`main` 대상 PR과 `dev`·`main` push에서만 돈다. 모두 `contents: read` 최소 권한이며, 같은 PR/브랜치에서 새 실행이 시작되면 이전 실행은 취소된다. `workflow_dispatch`로 수동 실행도 가능하다.
+`.github/workflows/`의 워크플로는 해당 디렉터리(또는 워크플로 파일 자체)가 바뀐 `dev`·`main` 대상 PR과 `dev` push에서 돈다. `main` push에서는 `deploy.yml`이 배포 대상에 맞춰 `backend-ci.yml`·`hono-ci.yml`·`web-ci.yml`을 `workflow_call`로 호출한다([배포 파이프라인](docs/deploy.md)). 모두 `contents: read` 최소 권한이며, 같은 PR/브랜치에서 새 실행이 시작되면 이전 실행은 취소된다(`main` 실행은 취소하지 않는다). `workflow_dispatch`로 수동 실행도 가능하다.
 
 | 워크플로 | 트리거 경로 | 하는 일 |
 |---|---|---|
 | `backend-ci.yml` | `backend/**` | JDK 21(Temurin). `test` 잡: 단위 테스트(H2) + 빌드. `postgres-test` 잡: Testcontainers PostgreSQL 17 통합 테스트(`CI=true`라 Docker가 없으면 건너뛰지 않고 실패). 실패 시 테스트 리포트 artifact 업로드 |
 | `android-ci.yml` | `android/**` | JDK 21 + Android SDK. 단위 테스트·debug 빌드·lint, 자리표시 HTTPS 주소로 release 빌드. lint·테스트 리포트 artifact 업로드 |
 | `ios-ci.yml` | `ios/**` | macOS 러너, 최신 안정 Xcode. 사용 가능한 iPhone 시뮬레이터를 `simctl`로 골라 `WellnessGameTests` 스킴 테스트, Watch 앱(`-sdk watchsimulator`) 빌드, Watch를 임베드한 iOS 앱을 generic 시뮬레이터 목적지로 빌드(서명 없음, watchOS 런타임 불필요) |
-| `web-ci.yml` | `web/**` | Node 22. `npm ci` → 테스트 → 자리표시 API 주소로 프로덕션 빌드. 배포는 Vercel이 직접 한다([운영 배포](#운영-배포)) |
+| `web-ci.yml` | `web/**` | Node 22. `npm ci` → 테스트 → 자리표시 API 주소로 프로덕션 빌드. 배포는 `deploy.yml`이 Vercel로 한다([배포 파이프라인](docs/deploy.md)) |
 
 로컬에서 같은 검사를 돌리는 명령:
 

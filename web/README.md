@@ -170,8 +170,8 @@ object-src 'none'; base-uri 'self'; form-action 'self'
 
 ## Vercel 배포
 
-운영 웹은 Vercel이 저장소를 직접 빌드해 배포합니다(전체 순서는 루트 README의 "운영 배포"). GitHub Actions(`web-ci.yml`)는
-PR·push에서 테스트·빌드 검증만 합니다.
+운영(main) 배포는 GitHub Actions `deploy.yml`이 `web-ci.yml` 검증을 통과한 뒤 Vercel CLI로 수행합니다(#151, [docs/deploy.md](../docs/deploy.md)).
+Vercel Git 연동의 main 자동 배포는 `vercel.json`의 `git.deploymentEnabled`로 꺼 두고, PR·브랜치 Preview 배포는 그대로 씁니다.
 
 - Vercel 프로젝트의 **Root Directory를 `web`** 으로 지정합니다. 빌드 설정은 `vercel.json`(설치 `npm ci`, 빌드 `npm run build`, 출력 `dist`)에 있습니다.
 - 환경변수(Production·Preview 모두): `VITE_API_BASE_URL`(Render 백엔드 주소, 필수), `VITE_PRIVACY_CONTACT_EMAIL`·`VITE_PRIVACY_EFFECTIVE_DATE`(필수, 아래), `VITE_GOOGLE_CLIENT_ID`, `VITE_KAKAO_CLIENT_ID`,
