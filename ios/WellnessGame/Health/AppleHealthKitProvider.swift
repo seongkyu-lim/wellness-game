@@ -20,27 +20,62 @@ final class AppleHealthKitProvider: HealthDataProvider {
     }
 
     func loadToday() async throws -> DailyHealthSnapshot {
+        try await load(day: Date())
+    }
+
+    func load(day: Date) async throws -> DailyHealthSnapshot {
         guard isAvailable else {
             throw HealthDataError.unavailable
         }
-        async let steps = fetchSteps()
-        async let workouts = fetchWorkouts()
-        async let sleep = fetchLastNightSleep()
+        let window = try Self.dayWindow(for: day, now: Date(), calendar: calendar)
+        async let steps = fetchSteps(in: window)
+        async let workouts = fetchWorkouts(in: window)
+        async let sleep = fetchSleep(in: window)
         return try await DailyHealthSnapshot(
-            date: Date(),
+            date: window.snapshotDate,
             steps: steps,
             workouts: workouts,
             sleep: sleep
         )
     }
 
-    private func fetchSteps() async throws -> Int {
+    /// 하루치 데이터를 읽는 구간.
+    ///
+    /// - 걸음·운동: `[그날 0시, end)`. `end`는 오늘이면 지금, 지난 날이면 다음 날 0시다.
+    /// - 수면: `[그날 0시 - 12시간, end]`와 겹치면서 `end` 이전에 깬 수면. 서버는 수면을 깬 시각의 날짜로 보므로,
+    ///   지난 날을 다시 읽을 때 자정을 넘겨 오늘 아침에 깬 수면은 그날이 아니라 오늘 몫으로 남긴다.
+    ///   오늘은 `end`가 지금이라 깬 시각 조건이 기존 동작(`loadToday`)과 같다.
+    /// 즉 지난 날 구간은 "그날 마지막 순간에 `loadToday`를 불렀다면 보냈을 데이터"와 같다.
+    struct DayWindow: Equatable {
+        let start: Date
+        let end: Date
+        let sleepStart: Date
+        /// 요청 날짜(`yyyy-MM-dd`)를 만들 시각. 오늘이면 지금, 지난 날이면 그날 0시.
+        let snapshotDate: Date
+    }
+
+    static func dayWindow(for day: Date, now: Date, calendar: Calendar) throws -> DayWindow {
+        let start = calendar.startOfDay(for: day)
+        // 서버는 미래 날짜의 걸음 수를 거절한다.
+        guard start <= now,
+              let nextStart = calendar.date(byAdding: .day, value: 1, to: start),
+              let sleepStart = calendar.date(byAdding: .hour, value: -12, to: start) else {
+            throw HealthDataError.invalidData
+        }
+        let isToday = nextStart > now
+        return DayWindow(
+            start: start,
+            end: isToday ? now : nextStart,
+            sleepStart: sleepStart,
+            snapshotDate: isToday ? now : start
+        )
+    }
+
+    private func fetchSteps(in window: DayWindow) async throws -> Int {
         guard let type = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
             throw HealthDataError.invalidData
         }
-        let now = Date()
-        let start = calendar.startOfDay(for: now)
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: now, options: .strictStartDate)
+        let predicate = HKQuery.predicateForSamples(withStart: window.start, end: window.end, options: .strictStartDate)
 
         return try await withCheckedThrowingContinuation { continuation in
             let query = HKStatisticsQuery(
@@ -59,10 +94,8 @@ final class AppleHealthKitProvider: HealthDataProvider {
         }
     }
 
-    private func fetchWorkouts() async throws -> [HealthActivityDTO] {
-        let now = Date()
-        let start = calendar.startOfDay(for: now)
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: now, options: .strictStartDate)
+    private func fetchWorkouts(in window: DayWindow) async throws -> [HealthActivityDTO] {
+        let predicate = HKQuery.predicateForSamples(withStart: window.start, end: window.end, options: .strictStartDate)
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -137,16 +170,11 @@ final class AppleHealthKitProvider: HealthDataProvider {
         WorkoutType(rawValue: WorkoutKind(activityType: type).serverType) ?? .other
     }
 
-    private func fetchLastNightSleep() async throws -> HealthActivityDTO? {
+    private func fetchSleep(in window: DayWindow) async throws -> HealthActivityDTO? {
         guard let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
             throw HealthDataError.invalidData
         }
-        let now = Date()
-        let todayStart = calendar.startOfDay(for: now)
-        guard let windowStart = calendar.date(byAdding: .hour, value: -12, to: todayStart) else {
-            throw HealthDataError.invalidData
-        }
-        let predicate = HKQuery.predicateForSamples(withStart: windowStart, end: now, options: [])
+        let predicate = HKQuery.predicateForSamples(withStart: window.sleepStart, end: window.end, options: [])
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -161,7 +189,7 @@ final class AppleHealthKitProvider: HealthDataProvider {
                     return
                 }
                 let asleep = (samples as? [HKCategorySample] ?? [])
-                    .filter { self.isAsleepValue($0.value) }
+                    .filter { self.isAsleepValue($0.value) && $0.endDate <= window.end }
                 guard !asleep.isEmpty else {
                     continuation.resume(returning: nil)
                     return
