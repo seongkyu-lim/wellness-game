@@ -138,6 +138,12 @@
 		5B0000000000000000000738 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 5F0000000000000000000708 /* InfoPlist.xcstrings */; };
 		5B0000000000000000000739 /* WorkoutSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F000000000000000000070A /* WorkoutSessionController.swift */; };
 		5B0000000000000000000726 /* WorkoutSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F000000000000000000070A /* WorkoutSessionController.swift */; };
+		9A0000000000000000000111 /* HealthSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0000000000000000000101 /* HealthSyncService.swift */; };
+		9A0000000000000000000121 /* HealthSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0000000000000000000101 /* HealthSyncService.swift */; };
+		9A0000000000000000000112 /* HealthBackgroundSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0000000000000000000102 /* HealthBackgroundSync.swift */; };
+		9A0000000000000000000122 /* HealthBackgroundSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0000000000000000000102 /* HealthBackgroundSync.swift */; };
+		9A0000000000000000000113 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0000000000000000000103 /* AppEnvironment.swift */; };
+		9A0000000000000000000124 /* HealthBackgroundSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0000000000000000000104 /* HealthBackgroundSyncTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -264,6 +270,10 @@
 		5F0000000000000000000708 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		5F0000000000000000000709 /* WatchWorkoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWorkoutTests.swift; sourceTree = "<group>"; };
 		5F000000000000000000070A /* WorkoutSessionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSessionController.swift; sourceTree = "<group>"; };
+		9A0000000000000000000101 /* HealthSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncService.swift; sourceTree = "<group>"; };
+		9A0000000000000000000102 /* HealthBackgroundSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthBackgroundSync.swift; sourceTree = "<group>"; };
+		9A0000000000000000000103 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		9A0000000000000000000104 /* HealthBackgroundSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthBackgroundSyncTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -321,6 +331,7 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000001 /* WellnessGameApp.swift */,
+				9A0000000000000000000103 /* AppEnvironment.swift */,
 				D1000000000000000000000B /* Authentication */,
 				D10000000000000000000003 /* Models */,
 				D10000000000000000000004 /* Health */,
@@ -347,6 +358,8 @@
 				B10000000000000000000007 /* HealthKitManager.swift */,
 				B10000000000000000000008 /* AppleHealthKitProvider.swift */,
 				B10000000000000000000009 /* MockHealthDataProvider.swift */,
+				9A0000000000000000000101 /* HealthSyncService.swift */,
+				9A0000000000000000000102 /* HealthBackgroundSync.swift */,
 			);
 			path = Health;
 			sourceTree = "<group>";
@@ -414,6 +427,7 @@
 				6F0000000000000000000506 /* SharedConfigurationTests.swift */,
 				6F0000000000000000000508 /* WatchDashboardModelTests.swift */,
 				5F0000000000000000000709 /* WatchWorkoutTests.swift */,
+				9A0000000000000000000104 /* HealthBackgroundSyncTests.swift */,
 );
 			path = WellnessGameTests;
 			sourceTree = "<group>";
@@ -742,6 +756,9 @@
 				A10000000000000000000005 /* CharacterResponse.swift in Sources */,
 				A10000000000000000000006 /* HealthDataProvider.swift in Sources */,
 				A10000000000000000000007 /* HealthKitManager.swift in Sources */,
+				9A0000000000000000000111 /* HealthSyncService.swift in Sources */,
+				9A0000000000000000000112 /* HealthBackgroundSync.swift in Sources */,
+				9A0000000000000000000113 /* AppEnvironment.swift in Sources */,
 				A10000000000000000000008 /* AppleHealthKitProvider.swift in Sources */,
 				A10000000000000000000009 /* MockHealthDataProvider.swift in Sources */,
 				A1000000000000000000000A /* NetworkClient.swift in Sources */,
@@ -792,6 +809,9 @@
 				A20000000000000000000011 /* MockHealthDataProvider.swift in Sources */,
 				A20000000000000000000012 /* AppleHealthKitProvider.swift in Sources */,
 				A20000000000000000000013 /* HealthKitManager.swift in Sources */,
+				9A0000000000000000000121 /* HealthSyncService.swift in Sources */,
+				9A0000000000000000000122 /* HealthBackgroundSync.swift in Sources */,
+				9A0000000000000000000124 /* HealthBackgroundSyncTests.swift in Sources */,
 				A20000000000000000000014 /* AuthNetworkingTests.swift in Sources */,
 				A20000000000000000000015 /* LocalizationTests.swift in Sources */,
 				A200000000000000000CA13 /* SocialLoginTests.swift in Sources */,

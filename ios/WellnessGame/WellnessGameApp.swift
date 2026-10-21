@@ -2,6 +2,9 @@ import SwiftUI
 
 @main
 struct WellnessGameApp: App {
+    /// HealthKit 백그라운드 동기화를 실행 시점에 등록한다(백그라운드 재실행 포함).
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         ServerEnvironment.validateAtLaunch()
         SocialLoginService.initializeKakaoIfConfigured()

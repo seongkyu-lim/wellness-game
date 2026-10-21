@@ -4,6 +4,9 @@ protocol HealthDataProvider {
     var isAvailable: Bool { get }
     func requestAuthorization() async throws
     func loadToday() async throws -> DailyHealthSnapshot
+    /// `day`가 속한 하루의 데이터를 읽는다. 오늘이면 `loadToday()`와 같고, 지난 날이면 그날 하루 전체를 읽는다.
+    /// 오늘 이후(미래) 날짜는 서버가 거절하므로 `HealthDataError.invalidData`를 던진다.
+    func load(day: Date) async throws -> DailyHealthSnapshot
 }
 
 enum HealthDataError: LocalizedError {
