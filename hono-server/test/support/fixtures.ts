@@ -32,3 +32,14 @@ export class MutableClock {
     this.now += ms;
   }
 }
+
+import { afterEach, beforeEach, vi } from 'vitest';
+
+/** 오류 경로 테스트가 남기는 로그로 출력이 어지러워지지 않게 한다(describe 안에서 호출) */
+export function quietLogs() {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+}
