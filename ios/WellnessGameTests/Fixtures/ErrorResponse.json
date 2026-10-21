@@ -1,0 +1,6 @@
+{
+  "timestamp": "2026-10-21T00:00:00Z",
+  "status": 401,
+  "error": "Unauthorized",
+  "message": "토큰이 유효하지 않습니다."
+}

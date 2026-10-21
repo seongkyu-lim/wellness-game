@@ -1,0 +1,10 @@
+{
+  "userId": "password:alice",
+  "character": {
+    "level": 2,
+    "currentXp": 10,
+    "totalXp": 110,
+    "nextLevelXp": 200,
+    "stats": { "str": 1, "vit": 1, "intStat": 1, "discipline": 1, "recovery": 1 }
+  }
+}

@@ -31,66 +31,6 @@ final class RecordingHealthProvider: HealthDataProvider, @unchecked Sendable {
     }
 }
 
-/// HealthKit 없이 관찰 콜백·권한 확인을 흉내 낸다. 권한 확인은 `answers` 순서대로 답하고,
-/// `holdAuthorization`이면 `releaseAuthorization()` 전까지 답하지 않는다.
-@MainActor
-final class FakeHealthUpdateObserver: HealthUpdateObserving {
-    enum Answer {
-        case requested
-        case notRequested
-        case unknown
-    }
-
-    var answers: [Answer] = [.requested]
-    var holdAuthorization = false
-    private(set) var startCount = 0
-    private(set) var enableCount = 0
-    private(set) var authorizationChecks = 0
-    private var held: [CheckedContinuation<Void, Never>] = []
-    private var handler: (@Sendable (HealthObservedType, Error?, @escaping @Sendable () -> Void) -> Void)?
-
-    nonisolated func startObserving(
-        _ handler: @escaping @Sendable (HealthObservedType, Error?, @escaping @Sendable () -> Void) -> Void
-    ) {
-        MainActor.assumeIsolated {
-            startCount += 1
-            self.handler = handler
-        }
-    }
-
-    nonisolated func isAuthorizationRequested() async throws -> Bool {
-        try await answer()
-    }
-
-    nonisolated func enableBackgroundDelivery() {
-        MainActor.assumeIsolated { enableCount += 1 }
-    }
-
-    private func answer() async throws -> Bool {
-        authorizationChecks += 1
-        if holdAuthorization {
-            await withCheckedContinuation { held.append($0) }
-        }
-        let next = answers.count > 1 ? answers.removeFirst() : (answers.first ?? .notRequested)
-        switch next {
-        case .requested: return true
-        case .notRequested: return false
-        case .unknown: throw HealthDataError.unavailable
-        }
-    }
-
-    func releaseAuthorization() {
-        holdAuthorization = false
-        let pending = held
-        held = []
-        pending.forEach { $0.resume() }
-    }
-
-    func fire(_ type: HealthObservedType, error: Error? = nil, completion: @escaping @Sendable () -> Void) {
-        handler?(type, error, completion)
-    }
-}
-
 /// 실행을 열어 줄 때까지 기다리는 동기화 작업.
 @MainActor
 final class GatedPerform {
@@ -109,100 +49,6 @@ final class GatedPerform {
     }
 }
 
-/// 시간을 직접 흘려보내는 sleep. 벽시계를 기다리지 않는다.
-@MainActor
-final class ManualSleeper {
-    private var sleepers: [(seconds: TimeInterval, continuation: CheckedContinuation<Void, Never>)] = []
-
-    var pendingDelays: [TimeInterval] {
-        sleepers.map(\.seconds)
-    }
-
-    nonisolated func sleep(_ seconds: TimeInterval) async {
-        await enqueue(seconds)
-    }
-
-    private func enqueue(_ seconds: TimeInterval) async {
-        await withCheckedContinuation { sleepers.append((seconds, $0)) }
-    }
-
-    /// 조건에 맞는 sleep을 깨운다.
-    func wake(where matches: (TimeInterval) -> Bool) {
-        let woken = sleepers.filter { matches($0.seconds) }
-        sleepers.removeAll { matches($0.seconds) }
-        woken.forEach { $0.continuation.resume() }
-    }
-}
-
-/// completion 호출 횟수를 센다.
-final class CompletionCounter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var _count = 0
-
-    var count: Int { lock.withLock { _count } }
-
-    func callAsFunction() {
-        lock.withLock { _count += 1 }
-    }
-}
-
-/// 시작·종료를 기록하는 백그라운드 작업.
-@MainActor
-final class FakeBackgroundTasks: BackgroundTaskProviding {
-    private(set) var begun = 0
-    private(set) var ended: [Int] = []
-
-    nonisolated init() {}
-
-    func begin(name: String, expiration: @escaping @MainActor () -> Void) -> Int {
-        begun += 1
-        return begun
-    }
-
-    func end(_ identifier: Int) {
-        ended.append(identifier)
-    }
-}
-
-/// 잠금 상태를 흉내 내는 토큰 저장소. 잠겨 있으면 읽지 못하고 `checkReadable()`이 던진다.
-final class LockableTokenStore: AccessTokenStore, @unchecked Sendable {
-    private let lock = NSLock()
-    private var token: String?
-    private var _isLocked = false
-
-    init(token: String?) {
-        self.token = token
-    }
-
-    var isLocked: Bool {
-        get { lock.withLock { _isLocked } }
-        set { lock.withLock { _isLocked = newValue } }
-    }
-
-    var storedToken: String? {
-        lock.withLock { token }
-    }
-
-    func loadToken() -> String? {
-        lock.withLock { _isLocked ? nil : token }
-    }
-
-    func saveToken(_ token: String) throws {
-        lock.withLock { self.token = token }
-    }
-
-    func deleteToken() {
-        lock.withLock {
-            // 잠겨 있으면 Keychain 삭제도 실패한다.
-            if !_isLocked { token = nil }
-        }
-    }
-
-    func checkReadable() throws {
-        if isLocked { throw KeychainError.locked }
-    }
-}
-
 /// 대기 중인 MainActor 작업이 진행되도록 양보한다(벽시계를 기다리지 않는다).
 @MainActor
 private func settle() async {
@@ -211,63 +57,48 @@ private func settle() async {
     }
 }
 
-private let seoul: Calendar = {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "Asia/Seoul")!
-    return calendar
-}()
-
-private func seoulDate(_ text: String) -> Date {
-    let formatter = DateFormatter()
-    formatter.calendar = seoul
-    formatter.timeZone = seoul.timeZone
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.dateFormat = "yyyy-MM-dd HH:mm"
-    return formatter.date(from: text)!
-}
-
 // MARK: - 전날 재전송 판단
 
 final class SyncDayPlannerTests: XCTestCase {
     func test_noHistory_syncsTodayOnly() {
         XCTAssertFalse(SyncDayPlanner.shouldResendPreviousDay(
-            lastSuccessAt: nil, now: seoulDate("2026-10-21 09:00")
+            lastSuccessAt: nil, now: kst("2026-10-21 09:00")
         ))
     }
 
     func test_sameServerDay_syncsTodayOnly() {
         XCTAssertFalse(SyncDayPlanner.shouldResendPreviousDay(
-            lastSuccessAt: seoulDate("2026-10-21 00:01"), now: seoulDate("2026-10-21 23:59")
+            lastSuccessAt: kst("2026-10-21 00:01"), now: kst("2026-10-21 23:59")
         ))
     }
 
     func test_lastSuccessOnEarlierServerDay_resendsPreviousDay() {
         XCTAssertTrue(SyncDayPlanner.shouldResendPreviousDay(
-            lastSuccessAt: seoulDate("2026-10-20 23:59"), now: seoulDate("2026-10-21 00:01")
+            lastSuccessAt: kst("2026-10-20 23:59"), now: kst("2026-10-21 00:01")
         ))
         XCTAssertTrue(SyncDayPlanner.shouldResendPreviousDay(
-            lastSuccessAt: seoulDate("2026-10-15 12:00"), now: seoulDate("2026-10-21 09:00")
+            lastSuccessAt: kst("2026-10-15 12:00"), now: kst("2026-10-21 09:00")
         ))
     }
 
     func test_decisionUsesServerTimeZone_notDeviceTimeZone() {
         // UTC로는 같은 날(10/20 14:00Z → 15:30Z)이지만 한국 시간으로는 10/20 23:00 → 10/21 00:30이다.
         XCTAssertTrue(SyncDayPlanner.shouldResendPreviousDay(
-            lastSuccessAt: seoulDate("2026-10-20 23:00"), now: seoulDate("2026-10-21 00:30")
+            lastSuccessAt: kst("2026-10-20 23:00"), now: kst("2026-10-21 00:30")
         ))
         XCTAssertEqual(SyncDayPlanner.serverCalendar.timeZone.identifier, "Asia/Seoul")
     }
 
     func test_futureLastSuccess_syncsTodayOnly() {
         XCTAssertFalse(SyncDayPlanner.shouldResendPreviousDay(
-            lastSuccessAt: seoulDate("2026-10-22 09:00"), now: seoulDate("2026-10-21 09:00")
+            lastSuccessAt: kst("2026-10-22 09:00"), now: kst("2026-10-21 09:00")
         ))
     }
 
     func test_previousDay_isStartOfYesterday() {
         XCTAssertEqual(
-            SyncDayPlanner.previousDay(of: seoulDate("2026-10-21 00:30"), calendar: seoul),
-            seoulDate("2026-10-20 00:00")
+            SyncDayPlanner.previousDay(of: kst("2026-10-21 00:30"), calendar: seoulCalendar),
+            kst("2026-10-20 00:00")
         )
     }
 
@@ -275,12 +106,12 @@ final class SyncDayPlannerTests: XCTestCase {
         var losAngeles = Calendar(identifier: .gregorian)
         losAngeles.timeZone = TimeZone(identifier: "America/Los_Angeles")!
         // 한국 10/22 12:00 = LA 10/21 20:00. LA 기준 전날(10/20)은 서버 기준 오늘(10/22)에서 이틀 전이다.
-        let now = seoulDate("2026-10-22 12:00")
+        let now = kst("2026-10-22 12:00")
         let laYesterday = SyncDayPlanner.previousDay(of: now, calendar: losAngeles)!
 
         XCTAssertFalse(SyncDayPlanner.isAcceptedByServer(day: laYesterday, deviceCalendar: losAngeles, now: now))
         XCTAssertTrue(SyncDayPlanner.isAcceptedByServer(
-            day: SyncDayPlanner.previousDay(of: now, calendar: seoul)!, deviceCalendar: seoul, now: now
+            day: SyncDayPlanner.previousDay(of: now, calendar: seoulCalendar)!, deviceCalendar: seoulCalendar, now: now
         ))
     }
 }
@@ -289,58 +120,58 @@ final class SyncDayPlannerTests: XCTestCase {
 
 final class HealthDayWindowTests: XCTestCase {
     func test_today_endsNow() throws {
-        let now = seoulDate("2026-10-21 15:00")
-        let window = try AppleHealthKitProvider.dayWindow(for: now, now: now, calendar: seoul)
+        let now = kst("2026-10-21 15:00")
+        let window = try AppleHealthKitProvider.dayWindow(for: now, now: now, calendar: seoulCalendar)
 
-        XCTAssertEqual(window.start, seoulDate("2026-10-21 00:00"))
+        XCTAssertEqual(window.start, kst("2026-10-21 00:00"))
         XCTAssertEqual(window.end, now)
-        XCTAssertEqual(window.sleepStart, seoulDate("2026-10-20 12:00"))
+        XCTAssertEqual(window.sleepStart, kst("2026-10-20 12:00"))
         XCTAssertEqual(window.snapshotDate, now)
     }
 
     func test_pastDay_coversWholeDay_andSleepWakingThatDay() throws {
-        let now = seoulDate("2026-10-21 07:00")
-        let window = try AppleHealthKitProvider.dayWindow(for: seoulDate("2026-10-20 00:00"), now: now, calendar: seoul)
+        let now = kst("2026-10-21 07:00")
+        let window = try AppleHealthKitProvider.dayWindow(for: kst("2026-10-20 00:00"), now: now, calendar: seoulCalendar)
 
-        XCTAssertEqual(window.start, seoulDate("2026-10-20 00:00"))
-        XCTAssertEqual(window.end, seoulDate("2026-10-21 00:00"))
-        XCTAssertEqual(window.sleepStart, seoulDate("2026-10-19 12:00"))
-        XCTAssertEqual(window.snapshotDate, seoulDate("2026-10-20 00:00"))
+        XCTAssertEqual(window.start, kst("2026-10-20 00:00"))
+        XCTAssertEqual(window.end, kst("2026-10-21 00:00"))
+        XCTAssertEqual(window.sleepStart, kst("2026-10-19 12:00"))
+        XCTAssertEqual(window.snapshotDate, kst("2026-10-20 00:00"))
     }
 
     func test_futureDay_isRejected() {
         XCTAssertThrowsError(try AppleHealthKitProvider.dayWindow(
-            for: seoulDate("2026-10-22 00:00"), now: seoulDate("2026-10-21 23:00"), calendar: seoul
+            for: kst("2026-10-22 00:00"), now: kst("2026-10-21 23:00"), calendar: seoulCalendar
         ))
     }
 
     func test_pastDaySleep_excludesSleepWakingAfterDayEnd() throws {
         let window = try AppleHealthKitProvider.dayWindow(
-            for: seoulDate("2026-10-20 00:00"), now: seoulDate("2026-10-21 09:00"), calendar: seoul
+            for: kst("2026-10-20 00:00"), now: kst("2026-10-21 09:00"), calendar: seoulCalendar
         )
         let core = HKCategoryValueSleepAnalysis.asleepCore.rawValue
         let samples: [AppleHealthKitProvider.SleepSample] = [
-            .init(value: core, start: seoulDate("2026-10-19 23:00"), end: seoulDate("2026-10-20 06:00")),
+            .init(value: core, start: kst("2026-10-19 23:00"), end: kst("2026-10-20 06:00")),
             .init(value: HKCategoryValueSleepAnalysis.awake.rawValue,
-                  start: seoulDate("2026-10-20 06:00"), end: seoulDate("2026-10-20 06:30")),
+                  start: kst("2026-10-20 06:00"), end: kst("2026-10-20 06:30")),
             // 자정을 넘겨 다음 날 아침에 깬 수면은 다음 날 몫이다.
-            .init(value: core, start: seoulDate("2026-10-20 23:30"), end: seoulDate("2026-10-21 07:00")),
+            .init(value: core, start: kst("2026-10-20 23:30"), end: kst("2026-10-21 07:00")),
         ]
 
         let sleep = try XCTUnwrap(AppleHealthKitProvider.sleepActivity(from: samples, in: window))
 
         XCTAssertEqual(sleep.sleepMinutes, 420)
-        XCTAssertEqual(sleep.startedAt, seoulDate("2026-10-19 23:00"))
-        XCTAssertEqual(sleep.endedAt, seoulDate("2026-10-20 06:00"))
+        XCTAssertEqual(sleep.startedAt, kst("2026-10-19 23:00"))
+        XCTAssertEqual(sleep.endedAt, kst("2026-10-20 06:00"))
     }
 
     func test_sleep_endingExactlyAtDayEnd_isIncluded() throws {
         let window = try AppleHealthKitProvider.dayWindow(
-            for: seoulDate("2026-10-20 00:00"), now: seoulDate("2026-10-21 09:00"), calendar: seoul
+            for: kst("2026-10-20 00:00"), now: kst("2026-10-21 09:00"), calendar: seoulCalendar
         )
         let samples: [AppleHealthKitProvider.SleepSample] = [
             .init(value: HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
-                  start: seoulDate("2026-10-20 22:00"), end: seoulDate("2026-10-21 00:00")),
+                  start: kst("2026-10-20 22:00"), end: kst("2026-10-21 00:00")),
         ]
 
         XCTAssertEqual(AppleHealthKitProvider.sleepActivity(from: samples, in: window)?.sleepMinutes, 120)
@@ -361,25 +192,19 @@ final class HealthSyncServiceTests: XCTestCase {
     """
     private static let watchToken = #"{"accessToken":"watch","tokenType":"Bearer","expiresIn":604800}"#
 
-    private var suiteName: String!
     private var defaults: UserDefaults!
     private var store: InMemoryTokenStore!
     private var clock: TestClock!
 
     override func setUp() async throws {
-        suiteName = "HealthSyncServiceTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
         store = InMemoryTokenStore()
-        clock = TestClock(seoulDate("2026-10-21 09:00"))
+        clock = TestClock(kst("2026-10-21 09:00"))
         stubServer(syncStatus: 200)
     }
 
-    override func tearDown() async throws {
-        defaults.removePersistentDomain(forName: suiteName)
-    }
-
     private func stubServer(syncStatus: Int) {
-        StubURLProtocol.setStubs([
+        RoutedURLProtocol.setStubs([
             Self.syncPath: syncStatus == 200
                 ? .init(status: 200, json: Self.syncResponse)
                 : .init(status: syncStatus, json: #"{"message":"error"}"#),
@@ -404,7 +229,7 @@ final class HealthSyncServiceTests: XCTestCase {
 
     private func makeService(session: UserSession) -> HealthSyncService {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [StubURLProtocol.self]
+        configuration.protocolClasses = [RoutedURLProtocol.self]
         let client = NetworkClient(
             baseURL: URL(string: "http://stub.local")!,
             session: URLSession(configuration: configuration),
@@ -415,8 +240,8 @@ final class HealthSyncServiceTests: XCTestCase {
             networkClient: client,
             userSession: session,
             history: HealthSyncHistory(defaults: defaults),
-            calendar: seoul,
-            serverCalendar: seoul,
+            calendar: seoulCalendar,
+            serverCalendar: seoulCalendar,
             now: { clock.now }
         )
     }
@@ -438,26 +263,26 @@ final class HealthSyncServiceTests: XCTestCase {
     }
 
     private var syncedDates: [String] {
-        StubURLProtocol.requests
+        RoutedURLProtocol.requests
             .filter { $0.url?.path == Self.syncPath }
-            .compactMap { StubURLProtocol.bodyData(of: $0) }
+            .compactMap { RoutedURLProtocol.bodyData(of: $0) }
             .compactMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
             .compactMap { $0["date"] as? String }
     }
 
     private var requestPaths: [String] {
-        StubURLProtocol.requests.compactMap { $0.url?.path }
+        RoutedURLProtocol.requests.compactMap { $0.url?.path }
     }
 
     func test_sync_whenLastSuccessYesterday_sendsYesterdayThenToday() async throws {
         let service = makeService(session: try makeSession(signedIn: true))
-        HealthSyncHistory(defaults: defaults).recordSuccess(at: seoulDate("2026-10-20 22:00"))
+        HealthSyncHistory(defaults: defaults).recordSuccess(at: kst("2026-10-20 22:00"))
         let provider = RecordingHealthProvider()
 
         let result = try await service.sync(provider: provider, userId: "password:alice")
 
         XCTAssertNotNil(result)
-        XCTAssertEqual(provider.loadedDays, [seoulDate("2026-10-20 00:00")])
+        XCTAssertEqual(provider.loadedDays, [kst("2026-10-20 00:00")])
         XCTAssertEqual(provider.todayLoads, 1)
         XCTAssertEqual(syncedDates.first, "2026-10-20")
         XCTAssertEqual(syncedDates.count, 2)
@@ -466,7 +291,7 @@ final class HealthSyncServiceTests: XCTestCase {
 
     func test_sync_whenAlreadySyncedToday_sendsTodayOnly() async throws {
         let service = makeService(session: try makeSession(signedIn: true))
-        HealthSyncHistory(defaults: defaults).recordSuccess(at: seoulDate("2026-10-21 08:00"))
+        HealthSyncHistory(defaults: defaults).recordSuccess(at: kst("2026-10-21 08:00"))
         let provider = RecordingHealthProvider()
 
         _ = try await service.sync(provider: provider, userId: "password:alice")
@@ -477,7 +302,7 @@ final class HealthSyncServiceTests: XCTestCase {
 
     func test_sync_previousDayFailure_stillSyncsToday() async throws {
         let service = makeService(session: try makeSession(signedIn: true))
-        HealthSyncHistory(defaults: defaults).recordSuccess(at: seoulDate("2026-10-19 22:00"))
+        HealthSyncHistory(defaults: defaults).recordSuccess(at: kst("2026-10-19 22:00"))
         let provider = RecordingHealthProvider()
         provider.failPreviousDay = true
 
@@ -490,7 +315,7 @@ final class HealthSyncServiceTests: XCTestCase {
 
     func test_sync_401DuringPreviousDay_stopsAndThrows() async throws {
         let service = makeService(session: try makeSession(signedIn: true))
-        let lastSuccess = seoulDate("2026-10-20 22:00")
+        let lastSuccess = kst("2026-10-20 22:00")
         HealthSyncHistory(defaults: defaults).recordSuccess(at: lastSuccess)
         stubServer(syncStatus: 401)
         let provider = RecordingHealthProvider()
@@ -532,7 +357,7 @@ final class HealthSyncServiceTests: XCTestCase {
         let outcome = await makeRunner(service: service, tasks: tasks, provider: provider).run()
 
         XCTAssertEqual(outcome, .skippedSignedOut)
-        XCTAssertTrue(StubURLProtocol.requests.isEmpty)
+        XCTAssertTrue(RoutedURLProtocol.requests.isEmpty)
         XCTAssertEqual(provider.todayLoads, 0)
         XCTAssertEqual(tasks.begun, 1)
         XCTAssertEqual(tasks.ended, [1])
@@ -545,7 +370,7 @@ final class HealthSyncServiceTests: XCTestCase {
         let outcome = await makeRunner(service: service, tasks: tasks, isAppActive: true).run()
 
         XCTAssertEqual(outcome, .skippedForeground)
-        XCTAssertTrue(StubURLProtocol.requests.isEmpty)
+        XCTAssertTrue(RoutedURLProtocol.requests.isEmpty)
         XCTAssertEqual(tasks.begun, 0)
     }
 

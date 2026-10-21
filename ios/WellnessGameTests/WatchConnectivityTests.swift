@@ -1,38 +1,6 @@
 import WatchConnectivity
 import XCTest
 
-// MARK: - Test doubles
-
-/// `WCSession` 대신 쓰는 가짜 세션. 보낸 컨텍스트를 기록한다.
-final class FakeWatchContextSession: WatchContextSession {
-    var activationState: WCSessionActivationState = .activated
-    var isPaired = true
-    var isWatchAppInstalled = true
-    var sendError: Error?
-    private(set) var sentContexts: [[String: Any]] = []
-
-    func updateApplicationContext(_ applicationContext: [String: Any]) throws {
-        if let sendError {
-            throw sendError
-        }
-        sentContexts.append(applicationContext)
-    }
-}
-
-/// `UserSession`이 Watch에 보낸 값을 기록한다.
-final class SpyWatchPublisher: WatchAuthPublishing {
-    private(set) var published: [WatchAuthContext?] = []
-
-    func publish(_ context: WatchAuthContext?) {
-        published.append(context)
-    }
-}
-
-/// 테스트가 실제 WCSession(`WatchAuthRelay.shared`)을 건드리지 않도록 `UserSession`에 주입한다.
-final class NoopWatchPublisher: WatchAuthPublishing {
-    func publish(_ context: WatchAuthContext?) {}
-}
-
 // MARK: - WatchAuthContext
 
 final class WatchAuthContextTests: XCTestCase {
@@ -224,17 +192,14 @@ final class WatchAuthRelayTests: XCTestCase {
 
 @MainActor
 final class UserSessionWatchSyncTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
 
     override func setUp() {
         super.setUp()
-        suiteName = "UserSessionWatchSyncTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
     }
 
     override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
         super.tearDown()
     }
@@ -265,12 +230,12 @@ final class UserSessionWatchSyncTests: XCTestCase {
         try session.signIn(provider: .google, auth: auth)
         session.signOut()
         XCTAssertEqual(spy.published.count, 2, "복원(빈 값) → 로그아웃(빈 값) 순서로 보내야 합니다")
-        XCTAssertNil(spy.published.last ?? nil)
+        XCTAssertNil(spy.lastContext)
 
         try session.signIn(provider: .google, auth: auth)
         session.handleUnauthorized()
         XCTAssertEqual(spy.published.count, 3)
-        XCTAssertNil(spy.published.last ?? nil)
+        XCTAssertNil(spy.lastContext)
     }
 
     func test_restoredSession_doesNotPublishIPhoneTokenOnLaunch() throws {

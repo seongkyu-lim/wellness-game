@@ -50,21 +50,18 @@ private enum ModelFixture {
 
 @MainActor
 final class WatchDashboardModelTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
     private var cache: SnapshotStore!
     private var widgetReloads = 0
 
     override func setUp() {
         super.setUp()
-        suiteName = "WatchDashboardModelTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
         cache = SnapshotStore(defaults: defaults)
         widgetReloads = 0
     }
 
     override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
         cache = nil
         super.tearDown()
@@ -211,17 +208,14 @@ final class WatchDashboardModelTests: XCTestCase {
 // MARK: - 컴플리케이션 타임라인
 
 final class LevelProviderTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
 
     override func setUp() {
         super.setUp()
-        suiteName = "LevelProviderTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
     }
 
     override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
         super.tearDown()
     }

@@ -1,0 +1,15 @@
+{
+  "userId": "password:alice",
+  "date": "2026-10-21",
+  "activities": [
+    { "type": "STEPS", "source": "HEALTHKIT", "durationMinutes": null, "calories": null, "distanceMeters": null,
+      "steps": 8500, "sleepMinutes": null, "sleepScore": null, "gainedXp": 30, "startedAt": null, "endedAt": null },
+    { "type": "WORKOUT", "source": "WATCH", "durationMinutes": 45, "calories": 420.5, "distanceMeters": 1200.00,
+      "steps": null, "sleepMinutes": null, "sleepScore": null, "gainedXp": 45,
+      "startedAt": "2026-10-21T07:00:00Z", "endedAt": "2026-10-21T07:45:00Z" },
+    { "type": "WORKOUT", "source": "HEALTHKIT", "durationMinutes": 15, "calories": null, "distanceMeters": null,
+      "steps": null, "sleepMinutes": null, "sleepScore": null, "gainedXp": 15, "startedAt": null, "endedAt": null },
+    { "type": "SLEEP", "source": "HEALTHKIT", "durationMinutes": null, "calories": null, "distanceMeters": null,
+      "steps": null, "sleepMinutes": 430, "sleepScore": 90, "gainedXp": 20, "startedAt": null, "endedAt": null }
+  ]
+}
