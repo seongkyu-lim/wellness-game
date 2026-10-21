@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.5.15'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'jacoco'
 }
 
 group = 'com.wellnessgame'
@@ -61,4 +62,74 @@ tasks.register('postgresTest', Test) {
         includeTags 'postgres'
     }
     shouldRunAfter tasks.named('test')
+}
+
+// 커버리지(#152): test(H2)와 postgresTest(Testcontainers)의 실행 데이터를 합쳐 HTML/XML 리포트를 만든다.
+//  - ./gradlew test                  -> build/reports/jacoco/test/html/index.html (H2 실행분)
+//  - ./gradlew test postgresTest     -> 두 실행분을 합친 리포트(마이그레이션 V4·V6 같은 PostgreSQL 전용 코드가 포함된다)
+jacoco {
+    toolVersion = '0.8.13'
+}
+
+// 에이전트는 기존 exec 파일에 이어 쓰므로, 이전 실행 데이터가 쌓여 검증 결과가 부풀지 않게 실행 전에 지운다.
+tasks.withType(Test).configureEach { testTask ->
+    testTask.doFirst {
+        testTask.extensions.getByType(JacocoTaskExtension).destinationFile?.delete()
+    }
+}
+
+// 앱 진입점(main)은 단위·통합 테스트로 다루지 않는다.
+def jacocoExcludes = ['com/wellnessgame/WellnessGameApplication*']
+
+tasks.named('jacocoTestReport') {
+    description = 'test + postgresTest 실행 데이터를 합친 커버리지 리포트(HTML/XML).'
+    // 존재하는 exec 만 합친다. postgresTest 는 Docker 가 필요하므로 의존하지 않고, 실행됐다면 순서만 앞선다.
+    dependsOn tasks.named('test')
+    mustRunAfter tasks.named('postgresTest')
+    executionData.setFrom(files(
+            layout.buildDirectory.file('jacoco/test.exec'),
+            layout.buildDirectory.file('jacoco/postgresTest.exec')).filter { it.exists() })
+    reports {
+        html.required = true
+        xml.required = true
+    }
+    classDirectories.setFrom(files(classDirectories.files.collect {
+        fileTree(it) { exclude jacocoExcludes }
+    }))
+}
+
+// 검증 규칙: 기본 test(H2, Docker 불필요) 실행 데이터만으로 판정한다. 그래서 check/build 가 Docker 없이도 돈다.
+// 현재 H2 실행분은 줄 96.8%, 분기 91.1% 다. 그보다 조금 낮게 잡아 커버리지 하락을 막되 사소한 변경에는 깨지지 않게 한다.
+// postgresTest 까지 합치면 더 높아지지만(마이그레이션 V4·V6) Docker 를 요구하게 되므로 규칙은 H2 기준으로 둔다.
+tasks.named('jacocoTestCoverageVerification') {
+    dependsOn tasks.named('test')
+    executionData.setFrom(layout.buildDirectory.file('jacoco/test.exec'))
+    classDirectories.setFrom(files(classDirectories.files.collect {
+        fileTree(it) { exclude jacocoExcludes }
+    }))
+    violationRules {
+        rule {
+            element = 'BUNDLE'
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.95
+            }
+            limit {
+                counter = 'BRANCH'
+                value = 'COVEREDRATIO'
+                minimum = 0.88
+            }
+        }
+    }
+}
+
+tasks.named('test') {
+    finalizedBy tasks.named('jacocoTestReport')
+}
+tasks.named('postgresTest') {
+    finalizedBy tasks.named('jacocoTestReport')
+}
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
 }
