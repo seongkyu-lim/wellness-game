@@ -1,6 +1,6 @@
 name: Web CI
 
-# 운영 배포는 Vercel이 저장소를 직접 빌드한다(web/vercel.json). 이 워크플로는 테스트·빌드 검증만 한다.
+# 운영 배포는 deploy.yml이 Vercel 로 prebuilt 배포한다(web/vercel.json, docs/deploy.md). 이 워크플로는 테스트·빌드 검증만 한다.
 on:
   pull_request:
     branches: [dev, main]
