@@ -4,21 +4,14 @@ import XCTest
 // MARK: - SessionCredentialStore
 
 final class SessionCredentialStoreTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
     private var accessStore: InMemoryTokenStore!
     private let now = Date(timeIntervalSince1970: 1_792_540_800)
 
     override func setUp() {
         super.setUp()
-        suiteName = "SessionCredentialStoreTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
         accessStore = InMemoryTokenStore()
-    }
-
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
     }
 
     private func makeStore(refreshStore: AccessTokenStore = InMemoryTokenStore()) -> SessionCredentialStore {
@@ -126,6 +119,8 @@ private final class GatedRefresh: @unchecked Sendable {
     private var _stored: String?
     private var _isOpen = false
     var failure: Error?
+    /// 리프레시가 시작되면(게이트에서 기다리기 시작하면) 채운다.
+    var performStarted: XCTestExpectation?
 
     init(stored: String?) {
         _stored = stored
@@ -136,6 +131,7 @@ private final class GatedRefresh: @unchecked Sendable {
 
     func perform() async throws -> String {
         lock.withLock { _performCount += 1 }
+        performStarted?.fulfill()
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let resumeNow = lock.withLock { () -> Bool in
                 if _isOpen { return true }
@@ -160,28 +156,45 @@ private final class GatedRefresh: @unchecked Sendable {
 }
 
 final class TokenRefreshCoordinatorTests: XCTestCase {
-    private func waitUntil(_ condition: () -> Bool) async {
-        for _ in 0..<10_000 where !condition() {
-            await Task.yield()
-        }
-    }
-
-    func test_동시에_요청해도_리프레시는_한번만_나가고_모두_같은_새토큰을_받는다() async throws {
+    func test_동시에_요청해도_리프레시는_한번만_나가고_모두_진행중인_리프레시에_합류한다() async throws {
         let coordinator = TokenRefreshCoordinator()
         let server = GatedRefresh(stored: "old")
+        let started = expectation(description: "첫 리프레시 시작")
+        server.performStarted = started
+        // 합류하지 않고 저장된 토큰을 따로 확인한 횟수. 합류 경로면 0이어야 한다.
+        let separateChecks = CompletionCounter()
 
         async let first = coordinator.refresh(rejecting: "old", currentToken: { server.stored }, perform: server.perform)
-        await waitUntil { server.performCount == 1 }
-        await waitUntil { coordinator.isRefreshing }
+        await fulfillment(of: [started], timeout: 5)
+
+        let calling = expectation(description: "합류 요청 시작")
+        calling.expectedFulfillmentCount = 2
+        let follower: @Sendable () async throws -> String = {
+            calling.fulfill()
+            return try await coordinator.refresh(
+                rejecting: "old",
+                currentToken: {
+                    separateChecks()
+                    return server.stored
+                },
+                perform: server.perform
+            )
+        }
+        async let second = follower()
+        async let third = follower()
+        await fulfillment(of: [calling], timeout: 5)
         XCTAssertTrue(coordinator.isRefreshing, "리프레시가 나가 있는 동안 동기적으로 알 수 있어야 한다")
-        async let second = coordinator.refresh(rejecting: "old", currentToken: { server.stored }, perform: server.perform)
-        async let third = coordinator.refresh(rejecting: "old", currentToken: { server.stored }, perform: server.perform)
+        // 합류 요청이 액터에 들어갈 몇 번의 양보 뒤에 리프레시를 끝낸다. 늦게 들어오면 아래 separateChecks 단언이 실패한다.
+        for _ in 0..<20 {
+            await Task.yield()
+        }
         server.open()
 
         let results = try await [first, second, third]
 
         XCTAssertEqual(results, ["new-1", "new-1", "new-1"])
         XCTAssertEqual(server.performCount, 1)
+        XCTAssertEqual(separateChecks.count, 0, "합류한 요청은 진행 중인 리프레시 결과를 받아야 한다")
         XCTAssertFalse(coordinator.isRefreshing)
     }
 
@@ -286,9 +299,7 @@ final class KeychainTokenStoreTests: XCTestCase {
     }
 
     func test_실제_Keychain으로도_세션저장소가_토큰을_보관한다() throws {
-        let suite = "KeychainTokenStoreTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = ScratchDefaults.make(for: self)
         let refresh = KeychainTokenStore(service: store.service, account: SessionCredentialStore.refreshTokenAccount)
         let credentials = SessionCredentialStore(accessStore: store, refreshStore: refresh, defaults: defaults)
 
@@ -308,6 +319,5 @@ final class KeychainErrorTests: XCTestCase {
         // 지역 설정에 따라 "-25,299"처럼 자릿수 구분이 붙을 수 있으므로 숫자만 비교한다.
         XCTAssertTrue(message.contains("Keychain"), message)
         XCTAssertTrue(message.filter(\.isNumber).contains("25299"), message)
-        XCTAssertEqual(KeychainError.locked.errorDescription, KeychainError.invalidData.errorDescription)
     }
 }

@@ -32,13 +32,6 @@
       <CodeCoverageTargets>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "E10000000000000000000001"
-            BuildableName = "WellnessGame.app"
-            BlueprintName = "WellnessGame"
-            ReferencedContainer = "container:WellnessGame.xcodeproj">
-         </BuildableReference>
-         <BuildableReference
-            BuildableIdentifier = "primary"
             BlueprintIdentifier = "E20000000000000000000001"
             BuildableName = "WellnessGameTests.xctest"
             BlueprintName = "WellnessGameTests"

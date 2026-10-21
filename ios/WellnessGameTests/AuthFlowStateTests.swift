@@ -1,86 +1,19 @@
 import AuthenticationServices
 import XCTest
 
-// MARK: - Test doubles
-
-/// 테스트 시계 기준으로 오늘·지난 날 스냅샷을 돌려주는 건강 데이터 제공자.
-/// `holdToday`면 `releaseToday()` 전까지 오늘 데이터 읽기를 멈춰 진행 중 상태를 관찰할 수 있다.
-@MainActor
-final class ClockedHealthProvider: HealthDataProvider {
-    private let clock: TestClock
-    private(set) var authorizationRequests = 0
-    private(set) var loadedDays: [Date] = []
-    private(set) var todayLoads = 0
-    var holdToday = false
-    var steps = 8_500
-    private var held: CheckedContinuation<Void, Never>?
-
-    init(clock: TestClock) {
-        self.clock = clock
-    }
-
-    nonisolated var isAvailable: Bool { true }
-
-    func requestAuthorization() async throws {
-        authorizationRequests += 1
-    }
-
-    func loadToday() async throws -> DailyHealthSnapshot {
-        todayLoads += 1
-        if holdToday {
-            await withCheckedContinuation { held = $0 }
-        }
-        return DailyHealthSnapshot(date: clock.now, steps: steps, workouts: [], sleep: nil)
-    }
-
-    func load(day: Date) async throws -> DailyHealthSnapshot {
-        loadedDays.append(day)
-        return DailyHealthSnapshot(date: day, steps: 4_000, workouts: [], sleep: nil)
-    }
-
-    func releaseToday() {
-        holdToday = false
-        held?.resume()
-        held = nil
-    }
-}
-
-let seoulCalendar: Calendar = {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "Asia/Seoul")!
-    return calendar
-}()
-
-/// 한국 시간 `yyyy-MM-dd HH:mm`.
-func kst(_ text: String) -> Date {
-    let formatter = DateFormatter()
-    formatter.calendar = seoulCalendar
-    formatter.timeZone = seoulCalendar.timeZone
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.dateFormat = "yyyy-MM-dd HH:mm"
-    return formatter.date(from: text)!
-}
-
 // MARK: - UserSession 상태
 
 @MainActor
 final class UserSessionStateTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
     private var credentials: SessionCredentialStore!
     private var clock: TestClock!
 
     override func setUp() {
         super.setUp()
-        suiteName = "UserSessionStateTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
         credentials = SessionCredentialStore(accessStore: InMemoryTokenStore(), refreshStore: InMemoryTokenStore(), defaults: defaults)
         clock = TestClock(kst("2026-10-21 09:00"))
-    }
-
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
     }
 
     private func makeSession(publisher: WatchAuthPublishing = NoopWatchPublisher()) -> UserSession {
@@ -150,7 +83,7 @@ final class UserSessionStateTests: XCTestCase {
         }
 
         XCTAssertEqual(issued, 1)
-        let context = try XCTUnwrap(spy.published.last ?? nil)
+        let context = try XCTUnwrap(spy.lastContext)
         XCTAssertNil(context.expiresAt)
         XCTAssertNil(defaults.object(forKey: "auth.watchToken.expiresAt"))
     }
@@ -181,7 +114,7 @@ final class UserSessionStateTests: XCTestCase {
         }
 
         XCTAssertEqual(spy.published.count, publishedBefore + 1)
-        XCTAssertNil(spy.published.last ?? nil, "로그아웃의 빈 컨텍스트만 보낸다")
+        XCTAssertNil(spy.lastContext, "로그아웃의 빈 컨텍스트만 보낸다")
     }
 }
 
@@ -189,15 +122,13 @@ final class UserSessionStateTests: XCTestCase {
 
 @MainActor
 final class CredentialAuthServiceTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
     private var session: UserSession!
     private var service: CredentialAuthService!
 
     override func setUp() {
         super.setUp()
-        suiteName = "CredentialAuthServiceTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
         let credentials = SessionCredentialStore(accessStore: InMemoryTokenStore(), refreshStore: InMemoryTokenStore(), defaults: defaults)
         session = UserSession(defaults: defaults, credentials: credentials, watchPublisher: NoopWatchPublisher())
         service = CredentialAuthService(networkClient: NetworkClient(
@@ -205,11 +136,6 @@ final class CredentialAuthServiceTests: XCTestCase {
             session: RoutedURLProtocol.makeSession(),
             credentials: credentials
         ))
-    }
-
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
     }
 
     func test_회원가입에_성공하면_계정세션으로_로그인한다() async throws {
@@ -253,26 +179,19 @@ final class CredentialAuthServiceTests: XCTestCase {
 
 @MainActor
 final class AppleSignInResultTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
     private var session: UserSession!
     private var flow: SocialSignInFlow!
 
     override func setUp() {
         super.setUp()
-        suiteName = "AppleSignInResultTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
         session = UserSession(defaults: defaults, tokenStore: InMemoryTokenStore(), watchPublisher: NoopWatchPublisher())
         flow = SocialSignInFlow(
             networkClient: NetworkClient(baseURL: URL(string: "http://stub.local")!, session: RoutedURLProtocol.makeSession()),
             pendingAppleNames: PendingAppleNameStore(backing: InMemoryTokenStore())
         )
         RoutedURLProtocol.route { _ in .http(status: 500, json: "") }
-    }
-
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
     }
 
     func test_사용자가_취소하면_요청없이_로그인안내로_돌아간다() async {
@@ -316,7 +235,6 @@ final class AppleSignInResultTests: XCTestCase {
 
 @MainActor
 final class DashboardViewModelStateTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
     private var credentials: SessionCredentialStore!
     private var clock: TestClock!
@@ -324,8 +242,7 @@ final class DashboardViewModelStateTests: XCTestCase {
     private var provider: ClockedHealthProvider!
 
     override func setUp() async throws {
-        suiteName = "DashboardViewModelStateTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
         credentials = SessionCredentialStore(accessStore: InMemoryTokenStore(), refreshStore: InMemoryTokenStore(), defaults: defaults)
         clock = TestClock(kst("2026-10-21 09:00"))
         let clock = clock!
@@ -334,10 +251,6 @@ final class DashboardViewModelStateTests: XCTestCase {
             watchTokenRetryDelay: 3600, now: { clock.now }
         )
         provider = ClockedHealthProvider(clock: clock)
-    }
-
-    override func tearDown() async throws {
-        defaults.removePersistentDomain(forName: suiteName)
     }
 
     private func signIn() throws {
@@ -410,11 +323,11 @@ final class DashboardViewModelStateTests: XCTestCase {
         var authorizationCallbacks = 0
         let viewModel = makeViewModel { authorizationCallbacks += 1 }
         provider.holdToday = true
+        let loading = expectation(description: "오늘 데이터 읽기 시작")
+        provider.todayLoadStarted = loading
 
         let running = Task { await viewModel.autoSync() }
-        for _ in 0..<1_000 where provider.todayLoads == 0 {
-            await Task.yield()
-        }
+        await fulfillment(of: [loading], timeout: 5)
         XCTAssertTrue(viewModel.isLoading)
         XCTAssertNil(viewModel.syncResponse)
         provider.releaseToday()

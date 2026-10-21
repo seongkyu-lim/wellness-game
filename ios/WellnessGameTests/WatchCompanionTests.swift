@@ -135,7 +135,7 @@ final class WatchCredentialStoreTests: XCTestCase {
 final class WatchAPIClientTests: XCTestCase {
     private func makeClient() -> WatchAPIClient {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [StubURLProtocol.self]
+        configuration.protocolClasses = [RoutedURLProtocol.self]
         return WatchAPIClient(baseURL: URL(string: "http://stub.local")!, session: URLSession(configuration: configuration))
     }
 
@@ -143,15 +143,15 @@ final class WatchAPIClientTests: XCTestCase {
     private let seoul = TimeZone(identifier: "Asia/Seoul")!
 
     func test_requests_sendBearerTokenAndAcceptLanguage() async throws {
-        StubURLProtocol.setStubs([
-            WatchFixture.characterPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.character),
-            WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.emptyActivities),
+        RoutedURLProtocol.setStubs([
+            WatchFixture.characterPath: RoutedURLProtocol.Reply(status: 200, json: WatchFixture.character),
+            WatchFixture.activitiesPath: RoutedURLProtocol.Reply(status: 200, json: WatchFixture.emptyActivities),
         ])
 
         _ = try await makeClient().fetchSnapshot(credentials: WatchFixture.credentials, now: now, timeZone: seoul)
 
-        XCTAssertEqual(StubURLProtocol.requests.count, 2)
-        for request in StubURLProtocol.requests {
+        XCTAssertEqual(RoutedURLProtocol.requests.count, 2)
+        for request in RoutedURLProtocol.requests {
             XCTAssertEqual(request.httpMethod, "GET")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer jwt-watch")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Accept-Language"), "ko")
@@ -159,13 +159,13 @@ final class WatchAPIClientTests: XCTestCase {
     }
 
     func test_dailyActivities_queriesLocalDate() async throws {
-        StubURLProtocol.setStubs([WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.emptyActivities)])
+        RoutedURLProtocol.setStubs([WatchFixture.activitiesPath: RoutedURLProtocol.Reply(status: 200, json: WatchFixture.emptyActivities)])
         // UTC 2026-10-05 20:00은 서울에서 10월 6일이다.
         let lateEvening = ISO8601DateFormatter().date(from: "2026-10-05T20:00:00Z")!
 
         _ = try await makeClient().fetchDailyActivities(credentials: WatchFixture.credentials, date: lateEvening, timeZone: seoul)
 
-        let request = try XCTUnwrap(StubURLProtocol.request(forPath: WatchFixture.activitiesPath))
+        let request = try XCTUnwrap(RoutedURLProtocol.request(forPath: WatchFixture.activitiesPath))
         let query = URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems
         XCTAssertEqual(query, [URLQueryItem(name: "date", value: "2026-10-06")])
     }
@@ -176,18 +176,18 @@ final class WatchAPIClientTests: XCTestCase {
     }
 
     func test_acceptLanguage_fallsBackForUnsupportedStoredLanguage() async throws {
-        StubURLProtocol.setStubs([WatchFixture.characterPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.character)])
+        RoutedURLProtocol.setStubs([WatchFixture.characterPath: RoutedURLProtocol.Reply(status: 200, json: WatchFixture.character)])
         let credentials = WatchAuthContext(accessToken: "t", userId: "u", displayName: nil, expiresAt: nil, language: "en-GB")
 
         _ = try await makeClient().fetchCharacter(credentials: credentials)
 
-        XCTAssertEqual(StubURLProtocol.requests.last?.value(forHTTPHeaderField: "Accept-Language"), "en")
+        XCTAssertEqual(RoutedURLProtocol.requests.last?.value(forHTTPHeaderField: "Accept-Language"), "en")
     }
 
     func test_unauthorized_throwsUnauthorized() async {
-        StubURLProtocol.setStubs([
-            WatchFixture.characterPath: StubURLProtocol.Stub(status: 401, json: WatchFixture.unauthorized),
-            WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 401, json: WatchFixture.unauthorized),
+        RoutedURLProtocol.setStubs([
+            WatchFixture.characterPath: RoutedURLProtocol.Reply(status: 401, json: WatchFixture.unauthorized),
+            WatchFixture.activitiesPath: RoutedURLProtocol.Reply(status: 401, json: WatchFixture.unauthorized),
         ])
 
         do {
@@ -199,7 +199,7 @@ final class WatchAPIClientTests: XCTestCase {
     }
 
     func test_serverError_throwsServerStatus() async {
-        StubURLProtocol.setStubs([WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 500, json: "{}")])
+        RoutedURLProtocol.setStubs([WatchFixture.activitiesPath: RoutedURLProtocol.Reply(status: 500, json: "{}")])
 
         do {
             _ = try await makeClient().fetchDailyActivities(credentials: WatchFixture.credentials, date: now, timeZone: seoul)
@@ -210,7 +210,7 @@ final class WatchAPIClientTests: XCTestCase {
     }
 
     func test_missingCharacter_returnsNilSnapshot() async throws {
-        StubURLProtocol.setStubs([WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.emptyActivities)])
+        RoutedURLProtocol.setStubs([WatchFixture.activitiesPath: RoutedURLProtocol.Reply(status: 200, json: WatchFixture.emptyActivities)])
 
         let snapshot = try await makeClient().fetchSnapshot(credentials: WatchFixture.credentials, now: now, timeZone: seoul)
 
@@ -218,9 +218,9 @@ final class WatchAPIClientTests: XCTestCase {
     }
 
     func test_fetchSnapshot_combinesCharacterAndTodaysQuests() async throws {
-        StubURLProtocol.setStubs([
-            WatchFixture.characterPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.character),
-            WatchFixture.activitiesPath: StubURLProtocol.Stub(status: 200, json: WatchFixture.activities),
+        RoutedURLProtocol.setStubs([
+            WatchFixture.characterPath: RoutedURLProtocol.Reply(status: 200, json: WatchFixture.character),
+            WatchFixture.activitiesPath: RoutedURLProtocol.Reply(status: 200, json: WatchFixture.activities),
         ])
 
         let snapshot = try await makeClient().fetchSnapshot(credentials: WatchFixture.credentials, now: now, timeZone: seoul)
@@ -240,17 +240,14 @@ final class WatchAPIClientTests: XCTestCase {
 // MARK: - 스냅샷 캐시
 
 final class SnapshotStoreTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
 
     override func setUp() {
         super.setUp()
-        suiteName = "SnapshotStoreTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
     }
 
     override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
         super.tearDown()
     }

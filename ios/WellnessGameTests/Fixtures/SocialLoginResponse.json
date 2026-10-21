@@ -1,0 +1,9 @@
+{
+  "userId": "kakao:1234",
+  "displayName": "홍길동",
+  "accessToken": "access-kakao",
+  "tokenType": "Bearer",
+  "expiresIn": 3600,
+  "refreshToken": "refresh-kakao",
+  "refreshExpiresIn": 2592000
+}

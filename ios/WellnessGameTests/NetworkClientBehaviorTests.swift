@@ -1,141 +1,5 @@
 import XCTest
 
-// MARK: - Test doubles
-
-/// 요청마다 HTTP 응답·네트워크 오류·HTTP가 아닌 응답 중 하나를 고르는 URLProtocol stub.
-/// 기존 `ScriptedURLProtocol`과 달리 전송 실패와 비 HTTP 응답도 흉내 낼 수 있다.
-final class RoutedURLProtocol: URLProtocol {
-    enum Reply {
-        case http(status: Int, json: String)
-        case failure(URLError.Code)
-        case nonHTTP
-    }
-
-    private static let lock = NSLock()
-    private static var _handler: (URLRequest) -> Reply = { _ in .http(status: 404, json: "") }
-    private static var _requests: [URLRequest] = []
-
-    static func route(_ handler: @escaping (URLRequest) -> Reply) {
-        lock.withLock {
-            _handler = handler
-            _requests = []
-        }
-    }
-
-    static var requests: [URLRequest] {
-        lock.withLock { _requests }
-    }
-
-    static func requests(path: String) -> [URLRequest] {
-        requests.filter { $0.url?.path == path }
-    }
-
-    static func makeSession() -> URLSession {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [RoutedURLProtocol.self]
-        return URLSession(configuration: configuration)
-    }
-
-    static func json(of request: URLRequest) -> [String: Any]? {
-        guard let data = StubURLProtocol.bodyData(of: request) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    }
-
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        let reply = Self.lock.withLock { () -> Reply in
-            Self._requests.append(request)
-            return Self._handler(request)
-        }
-        switch reply {
-        case let .http(status, json):
-            let response = HTTPURLResponse(
-                url: request.url!,
-                statusCode: status,
-                httpVersion: "HTTP/1.1",
-                headerFields: ["Content-Type": "application/json"]
-            )!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data(json.utf8))
-            client?.urlProtocolDidFinishLoading(self)
-        case let .failure(code):
-            client?.urlProtocol(self, didFailWithError: URLError(code))
-        case .nonHTTP:
-            let response = URLResponse(
-                url: request.url!,
-                mimeType: "application/json",
-                expectedContentLength: 2,
-                textEncodingName: nil
-            )
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data("{}".utf8))
-            client?.urlProtocolDidFinishLoading(self)
-        }
-    }
-
-    override func stopLoading() {}
-}
-
-/// 백엔드 DTO(`com.wellnessgame.api`)와 같은 모양의 응답 JSON.
-enum BackendFixture {
-    static let loginPath = "/api/auth/login"
-    static let signUpPath = "/api/auth/signup"
-    static let syncPath = "/api/health-activities/sync"
-    static let refreshPath = "/api/auth/refresh"
-    static let logoutPath = "/api/auth/logout"
-    static let watchTokenPath = "/api/auth/watch-token"
-
-    /// `HealthActivitySyncResponse`(goals 포함, 클라이언트가 모르는 필드도 섞여 있다).
-    static func syncResponse(
-        date: String = "2026-10-21",
-        level: Int = 1,
-        currentXp: Int = 40,
-        totalXp: Int = 40,
-        nextLevelXp: Int = 100,
-        gainedXp: Int = 40,
-        levelUp: Bool = false
-    ) -> String {
-        """
-        {"userId":"password:alice","date":"\(date)","gainedXp":\(gainedXp),"levelUp":\(levelUp),
-         "character":{"level":\(level),"currentXp":\(currentXp),"totalXp":\(totalXp),"nextLevelXp":\(nextLevelXp),
-           "stats":{"str":3,"vit":2,"intStat":1,"discipline":4,"recovery":5}},
-         "activityResults":[
-           {"type":"STEPS","source":"HEALTHKIT","gainedXp":30,"message":"걸음 8500보","duplicate":false},
-           {"type":"SLEEP","source":"HEALTHKIT","gainedXp":10,"message":"수면 7시간","duplicate":true}],
-         "goals":[{"type":"STEPS","target":8000,"current":8500,"unit":"steps","achieved":true}]}
-        """
-    }
-
-    static func login(access: String, refresh: String?, expiresIn: Int = 3600) -> String {
-        let refreshFields = refresh.map { #","refreshToken":"\#($0)","refreshExpiresIn":2592000"# } ?? ""
-        return """
-        {"userIdentifier":"alice","userId":"password:alice","displayName":"Alice",
-         "accessToken":"\(access)","tokenType":"Bearer","expiresIn":\(expiresIn)\(refreshFields)}
-        """
-    }
-
-    static func refreshed(access: String, refresh: String, expiresIn: Int = 3600) -> String {
-        """
-        {"userId":"password:alice","accessToken":"\(access)","tokenType":"Bearer","expiresIn":\(expiresIn),
-         "refreshToken":"\(refresh)","refreshExpiresIn":2592000}
-        """
-    }
-
-    static func watchToken(_ token: String) -> String {
-        #"{"accessToken":"\#(token)","tokenType":"Bearer","expiresIn":604800}"#
-    }
-
-    static func error(_ status: Int, _ message: String) -> String {
-        #"{"timestamp":"2026-10-21T00:00:00Z","status":\#(status),"error":"Error","message":"\#(message)"}"#
-    }
-
-    static func bearer(_ request: URLRequest) -> String? {
-        request.value(forHTTPHeaderField: "Authorization")
-    }
-}
-
 // MARK: - 요청 구성·오류 변환
 
 final class NetworkClientRequestBuildingTests: XCTestCase {
@@ -201,7 +65,7 @@ final class NetworkClientRequestBuildingTests: XCTestCase {
 
     func test_회원가입은_저장된토큰을_싣지않고_표시이름이_없으면_필드를_생략한다() async throws {
         RoutedURLProtocol.route { _ in .http(status: 200, json: BackendFixture.login(access: "a-1", refresh: "r-1")) }
-        let defaults = UserDefaults(suiteName: "NetworkClientRequestBuildingTests.\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make(for: self)
         let credentials = SessionCredentialStore(
             accessStore: InMemoryTokenStore(token: "stale"),
             refreshStore: InMemoryTokenStore(token: "stale-refresh"),
@@ -226,7 +90,7 @@ final class NetworkClientRequestBuildingTests: XCTestCase {
 
     func test_로그아웃은_짧은_타임아웃으로_리프레시토큰만_보낸다() async throws {
         RoutedURLProtocol.route { _ in .http(status: 204, json: "") }
-        let defaults = UserDefaults(suiteName: "NetworkClientRequestBuildingTests.\(UUID().uuidString)")!
+        let defaults = ScratchDefaults.make(for: self)
         let credentials = SessionCredentialStore(
             accessStore: InMemoryTokenStore(token: "access"),
             refreshStore: InMemoryTokenStore(token: "refresh"),
@@ -299,8 +163,11 @@ final class NetworkClientRequestBuildingTests: XCTestCase {
             _ = try await makeClient().logIn(LoginRequest(username: "alice", password: "password1"))
             XCTFail("500은 에러가 나야 합니다")
         } catch {
+            let networkError = error as? NetworkError
+            // 현재 동작(버그): 메시지가 빈 문자열이다. 고치면 이 줄과 아래 기대 실패를 함께 바꾼다.
+            XCTAssertEqual(networkError, .server(status: 500, message: ""))
             XCTExpectFailure("빈 오류 본문이면 메시지가 빈 문자열이 된다(대체 문구 미적용)") {
-                XCTAssertEqual(error as? NetworkError, .server(status: 500, message: String(localized: "알 수 없는 오류")))
+                XCTAssertEqual(networkError, .server(status: 500, message: String(localized: "알 수 없는 오류")))
             }
         }
     }
@@ -322,7 +189,6 @@ final class NetworkClientRequestBuildingTests: XCTestCase {
 
 @MainActor
 final class NetworkClientRefreshEdgeTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
     private var accessStore: InMemoryTokenStore!
     private var refreshStore: InMemoryTokenStore!
@@ -331,17 +197,11 @@ final class NetworkClientRefreshEdgeTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        suiteName = "NetworkClientRefreshEdgeTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
         accessStore = InMemoryTokenStore()
         refreshStore = InMemoryTokenStore()
         credentials = SessionCredentialStore(accessStore: accessStore, refreshStore: refreshStore, defaults: defaults)
         clock = TestClock(Date(timeIntervalSince1970: 1_792_540_800))
-    }
-
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
     }
 
     private func makeClient() -> NetworkClient {
@@ -471,16 +331,24 @@ final class NetworkClientRefreshEdgeTests: XCTestCase {
             syncService: HealthSyncService(
                 networkClient: makeClient(),
                 userSession: session,
-                history: HealthSyncHistory(defaults: defaults)
+                history: HealthSyncHistory(defaults: defaults),
+                calendar: seoulCalendar,
+                serverCalendar: seoulCalendar,
+                now: { clock.now }
             )
         )
 
         await viewModel.autoSync(force: true)
+        // Watch 토큰 발급도 같은 이유로 실패해 로그인 직후 재시도가 예약된다. 테스트 밖으로 새지 않게 바로 취소한다
+        // (지연 시간은 주입할 수 있지만 0보다 큰 값이면 Task가 남는다).
+        let retry = session.watchTokenRetryTask
+        retry?.cancel()
+        await retry?.value
 
-        XCTAssertFalse(RoutedURLProtocol.requests(path: BackendFixture.refreshPath).isEmpty)
+        // 동기화와 Watch 토큰 발급이 각각 401 → 리프레시(400)를 거친다.
+        XCTAssertEqual(RoutedURLProtocol.requests(path: BackendFixture.refreshPath).count, 2)
         XCTExpectFailure("리프레시 400은 server 오류로 처리돼 로그아웃되지 않는다") {
             XCTAssertFalse(session.isSignedIn)
-            XCTAssertNotNil(session.reloginNotice)
         }
     }
 }

@@ -4,26 +4,30 @@ import XCTest
 
 // MARK: - 서버 DTO 계약
 
-/// 백엔드 record(`HealthActivitySyncResponse`, `CharacterSummaryResponse`, `DailyActivitiesResponse`,
-/// `HealthActivitySyncRequest.ActivityPayload`)와 같은 모양의 JSON으로 iOS 모델을 확인한다.
+/// `Fixtures/*.json`(백엔드 record 하나당 파일 하나, `Fixtures/README.md`)을 iOS 모델로 디코딩한다.
+/// 픽스처는 백엔드 record의 직렬화 결과와 같아야 하며, 백엔드 쪽에서 다시 만들어도 이 테스트가 그대로 계약을 확인한다.
 final class BackendContractTests: XCTestCase {
-    private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
-        try JSONDecoder().decode(type, from: Data(json.utf8))
+    private func decode<T: Decodable>(_ type: T.Type, fixture name: String) throws -> T {
+        try JSONDecoder().decode(type, from: BackendFixture.data(name))
+    }
+
+    private func object(_ name: String) throws -> [String: Any] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: BackendFixture.data(name)) as? [String: Any])
     }
 
     func test_동기화응답은_모르는_필드goals를_무시하고_캐릭터와_활동결과를_읽는다() throws {
-        let response = try decode(HealthActivitySyncResponse.self, BackendFixture.syncResponse(
-            level: 4, currentXp: 75, totalXp: 675, nextLevelXp: 300, gainedXp: 40, levelUp: true
-        ))
+        let response = try decode(HealthActivitySyncResponse.self, fixture: "HealthActivitySyncResponse")
 
+        XCTAssertNotNil(try object("HealthActivitySyncResponse")["goals"], "픽스처에 iOS가 쓰지 않는 goals가 있어야 의미가 있다")
         XCTAssertEqual(response.userId, "password:alice")
         XCTAssertEqual(response.date, "2026-10-21")
-        XCTAssertTrue(response.levelUp)
+        XCTAssertEqual(response.gainedXp, 40)
+        XCTAssertFalse(response.levelUp)
         XCTAssertEqual(response.character, CharacterState(
-            level: 4, currentXp: 75, totalXp: 675, nextLevelXp: 300,
+            level: 1, currentXp: 40, totalXp: 40, nextLevelXp: 100,
             stats: CharacterStats(str: 3, vit: 2, intStat: 1, discipline: 4, recovery: 5)
         ))
-        XCTAssertEqual(response.character.xpProgress, 0.25, accuracy: 0.0001)
+        XCTAssertEqual(response.character.xpProgress, 0.4, accuracy: 0.0001)
         XCTAssertEqual(response.activityResults.map(\.type), ["STEPS", "SLEEP"])
         XCTAssertEqual(response.activityResults.map(\.duplicate), [false, true])
         XCTAssertEqual(Set(response.activityResults.map(\.id)).count, 2, "목록 식별자는 결과마다 달라야 한다")
@@ -31,18 +35,14 @@ final class BackendContractTests: XCTestCase {
 
     func test_스탯필드명이_서버와_다르면_디코딩에_실패한다() {
         // 서버 StatsResponse는 `int`가 아니라 `intStat`이다. 이름이 어긋나면 조용히 0이 되지 않고 실패해야 한다.
-        let json = BackendFixture.syncResponse().replacingOccurrences(of: "\"intStat\"", with: "\"int\"")
+        let json = String(decoding: BackendFixture.data("HealthActivitySyncResponse"), as: UTF8.self)
+            .replacingOccurrences(of: "\"intStat\"", with: "\"int\"")
 
-        XCTAssertThrowsError(try decode(HealthActivitySyncResponse.self, json))
+        XCTAssertThrowsError(try JSONDecoder().decode(HealthActivitySyncResponse.self, from: Data(json.utf8)))
     }
 
     func test_캐릭터조회_응답을_읽는다() throws {
-        let json = """
-        {"userId":"password:alice","character":{"level":2,"currentXp":10,"totalXp":110,"nextLevelXp":200,
-          "stats":{"str":1,"vit":1,"intStat":1,"discipline":1,"recovery":1}}}
-        """
-
-        let summary = try decode(CharacterSummaryResponse.self, json)
+        let summary = try decode(CharacterSummaryResponse.self, fixture: "CharacterSummaryResponse")
 
         XCTAssertEqual(summary.userId, "password:alice")
         XCTAssertEqual(summary.character.level, 2)
@@ -50,33 +50,53 @@ final class BackendContractTests: XCTestCase {
     }
 
     func test_하루활동_응답은_null과_소수_시각필드가_섞여도_필요한_값만_읽는다() throws {
-        let json = """
-        {"userId":"password:alice","date":"2026-10-21","activities":[
-          {"type":"STEPS","source":"HEALTHKIT","durationMinutes":null,"calories":null,"distanceMeters":null,
-           "steps":8500,"sleepMinutes":null,"sleepScore":null,"gainedXp":30,"startedAt":null,"endedAt":null},
-          {"type":"WORKOUT","source":"WATCH","durationMinutes":45,"calories":420.5,"distanceMeters":1200.00,
-           "steps":null,"sleepMinutes":null,"sleepScore":null,"gainedXp":45,
-           "startedAt":"2026-10-21T07:00:00Z","endedAt":"2026-10-21T07:45:00Z"},
-          {"type":"WORKOUT","source":"HEALTHKIT","durationMinutes":15,"calories":null,"distanceMeters":null,
-           "steps":null,"sleepMinutes":null,"sleepScore":null,"gainedXp":15,"startedAt":null,"endedAt":null},
-          {"type":"SLEEP","source":"HEALTHKIT","durationMinutes":null,"calories":null,"distanceMeters":null,
-           "steps":null,"sleepMinutes":430,"sleepScore":90,"gainedXp":20,"startedAt":null,"endedAt":null}]}
-        """
-
-        let daily = try decode(DailyActivitiesResponse.self, json)
+        let daily = try decode(DailyActivitiesResponse.self, fixture: "DailyActivitiesResponse")
         let quests = DailyQuestProgress(activities: daily.activities)
 
+        XCTAssertEqual(daily.date, "2026-10-21")
         XCTAssertEqual(daily.activities.count, 4)
         XCTAssertEqual(daily.activities[1], ActivityEntry(type: "WORKOUT", durationMinutes: 45, steps: nil, sleepMinutes: nil, gainedXp: 45))
         XCTAssertEqual(quests, DailyQuestProgress(steps: 8_500, workoutMinutes: 60, sleepMinutes: 430))
     }
 
-    func test_동기화요청_필드는_서버_ActivityPayload에_있는_이름만_쓴다() throws {
-        // 서버 `HealthActivitySyncRequest.ActivityPayload` record 구성요소.
-        let serverFields: Set<String> = [
-            "type", "workoutType", "durationMinutes", "calories", "distanceMeters",
-            "steps", "sleepMinutes", "sleepScore", "startedAt", "endedAt",
-        ]
+    func test_아이디_로그인과_소셜_로그인_응답을_같은_토큰응답으로_읽는다() throws {
+        let password = try decode(AuthTokenResponse.self, fixture: "PasswordAuthResponse")
+        let social = try decode(AuthTokenResponse.self, fixture: "SocialLoginResponse")
+
+        XCTAssertEqual(password.userIdentifier, "alice")
+        XCTAssertEqual(password.sessionTokens, SessionTokens(
+            accessToken: "access-1", expiresIn: 3600, refreshToken: "refresh-1", refreshExpiresIn: 2_592_000
+        ))
+        XCTAssertEqual(social.userId, "kakao:1234")
+        XCTAssertNil(social.userIdentifier, "소셜 로그인 응답에는 userIdentifier가 없다")
+        XCTAssertEqual(social.refreshToken, "refresh-kakao")
+    }
+
+    func test_리프레시_응답과_Watch토큰_응답을_읽는다() throws {
+        let refresh = try decode(RefreshResponse.self, fixture: "RefreshResponse")
+        let watch = try decode(WatchTokenResponse.self, fixture: "IssuedToken")
+
+        XCTAssertEqual(refresh.sessionTokens, SessionTokens(
+            accessToken: "access-2", expiresIn: 3600, refreshToken: "refresh-2", refreshExpiresIn: 2_592_000
+        ))
+        XCTAssertEqual(watch, WatchTokenResponse(accessToken: "watch-1", tokenType: "Bearer", expiresIn: 604_800))
+    }
+
+    func test_오류본문의_message를_사용자문구로_쓴다() async throws {
+        RoutedURLProtocol.setStub(status: 401, json: String(decoding: BackendFixture.data("ErrorResponse"), as: UTF8.self))
+        let client = NetworkClient(baseURL: URL(string: "http://stub.local")!, session: RoutedURLProtocol.makeSession())
+
+        do {
+            _ = try await client.logIn(LoginRequest(username: "alice", password: "password1"))
+            XCTFail("401은 에러가 나야 합니다")
+        } catch {
+            XCTAssertEqual(error as? NetworkError, .unauthorized(message: try object("ErrorResponse")["message"] as? String ?? ""))
+        }
+    }
+
+    func test_동기화요청은_서버_요청픽스처와_같은_필드를_쓴다() throws {
+        let fixture = try object("HealthActivitySyncRequest")
+        let fixtureActivity = try XCTUnwrap((fixture["activities"] as? [[String: Any]])?.first)
         let start = Date(timeIntervalSince1970: 1_792_540_800)
         let full = HealthActivityDTO(
             type: .workout, workoutType: .swimming, durationMinutes: 1, calories: 1, distanceMeters: 1,
@@ -89,11 +109,14 @@ final class BackendContractTests: XCTestCase {
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(request)) as? [String: Any])
         let activity = try XCTUnwrap((json["activities"] as? [[String: Any]])?.first)
 
-        XCTAssertEqual(Set(json.keys), ["userId", "date", "activities"])
-        XCTAssertEqual(Set(activity.keys), serverFields)
+        XCTAssertEqual(Set(json.keys), Set(fixture.keys))
+        XCTAssertEqual(Set(activity.keys), Set(fixtureActivity.keys))
+        // 서버 Instant와 같은 초 단위 ISO-8601 문자열이어야 한다.
+        XCTAssertEqual(activity["startedAt"] as? String, "2026-10-21T00:00:00Z")
+        XCTAssertNotNil((fixtureActivity["startedAt"] as? String).flatMap(ISO8601DateFormatter().date(from:)))
     }
 
-    func test_iOS_열거값은_서버_enum_이름과_같다() {
+    func test_iOS_열거값은_서버_enum_이름과_같다() throws {
         // 서버 com.wellnessgame.activity.ActivityType / WorkoutType.
         XCTAssertEqual(
             [HealthActivityType.steps, .workout, .sleep].map(\.rawValue),
@@ -103,6 +126,9 @@ final class BackendContractTests: XCTestCase {
             [WorkoutType.swimming, .running, .walking, .cycling, .strengthTraining, .other].map(\.rawValue),
             ["SWIMMING", "RUNNING", "WALKING", "CYCLING", "STRENGTH_TRAINING", "OTHER"]
         )
+        let fixtureActivity = try XCTUnwrap((try object("HealthActivitySyncRequest")["activities"] as? [[String: Any]])?.first)
+        XCTAssertNotNil((fixtureActivity["type"] as? String).flatMap(HealthActivityType.init(rawValue:)))
+        XCTAssertNotNil((fixtureActivity["workoutType"] as? String).flatMap(WorkoutType.init(rawValue:)))
     }
 }
 

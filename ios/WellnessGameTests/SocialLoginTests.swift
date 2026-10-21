@@ -53,7 +53,6 @@ private struct FakeTokenProvider: SocialAccessTokenProviding {
 
 @MainActor
 final class SocialSignInFlowTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
     private var store: InMemoryTokenStore!
     private var session: UserSession!
@@ -67,13 +66,12 @@ final class SocialSignInFlowTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        suiteName = "SocialSignInFlowTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
         store = InMemoryTokenStore()
         session = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
 
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [StubURLProtocol.self]
+        configuration.protocolClasses = [RoutedURLProtocol.self]
         // 이전 토큰이 남아 있어도 교환 요청에 실리지 않는지 확인하려고 토큰 저장소를 연결해 둔다.
         let client = NetworkClient(
             baseURL: URL(string: "http://stub.local")!,
@@ -83,20 +81,15 @@ final class SocialSignInFlowTests: XCTestCase {
         flow = SocialSignInFlow(networkClient: client, pendingAppleNames: PendingAppleNameStore(backing: InMemoryTokenStore()))
     }
 
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
-    }
-
     private func lastRequestJSON() throws -> (URLRequest, [String: Any]) {
-        let request = try XCTUnwrap(StubURLProtocol.requests.last)
-        let body = try XCTUnwrap(StubURLProtocol.bodyData(of: request))
+        let request = try XCTUnwrap(RoutedURLProtocol.requests.last)
+        let body = try XCTUnwrap(RoutedURLProtocol.bodyData(of: request))
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
         return (request, json)
     }
 
     func test_kakao_postsAccessToken_withoutAuthorization_andStoresSession() async throws {
-        StubURLProtocol.setStub(status: 200, json: response("kakao:1", token: "jwt-kakao"))
+        RoutedURLProtocol.setStub(status: 200, json: response("kakao:1", token: "jwt-kakao"))
 
         await flow.signInWithKakao(tokenProvider: FakeTokenProvider.access("kakao-sdk-token"), session: session)
 
@@ -111,7 +104,7 @@ final class SocialSignInFlowTests: XCTestCase {
     }
 
     func test_naver_postsAccessToken_withoutAuthorization_andStoresSession() async throws {
-        StubURLProtocol.setStub(status: 200, json: response("naver:2", token: "jwt-naver"))
+        RoutedURLProtocol.setStub(status: 200, json: response("naver:2", token: "jwt-naver"))
 
         await flow.signInWithNaver(tokenProvider: FakeTokenProvider.naver(access: "naver-sdk-token", refresh: "naver-refresh-token"), session: session)
 
@@ -125,7 +118,7 @@ final class SocialSignInFlowTests: XCTestCase {
     }
 
     func test_apple_postsIdentityTokenAndFullName_andStoresSession() async throws {
-        StubURLProtocol.setStub(status: 200, json: response("apple:3", token: "jwt-apple"))
+        RoutedURLProtocol.setStub(status: 200, json: response("apple:3", token: "jwt-apple"))
 
         await flow.signInWithApple(
             credential: AppleCredential(identityToken: "apple-identity-token", fullName: "길동 홍"),
@@ -143,7 +136,7 @@ final class SocialSignInFlowTests: XCTestCase {
     }
 
     func test_apple_omitsFullName_whenAbsentOrBlank() async throws {
-        StubURLProtocol.setStub(status: 200, json: response("apple:3", token: "jwt-apple"))
+        RoutedURLProtocol.setStub(status: 200, json: response("apple:3", token: "jwt-apple"))
 
         await flow.signInWithApple(credential: AppleCredential(identityToken: "t", fullName: "  "), nonce: nil, session: session)
 
@@ -152,17 +145,17 @@ final class SocialSignInFlowTests: XCTestCase {
     }
 
     func test_cancelled_makesNoRequest_andShowsNoError() async {
-        StubURLProtocol.setStub(status: 200, json: response("kakao:1", token: "x"))
+        RoutedURLProtocol.setStub(status: 200, json: response("kakao:1", token: "x"))
 
         await flow.signInWithKakao(tokenProvider: FakeTokenProvider(result: .failure(SocialLoginError.cancelled)), session: session)
 
-        XCTAssertTrue(StubURLProtocol.requests.isEmpty)
+        XCTAssertTrue(RoutedURLProtocol.requests.isEmpty)
         XCTAssertFalse(session.isSignedIn)
         XCTAssertEqual(session.statusMessage, UserSession.signInPrompt)
     }
 
     func test_serverFailure_keepsSignedOut_andStoresNoToken() async {
-        StubURLProtocol.setStub(status: 401, json: #"{"message":"토큰이 유효하지 않습니다."}"#)
+        RoutedURLProtocol.setStub(status: 401, json: #"{"message":"토큰이 유효하지 않습니다."}"#)
 
         await flow.signInWithNaver(tokenProvider: FakeTokenProvider.naver(access: "bad", refresh: "bad-refresh"), session: session)
 
@@ -172,7 +165,7 @@ final class SocialSignInFlowTests: XCTestCase {
     }
 
     func test_restore_keepsSocialProviderSessions() async throws {
-        StubURLProtocol.setStub(status: 200, json: response("kakao:1", token: "jwt-kakao"))
+        RoutedURLProtocol.setStub(status: 200, json: response("kakao:1", token: "jwt-kakao"))
         await flow.signInWithKakao(tokenProvider: FakeTokenProvider.access("t"), session: session)
 
         let restored = UserSession(defaults: defaults, tokenStore: store, watchPublisher: NoopWatchPublisher())
@@ -182,20 +175,20 @@ final class SocialSignInFlowTests: XCTestCase {
     }
 
     func test_naver_withoutRefreshToken_makesNoRequest_andShowsFailure() async {
-        StubURLProtocol.setStub(status: 200, json: response("naver:2", token: "x"))
+        RoutedURLProtocol.setStub(status: 200, json: response("naver:2", token: "x"))
 
         await flow.signInWithNaver(tokenProvider: FakeTokenProvider.naver(access: "a", refresh: nil), session: session)
         await flow.signInWithNaver(tokenProvider: FakeTokenProvider.naver(access: "a", refresh: ""), session: session)
         await flow.signInWithNaver(tokenProvider: FakeTokenProvider.naver(access: "", refresh: "r"), session: session)
 
-        XCTAssertTrue(StubURLProtocol.requests.isEmpty)
+        XCTAssertTrue(RoutedURLProtocol.requests.isEmpty)
         XCTAssertFalse(session.isSignedIn)
         XCTAssertNil(store.loadToken())
         XCTAssertNotEqual(session.statusMessage, UserSession.signInPrompt)
     }
 
     func test_apple_truncatesFullNameTo100Characters() async throws {
-        StubURLProtocol.setStub(status: 200, json: response("apple:3", token: "jwt-apple"))
+        RoutedURLProtocol.setStub(status: 200, json: response("apple:3", token: "jwt-apple"))
         let longName = String(repeating: "가", count: 150)
 
         await flow.signInWithApple(credential: AppleCredential(identityToken: "t", fullName: longName), nonce: nil, session: session)
@@ -205,16 +198,16 @@ final class SocialSignInFlowTests: XCTestCase {
     }
 
     func test_apple_authorizationFailure_makesNoRequest() async {
-        StubURLProtocol.setStub(status: 200, json: response("apple:3", token: "x"))
+        RoutedURLProtocol.setStub(status: 200, json: response("apple:3", token: "x"))
 
         await flow.signInWithApple(result: .failure(ASAuthorizationError(.canceled)), nonce: nil, session: session)
 
-        XCTAssertTrue(StubURLProtocol.requests.isEmpty)
+        XCTAssertTrue(RoutedURLProtocol.requests.isEmpty)
         XCTAssertEqual(session.statusMessage, UserSession.signInPrompt)
     }
 
     func test_serverReturns401_showsServerMessage_forEachProvider() async {
-        StubURLProtocol.setStub(status: 401, json: #"{"message":"유효하지 않은 토큰"}"#)
+        RoutedURLProtocol.setStub(status: 401, json: #"{"message":"유효하지 않은 토큰"}"#)
 
         await flow.signInWithKakao(tokenProvider: FakeTokenProvider.access("k"), session: session)
         XCTAssertTrue(session.statusMessage.contains("유효하지 않은 토큰"))

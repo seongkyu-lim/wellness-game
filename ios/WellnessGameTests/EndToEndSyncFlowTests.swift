@@ -94,7 +94,6 @@ final class FakeWellnessServer: @unchecked Sendable {
 /// 네트워크는 `RoutedURLProtocol` + `FakeWellnessServer`, 시간은 `TestClock`으로 고정한다.
 @MainActor
 final class EndToEndSyncFlowTests: XCTestCase {
-    private var suiteName: String!
     private var defaults: UserDefaults!
     private var credentials: SessionCredentialStore!
     private var clock: TestClock!
@@ -106,8 +105,7 @@ final class EndToEndSyncFlowTests: XCTestCase {
     private var service: HealthSyncService!
 
     override func setUp() async throws {
-        suiteName = "EndToEndSyncFlowTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        defaults = ScratchDefaults.make(for: self)
         credentials = SessionCredentialStore(accessStore: InMemoryTokenStore(), refreshStore: InMemoryTokenStore(), defaults: defaults)
         clock = TestClock(kst("2026-10-21 09:00"))
         server = FakeWellnessServer()
@@ -135,10 +133,6 @@ final class EndToEndSyncFlowTests: XCTestCase {
         )
         // 마지막 성공이 어젯밤이라 첫 동기화는 전날부터 다시 보낸다.
         HealthSyncHistory(defaults: defaults).recordSuccess(at: kst("2026-10-20 21:00"))
-    }
-
-    override func tearDown() async throws {
-        defaults.removePersistentDomain(forName: suiteName)
     }
 
     private func makeViewModel() -> DashboardViewModel {
@@ -176,7 +170,7 @@ final class EndToEndSyncFlowTests: XCTestCase {
         XCTAssertEqual(viewModel.syncResponse?.character.totalXp, 80)
         XCTAssertEqual(viewModel.statusMessage, String(localized: "자동 동기화 완료"))
         XCTAssertEqual(bearers(BackendFixture.watchTokenPath), ["Bearer access-1"])
-        let watch = try XCTUnwrap(spy.published.last ?? nil)
+        let watch = try XCTUnwrap(spy.lastContext)
         XCTAssertEqual(watch.accessToken, "watch-1")
         XCTAssertEqual(watch.expiresAt, kst("2026-10-28 09:00"))
 
@@ -217,7 +211,7 @@ final class EndToEndSyncFlowTests: XCTestCase {
         XCTAssertNil(session.reloginNotice)
         XCTAssertNil(credentials.accessToken)
         XCTAssertNil(credentials.refreshToken)
-        XCTAssertNil(spy.published.last ?? nil)
+        XCTAssertNil(spy.lastContext)
         XCTAssertNil(viewModel.syncResponse)
         XCTAssertEqual(viewModel.statusMessage, UserSession.signInPrompt)
 
@@ -241,7 +235,7 @@ final class EndToEndSyncFlowTests: XCTestCase {
         XCTAssertEqual(viewModel.statusMessage, UserSession.reloginMessage)
         XCTAssertNil(viewModel.syncResponse)
         XCTAssertNil(credentials.refreshToken)
-        XCTAssertNil(spy.published.last ?? nil, "Watch에도 로그아웃을 알린다")
+        XCTAssertNil(spy.lastContext, "Watch에도 로그아웃을 알린다")
         XCTAssertEqual(RoutedURLProtocol.requests(path: BackendFixture.refreshPath).count, 1, "거절된 리프레시는 다시 시도하지 않는다")
     }
 
@@ -295,7 +289,7 @@ final class EndToEndSyncFlowTests: XCTestCase {
         XCTAssertEqual(RoutedURLProtocol.requests(path: BackendFixture.refreshPath).count, 1)
         XCTAssertEqual(Set(bearers(BackendFixture.syncPath)), ["Bearer access-2"])
         XCTAssertEqual(credentials.refreshToken, "refresh-2", "회전된 리프레시 토큰을 completion 전에 저장한다")
-        XCTAssertEqual((spy.published.last ?? nil)?.accessToken, "watch-1")
+        XCTAssertEqual(spy.lastContext?.accessToken, "watch-1")
         XCTAssertEqual(HealthSyncHistory(defaults: defaults).lastSuccessAt, clock.now)
         XCTAssertEqual(tasks.begun, 1)
         XCTAssertEqual(tasks.ended, [1])
@@ -312,7 +306,7 @@ final class EndToEndSyncFlowTests: XCTestCase {
         XCTAssertEqual(outcomes, [.synced, .failed])
         XCTAssertFalse(session.isSignedIn)
         XCTAssertEqual(session.reloginNotice, UserSession.reloginMessage)
-        XCTAssertNil(spy.published.last ?? nil)
+        XCTAssertNil(spy.lastContext)
         XCTAssertEqual(tasks.ended, [1, 2], "실패해도 백그라운드 작업을 끝낸다")
         XCTAssertEqual(server.syncedDates.count, 2)
     }

@@ -1,0 +1,9 @@
+{
+  "userId": "password:alice",
+  "date": "2026-10-21",
+  "activities": [
+    { "type": "WORKOUT", "workoutType": "SWIMMING", "durationMinutes": 45, "calories": 420.5, "distanceMeters": 1200,
+      "steps": null, "sleepMinutes": null, "sleepScore": null,
+      "startedAt": "2026-10-21T07:00:00Z", "endedAt": "2026-10-21T07:45:00Z" }
+  ]
+}
