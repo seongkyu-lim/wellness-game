@@ -6,6 +6,7 @@ import com.wellnessgame.api.HealthActivitySyncRequest.ActivityPayload;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 
 /**
  * 테스트용 동기화 payload 팩토리.
@@ -44,5 +45,10 @@ public final class ActivityPayloads {
 
     public static ActivityPayload sleep(int minutes, Integer score, String start, String end) {
         return sleep(minutes, score, Instant.parse(start), Instant.parse(end));
+    }
+
+    /** 지정한 날짜(UTC)의 "HH:mm"~"HH:mm" 구간 운동. */
+    public static ActivityPayload workoutOn(LocalDate date, WorkoutType type, Integer minutes, String start, String end) {
+        return workout(type, minutes, date + "T" + start + ":00Z", date + "T" + end + ":00Z");
     }
 }

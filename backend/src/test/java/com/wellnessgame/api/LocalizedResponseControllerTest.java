@@ -298,7 +298,6 @@ class LocalizedResponseControllerTest {
     }
 
     private static String syncBody(String... activities) {
-        return "{\"userId\": \"test-user\", \"date\": \"2026-06-17\", \"activities\": ["
-                + String.join(",", activities) + "]}";
+        return com.wellnessgame.support.TestRequests.syncBodyFor("test-user", "2026-06-17", activities);
     }
 }

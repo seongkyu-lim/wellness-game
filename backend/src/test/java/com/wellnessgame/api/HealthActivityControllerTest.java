@@ -301,7 +301,6 @@ class HealthActivityControllerTest {
     }
 
     private static String syncBody(String date, String... activities) {
-        return "{\"userId\": \"test-user\", \"date\": \"" + date + "\", \"activities\": ["
-                + String.join(",", activities) + "]}";
+        return com.wellnessgame.support.TestRequests.syncBodyFor("test-user", date, activities);
     }
 }
