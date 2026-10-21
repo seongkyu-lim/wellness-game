@@ -11,20 +11,25 @@ on:
       - 'backend/src/main/resources/messages*.properties'
       - '.github/workflows/hono-ci.yml'
   push:
-    branches: [dev, main]
+    # main 은 deploy.yml 이 배포 대상만 골라 이 워크플로를 workflow_call 로 호출한다(중복 실행 방지)
+    branches: [dev]
     paths:
       - 'hono-server/**'
       - 'backend/db/schema.sql'
       - 'backend/src/main/resources/messages*.properties'
       - '.github/workflows/hono-ci.yml'
   workflow_dispatch:
+  # deploy.yml 의 검증 잡에서 호출한다.
+  workflow_call:
 
 permissions:
   contents: read
 
+# 다른 워크플로가 호출하면 github.workflow 는 호출자 이름이 되므로 워크플로마다 접두사를 따로 둔다.
+# main 은 취소하지 않는다: 취소되면 그 실행의 배포가 빠지고 다음 실행의 변경 감지(event.before 기준)에도 안 잡힌다.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: hono-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 defaults:
   run:
