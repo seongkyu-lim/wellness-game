@@ -55,6 +55,14 @@ final class SessionCredentialStore: @unchecked Sendable {
         lock.withLock { defaults.object(forKey: Key.refreshExpiresAt) as? Date }
     }
 
+    /// Keychain을 지금 읽을 수 있는지 확인한다. 첫 잠금 해제 전이면 `KeychainError.locked`를 던진다.
+    func checkReadable() throws {
+        try lock.withLock {
+            try accessStore.checkReadable()
+            try refreshStore.checkReadable()
+        }
+    }
+
     func isAccessTokenExpired(at now: Date) -> Bool {
         accessExpiresAt.map { $0 <= now } ?? false
     }

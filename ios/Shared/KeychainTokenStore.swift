@@ -6,17 +6,26 @@ protocol AccessTokenStore: Sendable {
     func loadToken() -> String?
     func saveToken(_ token: String) throws
     func deleteToken()
+    /// 잠금 등으로 지금 읽을 수 없으면 던진다. 항목이 없는 것은 읽을 수 있는 상태다.
+    /// `loadToken()`은 읽기 실패와 항목 없음을 모두 nil로 돌려주므로, 둘을 구분해야 할 때 먼저 확인한다.
+    func checkReadable() throws
+}
+
+extension AccessTokenStore {
+    func checkReadable() throws {}
 }
 
 enum KeychainError: LocalizedError, Equatable {
     case unexpectedStatus(OSStatus)
     case invalidData
+    /// 기기를 켠 뒤 아직 한 번도 잠금 해제하지 않아 Keychain을 읽을 수 없다(`errSecInteractionNotAllowed`).
+    case locked
 
     var errorDescription: String? {
         switch self {
         case let .unexpectedStatus(status):
             return String(localized: "로그인 정보를 기기에 저장하지 못했습니다. (Keychain \(status))")
-        case .invalidData:
+        case .invalidData, .locked:
             return String(localized: "로그인 정보를 기기에 저장하지 못했습니다.")
         }
     }
@@ -82,6 +91,18 @@ struct KeychainTokenStore: AccessTokenStore {
 
     func deleteToken() {
         SecItemDelete(baseQuery as CFDictionary)
+    }
+
+    /// 잠금 상태(첫 잠금 해제 전)면 `KeychainError.locked`를 던진다.
+    /// 백그라운드 실행에서 토큰이 "없다"고 오해해 세션을 지우거나 토큰 없이 요청하지 않도록 쓴다.
+    func checkReadable() throws {
+        var query = baseQuery
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        if SecItemCopyMatching(query as CFDictionary, &item) == errSecInteractionNotAllowed {
+            throw KeychainError.locked
+        }
     }
 
     private var baseQuery: [String: Any] {

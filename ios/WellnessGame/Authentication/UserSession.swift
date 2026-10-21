@@ -186,6 +186,10 @@ final class UserSession: ObservableObject {
     }
 
     private func restore() {
+        // 첫 잠금 해제 전 백그라운드 실행이면 Keychain을 읽을 수 없다. 토큰이 없다고 보고 세션을 지우면
+        // 로그인이 풀리므로, 이번 실행에서는 로그아웃 상태로만 두고 저장값은 건드리지 않는다.
+        guard (try? credentials.checkReadable()) != nil else { return }
+
         // 게스트 식별자는 더 이상 쓰지 않는다.
         let hadGuestSession = defaults.string(forKey: Key.legacyGuestIdentifier) != nil
         defaults.removeObject(forKey: Key.legacyGuestIdentifier)
