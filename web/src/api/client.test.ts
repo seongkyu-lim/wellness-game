@@ -282,3 +282,60 @@ describe('로그아웃', () => {
     expect(sessionManager.current()).toBeNull()
   })
 })
+
+describe('오류 매핑', () => {
+  it.each([
+    ['서버 message', jsonResponse(403, { message: '권한이 없습니다.' }), { raw: '권한이 없습니다.' }],
+    ['빈 message', jsonResponse(500, { message: '' }), { key: 'error.request', params: { status: 500 } }],
+    ['문자열이 아닌 message', jsonResponse(502, { message: { detail: 'x' } }), { key: 'error.request', params: { status: 502 } }],
+    ['본문 없음', new Response(null, { status: 503 }), { key: 'error.request', params: { status: 503 } }],
+  ])('%s → 화면 메시지', async (_, response, expected) => {
+    fetchMock.mockResolvedValue(response)
+    const error = (await fetchDailyActivities('kakao:1', '2026-01-01').catch((e: unknown) => e)) as ApiError
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.userMessage).toEqual(expected)
+  })
+
+  it('fetch 자체가 실패하면(TypeError) ApiError로 감싸지 않고 그대로 던져 호출 측이 네트워크 오류로 처리한다', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+    const error = await fetchMyCharacter().catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(TypeError)
+    expect(isUnauthorized(error)).toBe(false)
+  })
+
+  it('404는 캐릭터 조회에서만 "없음"이고 활동 조회에서는 오류다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(404, {}))
+    await expect(fetchMyCharacter()).resolves.toBeNull()
+    await expect(fetchDailyActivities('kakao:1', '2026-01-01')).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('로그아웃 상태에서 조회하면 요청을 보내지 않고 만료(401)로 끝난다', async () => {
+    sessionManager.clear('logout')
+    const error = await fetchMyCharacter().catch((e: unknown) => e)
+    expect(isUnauthorized(error)).toBe(true)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('갱신 응답 검증', () => {
+  it('refresh 응답에 새 리프레시 토큰이 없으면 error.noToken으로 실패하고 세션은 지우지 않는다', async () => {
+    startV2Session()
+    fetchMock.mockImplementation(async (url: string) =>
+      url.endsWith('/api/auth/refresh') ? jsonResponse(200, { ...v2Tokens(2), refreshToken: undefined }) : jsonResponse(401, {}),
+    )
+    const error = (await fetchMyCharacter().catch((e: unknown) => e)) as ApiError
+    expect(error.userMessage).toEqual({ key: 'error.noToken' })
+    expect(isUnauthorized(error)).toBe(false)
+    expect(sessionManager.current()?.refreshToken).toBe('ref-1')
+  })
+
+  it('재시도 요청은 처음과 같은 URL·Accept-Language를 쓰고 Authorization만 바뀐다', async () => {
+    setLanguage('en')
+    startV2Session()
+    serverRotatingTo(2)
+    await fetchDailyActivities('kakao:1', '2026-02-03')
+    const [first, , retry] = fetchMock.mock.calls
+    expect(retry[0]).toBe(first[0])
+    expect(retry[1].headers).toEqual({ 'Accept-Language': 'en', Authorization: 'Bearer acc-2' })
+  })
+})

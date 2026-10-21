@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { buildCsp, isVercelBuild, resolveApiOrigin } from './csp'
+import type { HtmlTagDescriptor, Plugin, ResolvedConfig } from 'vite'
+import { describe, expect, it, vi } from 'vitest'
+import { buildCsp, cspPlugin, isVercelBuild, resolveApiOrigin } from './csp'
 
 function directives(policy: string): Map<string, string[]> {
   return new Map(
@@ -54,5 +55,49 @@ describe('isVercelBuild', () => {
     expect(isVercelBuild({ VERCEL: '1' })).toBe(true)
     expect(isVercelBuild({ VERCEL: '' })).toBe(false)
     expect(isVercelBuild({})).toBe(false)
+  })
+})
+
+/** 빌드 없이 플러그인 훅만 불러 본다. 실제 vite build 검증은 build.test.ts가 맡는다. */
+function runCspPlugin(env: Record<string, string>, mode = 'production') {
+  const plugin: Plugin = cspPlugin()
+  const warn = vi.fn()
+  const config = { env, mode, logger: { warn } } as unknown as ResolvedConfig
+  ;(plugin.configResolved as (config: ResolvedConfig) => void)(config)
+  const tags = (plugin.transformIndexHtml as () => HtmlTagDescriptor[])()
+  return { plugin, warn, tags }
+}
+
+describe('cspPlugin', () => {
+  it('빌드에만 적용된다(개발 서버의 HMR 인라인 스크립트를 막지 않기 위해)', () => {
+    expect(cspPlugin().apply).toBe('build')
+  })
+
+  it('API 오리진을 connect-src에 넣은 CSP meta를 head 맨 앞에 주입한다', () => {
+    const { tags, warn } = runCspPlugin({ VITE_API_BASE_URL: 'https://api.wellness.app/v1' })
+    expect(tags).toHaveLength(1)
+    expect(tags[0]).toMatchObject({ tag: 'meta', injectTo: 'head-prepend', attrs: { 'http-equiv': 'Content-Security-Policy' } })
+    const policy = directives(String(tags[0].attrs!.content))
+    expect(policy.get('connect-src')).toEqual(["'self'", 'https://api.wellness.app'])
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('로컬 프로덕션 빌드에서 API 주소가 비면 경고만 하고 connect-src를 self로 제한한다', () => {
+    vi.stubEnv('VERCEL', '')
+    const { tags, warn } = runCspPlugin({})
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(directives(String(tags[0].attrs!.content)).get('connect-src')).toEqual(["'self'"])
+  })
+
+  it('Vercel 빌드에서 API 주소가 비면 빌드를 실패시킨다', () => {
+    vi.stubEnv('VERCEL', '1')
+    expect(() => runCspPlugin({})).toThrow(/VITE_API_BASE_URL/)
+  })
+
+  it('개발 모드 설정이면 API 주소가 없어도 localhost 기본값을 허용한다', () => {
+    vi.stubEnv('VERCEL', '1')
+    const { tags, warn } = runCspPlugin({}, 'development')
+    expect(warn).not.toHaveBeenCalled()
+    expect(directives(String(tags[0].attrs!.content)).get('connect-src')).toEqual(["'self'", 'http://localhost:8080'])
   })
 })

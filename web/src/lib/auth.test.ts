@@ -236,3 +236,61 @@ describe('PKCE', () => {
     expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull()
   })
 })
+
+describe('인가 URL', () => {
+  it.each([
+    ['kakao', 'https://kauth.kakao.com/oauth/authorize'],
+    ['naver', 'https://nid.naver.com/oauth2.0/authorize'],
+    ['google', 'https://accounts.google.com/o/oauth2/v2/auth'],
+  ] as const)('%s는 provider 인가 주소로 보내고 redirect_uri는 앱 기준 주소다', async (provider, endpoint) => {
+    const url = new URL(await buildLoginUrl(provider))
+    expect(`${url.origin}${url.pathname}`).toBe(endpoint)
+    expect(url.searchParams.get('redirect_uri')).toBe(`${window.location.origin}/`)
+    expect(url.searchParams.get('scope')).toBe(provider === 'google' ? 'openid profile' : null)
+  })
+
+  it('로그인 시작이 겹쳐도 마지막 state·verifier 한 쌍만 남는다', async () => {
+    const [first, second] = await Promise.all([buildLoginUrl('kakao'), buildLoginUrl('google')])
+    const saved = sessionStorage.getItem(STATE_KEY)
+    const winner = [first, second].map((u) => new URL(u)).find((u) => u.searchParams.get('state') === saved)!
+    expect(winner).toBeDefined()
+    expect(winner.searchParams.get('code_challenge')).toBe(await codeChallengeS256(sessionStorage.getItem(VERIFIER_KEY)!))
+  })
+})
+
+describe('콜백 오류 처리', () => {
+  beforeEach(() => window.history.replaceState(null, '', '/'))
+
+  it('code만 있고 state가 없으면 로그인 리다이렉트로 보지 않고 저장값·주소를 건드리지 않는다', async () => {
+    sessionStorage.setItem(STATE_KEY, 'kakao:s')
+    window.history.replaceState(null, '', '/?code=c')
+    await expect(completeLoginFromRedirect()).resolves.toBeNull()
+    expect(sessionStorage.getItem(STATE_KEY)).toBe('kakao:s')
+    expect(window.location.search).toBe('?code=c')
+  })
+
+  it('저장된 state가 없으면(다른 탭·만료된 탭에서 돌아옴) 교환하지 않고 state 불일치로 끝낸다', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    window.history.replaceState(null, '', '/?code=c&state=kakao:s')
+    const error = (await completeLoginFromRedirect().catch((e: unknown) => e)) as LocalizedError
+    expect(error.userMessage).toEqual({ key: 'error.stateMismatch' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('교환이 실패해도 state를 소비하고 주소를 정리해, 새로고침으로 같은 code를 다시 보내지 않는다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ message: '만료된 코드' }), { status: 400 }))
+    vi.stubGlobal('fetch', fetchMock)
+    sessionStorage.setItem(STATE_KEY, 'kakao:s')
+    window.history.replaceState(null, '', '/?code=c&state=kakao:s')
+
+    const error = (await completeLoginFromRedirect().catch((e: unknown) => e)) as LocalizedError
+    expect(error.userMessage).toEqual({ raw: '만료된 코드' })
+    expect(window.location.search).toBe('')
+    expect(sessionStorage.getItem(STATE_KEY)).toBeNull()
+    expect(localStorage.getItem(SESSION_KEY)).toBeNull()
+
+    await expect(completeLoginFromRedirect()).resolves.toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
