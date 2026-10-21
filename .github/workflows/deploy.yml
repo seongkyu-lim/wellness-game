@@ -1,0 +1,449 @@
+name: Deploy
+
+# main 에 머지된 변경 중 배포 대상(backend / hono / web)만 골라 검증 후 배포한다.
+# 배포 구조와 시크릿 설정은 docs/deploy.md 참고.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: '배포 대상 (변경 감지 없이 선택한 대상을 전부 검증·배포한다)'
+        type: choice
+        options: [all, backend, hono, web]
+        default: all
+
+# 배포 작업은 항상 기본 권한만 쓴다. 배포 자격 증명은 시크릿으로만 주입한다.
+permissions:
+  contents: read
+
+# 배포는 한 번에 하나만 진행한다. 취소하지 않는다(진행 중인 배포를 끊으면 상태가 애매해진다).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  # Vercel CLI 는 정확한 버전으로 고정한다. 올릴 때는 npm 게시 후 2주 이상 지난 버전을 고른다.
+  VERCEL_CLI_VERSION: '62.5.0'
+
+jobs:
+  # 1) 변경 감지: 대상별로 배포할지 결정한다.
+  changes:
+    name: 변경 감지
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.detect.outputs.backend }}
+      hono: ${{ steps.detect.outputs.hono }}
+      web: ${{ steps.detect.outputs.web }}
+      reason: ${{ steps.detect.outputs.reason }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # event.before 커밋까지 diff 하려면 전체 히스토리가 필요하다.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 대상 감지
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_FULL: ${{ github.ref }}
+          TARGETS: ${{ inputs.targets }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # 운영 배포는 main 에서만 한다. 다른 브랜치에서 수동 실행해도 배포하지 않는다.
+          if [ "$REF_FULL" != "refs/heads/main" ]; then
+            echo "::error title=main 이 아닌 ref::배포는 main 에서만 실행합니다(현재: $REF_FULL)."
+            exit 1
+          fi
+
+          backend=false
+          hono=false
+          web=false
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            case "$TARGETS" in
+              all) backend=true; hono=true; web=true ;;
+              backend) backend=true ;;
+              hono) hono=true ;;
+              web) web=true ;;
+              *) echo "::error::알 수 없는 대상: $TARGETS"; exit 1 ;;
+            esac
+            reason="수동 실행: $TARGETS (변경 감지 생략)"
+          elif [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+            || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            # 직전 커밋을 알 수 없으면(새 브랜치 푸시 등) 안전하게 전체 배포한다.
+            backend=true; hono=true; web=true
+            reason="직전 커밋을 알 수 없어 전체 배포"
+          else
+            changed=$(git diff --name-only "$BEFORE" "$AFTER")
+            # 대상별 경로 규칙. backend/ 아래 schema.sql·messages 도 Hono 와 Spring 이 함께 쓰므로 backend 에 포함된다.
+            if printf '%s\n' "$changed" | grep -Eq '^backend/'; then backend=true; fi
+            if printf '%s\n' "$changed" | grep -Eq '^hono-server/'; then hono=true; fi
+            if printf '%s\n' "$changed" | grep -Eq '^web/'; then web=true; fi
+            # Hono 은 Spring 과 같은 DB 스키마·메시지 파일을 쓴다.
+            if printf '%s\n' "$changed" | grep -Eq '^backend/(db/schema\.sql|src/main/resources/messages[^/]*\.properties)$'; then hono=true; fi
+            reason="$BEFORE..$AFTER 변경 감지"
+          fi
+
+          {
+            echo "backend=$backend"
+            echo "hono=$hono"
+            echo "web=$web"
+            echo "reason=$reason"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## 변경 감지"
+            echo ""
+            echo "- 기준: $reason"
+            echo "- backend: $backend"
+            echo "- hono: $hono"
+            echo "- web: $web"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # 2) 검증: 배포 대상에 해당하는 기존 CI 워크플로를 그대로 호출한다. main 은 push 로 따로 돌리지 않는다.
+  verify-backend:
+    name: 검증 · backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    uses: ./.github/workflows/backend-ci.yml
+
+  verify-hono:
+    name: 검증 · hono
+    needs: changes
+    if: needs.changes.outputs.hono == 'true'
+    uses: ./.github/workflows/hono-ci.yml
+
+  verify-web:
+    name: 검증 · web
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    uses: ./.github/workflows/web-ci.yml
+
+  # 3) 배포: 검증이 성공한 대상만 배포한다.
+  deploy-backend:
+    name: 배포 · Render backend (wellness-game-api)
+    needs: [changes, verify-backend]
+    if: needs.changes.outputs.backend == 'true' && needs.verify-backend.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: production
+      url: https://wellness-game-api.onrender.com
+    env:
+      RENDER_API_URL: https://wellness-game-api.onrender.com
+      RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
+      RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID_API }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: 필수 시크릿·변수 확인
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::error title=시크릿 누락::RENDER_DEPLOY_HOOK_API 시크릿이 없습니다. 추가 방법은 docs/deploy.md 'GitHub 시크릿·변수'를 보세요."
+            missing=1
+          fi
+          if [ -n "$RENDER_API_KEY" ] && [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "::error title=변수 누락::RENDER_API_KEY 를 설정했다면 RENDER_SERVICE_ID_API 변수도 필요합니다(docs/deploy.md)."
+            missing=1
+          fi
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "::notice title=완료 대기 생략::RENDER_API_KEY 가 없어 배포 완료를 기다리지 않고 헬스체크만 합니다."
+          fi
+          exit "$missing"
+      - name: Render 배포 훅 호출
+        run: |
+          set -euo pipefail
+          api() {
+            curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" -H "Accept: application/json" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=1"
+          }
+          # 훅 호출 전 최신 배포 ID 를 기록해 두고, 이후 새 ID 가 live 가 되는지 본다.
+          prev_id=""
+          if [ -n "$RENDER_API_KEY" ]; then
+            prev_id=$(api | jq -r '(.[0].deploy // .[0]).id // empty')
+          fi
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$RENDER_DEPLOY_HOOK") \
+            || { echo "::error::배포 훅 호출에 실패했습니다(네트워크 오류)."; exit 1; }
+          case "$code" in
+            2*) echo "Render 배포 훅 호출 완료 (HTTP $code)" ;;
+            *) echo "::error::배포 훅 응답이 HTTP $code 입니다. 훅 URL 을 다시 복사했는지 확인하세요."; exit 1 ;;
+          esac
+          echo "RENDER_PREV_DEPLOY_ID=$prev_id" >> "$GITHUB_ENV"
+      - name: Render 배포 완료 대기
+        run: |
+          set -euo pipefail
+          if [ -z "$RENDER_API_KEY" ]; then
+            exit 0
+          fi
+          deadline=$(( $(date +%s) + 1200 ))
+          while :; do
+            if [ "$(date +%s)" -gt "$deadline" ]; then
+              echo "::error::20분 안에 배포가 live 가 되지 않았습니다. Render 대시보드의 Deploys 탭을 확인하세요."
+              exit 1
+            fi
+            json=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" -H "Accept: application/json" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=1" || echo "[]")
+            id=$(echo "$json" | jq -r '(.[0].deploy // .[0]).id // empty')
+            status=$(echo "$json" | jq -r '(.[0].deploy // .[0]).status // empty')
+            if [ -n "$id" ] && [ "$id" != "$RENDER_PREV_DEPLOY_ID" ]; then
+              case "$status" in
+                live)
+                  echo "Render 배포 live: $id"
+                  break ;;
+                build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+                  echo "::error::Render 배포 실패: $id ($status)"
+                  exit 1 ;;
+                *) echo "배포 진행 중: $status" ;;
+              esac
+            fi
+            sleep 15
+          done
+      - name: 헬스체크 (무료 플랜 콜드 스타트 재시도)
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            body=$(curl -sS --max-time 90 "$RENDER_API_URL/healthz" || true)
+            if echo "$body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then
+              echo "healthz OK (시도 $i)"
+              exit 0
+            fi
+            echo "healthz 아직 응답 없음 (시도 $i). 20초 뒤 재시도"
+            sleep 20
+          done
+          echo "::error::healthz 가 응답하지 않습니다: $RENDER_API_URL/healthz"
+          exit 1
+      - name: 배포 요약
+        if: always()
+        run: |
+          {
+            echo "## 배포됨: Render backend";
+            echo "- 서비스: wellness-game-api";
+            echo "- 주소: $RENDER_API_URL";
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-hono:
+    name: 배포 · Render hono (wellness-game-hono)
+    needs: [changes, verify-hono]
+    if: needs.changes.outputs.hono == 'true' && needs.verify-hono.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: production
+      url: https://wellness-game-hono.onrender.com
+    env:
+      RENDER_API_URL: https://wellness-game-hono.onrender.com
+      RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_HONO }}
+      RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID_HONO }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: 필수 시크릿·변수 확인
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::error title=시크릿 누락::RENDER_DEPLOY_HOOK_HONO 시크릿이 없습니다. 추가 방법은 docs/deploy.md 'GitHub 시크릿·변수'를 보세요."
+            missing=1
+          fi
+          if [ -n "$RENDER_API_KEY" ] && [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "::error title=변수 누락::RENDER_API_KEY 를 설정했다면 RENDER_SERVICE_ID_HONO 변수도 필요합니다(docs/deploy.md)."
+            missing=1
+          fi
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "::notice title=완료 대기 생략::RENDER_API_KEY 가 없어 배포 완료를 기다리지 않고 헬스체크만 합니다."
+          fi
+          exit "$missing"
+      - name: Render 배포 훅 호출
+        run: |
+          set -euo pipefail
+          api() {
+            curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" -H "Accept: application/json" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=1"
+          }
+          prev_id=""
+          if [ -n "$RENDER_API_KEY" ]; then
+            prev_id=$(api | jq -r '(.[0].deploy // .[0]).id // empty')
+          fi
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$RENDER_DEPLOY_HOOK") \
+            || { echo "::error::배포 훅 호출에 실패했습니다(네트워크 오류)."; exit 1; }
+          case "$code" in
+            2*) echo "Render 배포 훅 호출 완료 (HTTP $code)" ;;
+            *) echo "::error::배포 훅 응답이 HTTP $code 입니다. 훅 URL 을 다시 복사했는지 확인하세요."; exit 1 ;;
+          esac
+          echo "RENDER_PREV_DEPLOY_ID=$prev_id" >> "$GITHUB_ENV"
+      - name: Render 배포 완료 대기
+        run: |
+          set -euo pipefail
+          if [ -z "$RENDER_API_KEY" ]; then
+            exit 0
+          fi
+          deadline=$(( $(date +%s) + 1200 ))
+          while :; do
+            if [ "$(date +%s)" -gt "$deadline" ]; then
+              echo "::error::20분 안에 배포가 live 가 되지 않았습니다. Render 대시보드의 Deploys 탭을 확인하세요."
+              exit 1
+            fi
+            json=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" -H "Accept: application/json" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=1" || echo "[]")
+            id=$(echo "$json" | jq -r '(.[0].deploy // .[0]).id // empty')
+            status=$(echo "$json" | jq -r '(.[0].deploy // .[0]).status // empty')
+            if [ -n "$id" ] && [ "$id" != "$RENDER_PREV_DEPLOY_ID" ]; then
+              case "$status" in
+                live)
+                  echo "Render 배포 live: $id"
+                  break ;;
+                build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+                  echo "::error::Render 배포 실패: $id ($status)"
+                  exit 1 ;;
+                *) echo "배포 진행 중: $status" ;;
+              esac
+            fi
+            sleep 15
+          done
+      - name: 헬스체크 (무료 플랜 콜드 스타트 재시도)
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            body=$(curl -sS --max-time 90 "$RENDER_API_URL/healthz" || true)
+            if echo "$body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then
+              echo "healthz OK (시도 $i)"
+              exit 0
+            fi
+            echo "healthz 아직 응답 없음 (시도 $i). 20초 뒤 재시도"
+            sleep 20
+          done
+          echo "::error::healthz 가 응답하지 않습니다: $RENDER_API_URL/healthz"
+          exit 1
+      - name: 배포 요약
+        if: always()
+        run: |
+          {
+            echo "## 배포됨: Render hono";
+            echo "- 서비스: wellness-game-hono";
+            echo "- 주소: $RENDER_API_URL";
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-web:
+    name: 배포 · Vercel web
+    needs: [changes, verify-web]
+    if: needs.changes.outputs.web == 'true' && needs.verify-web.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://wellness-game-kohl.vercel.app
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_PRODUCTION_URL: https://wellness-game-kohl.vercel.app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: 필수 시크릿·변수 확인
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error title=시크릿 누락::VERCEL_TOKEN 시크릿이 없습니다. 추가 방법은 docs/deploy.md 'GitHub 시크릿·변수'를 보세요."
+            missing=1
+          fi
+          if [ -z "$VERCEL_ORG_ID" ]; then
+            echo "::error title=변수 누락::VERCEL_ORG_ID 변수가 없습니다(docs/deploy.md)."
+            missing=1
+          fi
+          if [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::error title=변수 누락::VERCEL_PROJECT_ID 변수가 없습니다(docs/deploy.md)."
+            missing=1
+          fi
+          exit "$missing"
+      - name: Node.js 설정
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Vercel CLI 설치 (버전 고정)
+        run: npm install --global --no-audit --no-fund "vercel@${VERCEL_CLI_VERSION}"
+      # Vercel 프로젝트의 Root Directory 는 web 이다. 저장소 루트에서 실행해야 CLI 가 Root Directory 를 적용해
+      # web/ 에서 빌드하고 .vercel/output 을 만든다. 실행 위치는 여기서만 정한다(작업 디렉터리를 바꾸지 않는다).
+      - name: 프로덕션 환경 설정 가져오기
+        run: vercel pull --yes --environment=production
+      - name: 프로덕션 빌드 (prebuilt)
+        run: vercel build --prod
+      - name: 배포
+        id: deploy
+        run: |
+          set -euo pipefail
+          url=$(vercel deploy --prebuilt --prod)
+          echo "배포 URL: $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: 스모크 테스트 (운영 도메인 / 와 /privacy)
+        run: |
+          set -euo pipefail
+          check() {
+            for i in $(seq 1 5); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$VERCEL_PRODUCTION_URL$1" || true)
+              if [ "$code" = "200" ]; then
+                echo "$1 -> 200 (시도 $i)"
+                return 0
+              fi
+              echo "$1 -> $code (시도 $i). 10초 뒤 재시도"
+              sleep 10
+            done
+            return 1
+          }
+          check "/" || { echo "::error::/ 가 200 이 아닙니다."; exit 1; }
+          check "/privacy" || { echo "::error::/privacy 가 200 이 아닙니다."; exit 1; }
+      - name: 배포 요약
+        if: always()
+        run: |
+          {
+            echo "## 배포됨: Vercel web";
+            echo "- 프로젝트: wellness-game (Root Directory: web)";
+            echo "- 주소: $VERCEL_PRODUCTION_URL";
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # 4) 결과 요약: 배포가 하나라도 실패하면 이 잡도 실패한다.
+  report:
+    name: 결과 요약
+    needs: [changes, verify-backend, verify-hono, verify-web, deploy-backend, deploy-hono, deploy-web]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      REASON: ${{ needs.changes.outputs.reason }}
+      CHANGES_BACKEND: ${{ needs.changes.outputs.backend }}
+      CHANGES_HONO: ${{ needs.changes.outputs.hono }}
+      CHANGES_WEB: ${{ needs.changes.outputs.web }}
+      VERIFY_BACKEND: ${{ needs.verify-backend.result }}
+      VERIFY_HONO: ${{ needs.verify-hono.result }}
+      VERIFY_WEB: ${{ needs.verify-web.result }}
+      DEPLOY_BACKEND: ${{ needs.deploy-backend.result }}
+      DEPLOY_HONO: ${{ needs.deploy-hono.result }}
+      DEPLOY_WEB: ${{ needs.deploy-web.result }}
+    steps:
+      - name: 결과 요약 작성
+        run: |
+          set -euo pipefail
+          {
+            echo "## 배포 결과"
+            echo ""
+            echo "기준: $REASON"
+            echo ""
+            echo "| 대상 | 변경 | 검증 | 배포 |"
+            echo "|---|---|---|---|"
+            echo "| backend (Render wellness-game-api) | $CHANGES_BACKEND | $VERIFY_BACKEND | $DEPLOY_BACKEND |"
+            echo "| hono (Render wellness-game-hono) | $CHANGES_HONO | $VERIFY_HONO | $DEPLOY_HONO |"
+            echo "| web (Vercel) | $CHANGES_WEB | $VERIFY_WEB | $DEPLOY_WEB |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for r in "$VERIFY_BACKEND" "$VERIFY_HONO" "$VERIFY_WEB" "$DEPLOY_BACKEND" "$DEPLOY_HONO" "$DEPLOY_WEB"; do
+            if [ "$r" = "failure" ]; then
+              echo "::error::배포 파이프라인에 실패한 작업이 있습니다. 위 요약과 각 작업 로그를 확인하세요."
+              exit 1
+            fi
+          done
