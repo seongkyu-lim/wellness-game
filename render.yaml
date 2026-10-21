@@ -1,4 +1,5 @@
 # Render Blueprint — 백엔드 API: Spring Boot(Docker) + Hono(Node). 순서·주의사항은 README "운영 배포" 참고.
+# 배포 파이프라인: .github/workflows/deploy.yml (main push 시 변경된 대상만 검증 후 배포 훅 호출). 배포 절차는 docs/deploy.md.
 # sync: false 항목은 Blueprint 를 처음 만들 때 Render 대시보드가 값을 묻는다(이후 Blueprint 동기화는 값을 건드리지 않음).
 # 비밀값은 이 파일에 적지 않는다.
 services:
@@ -9,9 +10,10 @@ services:
     rootDir: backend
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    # 운영 배포 브랜치. main 에 머지되면 자동 배포된다.
+    # 운영 배포 브랜치. 배포는 GitHub Actions(.github/workflows/deploy.yml)가 배포 훅으로 트리거한다.
     branch: main
-    autoDeploy: true
+    # Render 자체 자동 배포는 끈다(main 머지마다 중복 배포 방지). 대시보드 Auto-Deploy 도 Off 로 맞춰야 한다(docs/deploy.md).
+    autoDeploy: false
     # 한국과 가까운 리전. Supabase 도 같은 Singapore(ap-southeast-1)에 만들면 DB 왕복 지연이 가장 작다. 생성 후 바꿀 수 없다.
     region: singapore
     # starter: 512MB RAM·0.5 CPU, 항상 켜져 있음(유료).
@@ -97,7 +99,8 @@ services:
     buildCommand: npm ci && npm run build
     startCommand: npm start
     branch: main
-    autoDeploy: true
+    # Render 자체 자동 배포는 끈다. 배포는 deploy.yml 이 트리거한다(docs/deploy.md).
+    autoDeploy: false
     region: singapore
     # free: 15분 동안 요청이 없으면 잠들고 깨우는 데 플랫폼 기준 약 1분. 매일 04:00 정리 작업은 깨어 있을 때만 돈다.
     plan: free

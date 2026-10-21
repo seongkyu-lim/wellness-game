@@ -11,20 +11,25 @@ on:
       - 'backend/src/main/resources/messages*.properties'
       - '.github/workflows/hono-ci.yml'
   push:
-    branches: [dev, main]
+    # main 은 deploy.yml 이 배포 대상만 골라 이 워크플로를 workflow_call 로 호출한다(중복 실행 방지)
+    branches: [dev]
     paths:
       - 'hono-server/**'
       - 'backend/db/schema.sql'
       - 'backend/src/main/resources/messages*.properties'
       - '.github/workflows/hono-ci.yml'
   workflow_dispatch:
+  # deploy.yml 의 검증 잡에서 호출한다.
+  workflow_call:
 
 permissions:
   contents: read
 
+# 다른 워크플로가 호출하면 github.workflow 는 호출자 이름이 되므로 워크플로마다 접두사를 따로 둔다.
+# main 은 취소하지 않는다: 취소되면 그 실행의 배포가 빠지고 다음 실행의 변경 감지(event.before 기준)에도 안 잡힌다.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: hono-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 defaults:
   run:
@@ -53,10 +58,10 @@ jobs:
     env:
       DATABASE_URL_TEST: postgres://wellness:wellness@localhost:5432/wellness_test
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm

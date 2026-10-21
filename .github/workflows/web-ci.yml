@@ -1,6 +1,6 @@
 name: Web CI
 
-# 운영 배포는 Vercel이 저장소를 직접 빌드한다(web/vercel.json). 이 워크플로는 테스트·빌드 검증만 한다.
+# 운영 배포는 deploy.yml이 Vercel 로 prebuilt 배포한다(web/vercel.json, docs/deploy.md). 이 워크플로는 테스트·빌드 검증만 한다.
 on:
   pull_request:
     branches: [dev, main]
@@ -8,19 +8,24 @@ on:
       - 'web/**'
       - '.github/workflows/web-ci.yml'
   push:
-    branches: [dev, main]
+    # main 은 deploy.yml 이 배포 대상만 골라 이 워크플로를 workflow_call 로 호출한다(중복 실행 방지)
+    branches: [dev]
     paths:
       - 'web/**'
       - '.github/workflows/web-ci.yml'
   workflow_dispatch:
+  # deploy.yml 의 검증 잡에서 호출한다.
+  workflow_call:
 
 permissions:
   contents: read
 
 # 같은 브랜치/PR의 이전 실행은 취소한다.
+# 다른 워크플로가 호출하면 github.workflow 는 호출자 이름이 되므로 워크플로마다 접두사를 따로 둔다.
+# main 은 취소하지 않는다: 취소되면 그 실행의 배포가 빠지고 다음 실행의 변경 감지(event.before 기준)에도 안 잡힌다.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: web-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 defaults:
   run:
