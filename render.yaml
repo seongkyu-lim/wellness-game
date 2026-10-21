@@ -1,4 +1,4 @@
-# Render Blueprint — 백엔드 API (Spring Boot, Docker). 순서·주의사항은 README "운영 배포" 참고.
+# Render Blueprint — 백엔드 API: Spring Boot(Docker) + Hono(Node). 순서·주의사항은 README "운영 배포" 참고.
 # sync: false 항목은 Blueprint 를 처음 만들 때 Render 대시보드가 값을 묻는다(이후 Blueprint 동기화는 값을 건드리지 않음).
 # 비밀값은 이 파일에 적지 않는다.
 services:
@@ -54,10 +54,10 @@ services:
         value: "true"
       - key: APP_RATE_LIMIT_TRUSTED_PROXY_HOPS
         value: "0"
-      # 배포 직후 hops 보정용: 연결 주소와 X-Forwarded-For 원문을 10초에 한 번 INFO 로 남긴다.
-      # 로그로 체인 구조를 확인해 HOPS 를 맞춘 뒤 "false" 로 바꾼다(임시).
+      # hops 보정용 체인 로그(연결 주소와 X-Forwarded-For 원문). 2026-10-21 확인: Render 는 실제 클라이언트 IP 를
+      # 맨 오른쪽에 덧붙인다(예: [위조값, 실제IP]) → HOPS 0 이 맞다. 클라이언트 IP 가 로그에 남으므로 평소에는 끈다.
       - key: APP_RATE_LIMIT_LOG_FORWARDED_CHAIN
-        value: "true"
+        value: "false"
 
       # --- 소셜 로그인 (README "소셜 로그인 서버 환경변수") — 비워 둔 공급자의 엔드포인트는 503 ---
       - key: OAUTH_GOOGLE_CLIENT_ID
@@ -86,3 +86,66 @@ services:
       # JVM 기본값(Dockerfile: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError)을 바꿀 때만 설정한다.
       # - key: JAVA_TOOL_OPTIONS
       #   value: -XX:MaxRAMPercentage=65 -XX:+ExitOnOutOfMemoryError
+
+  # Hono(TypeScript) API — Spring 과 같은 API·DB·토큰 형식(#110). Node 런타임이라 JVM 보다 훨씬 가볍게 뜬다(#137).
+  # Spring 서비스와 병행 운영한다. 클라이언트가 어느 쪽을 쓸지는 각 클라이언트의 API 주소로 정한다.
+  - type: web
+    name: wellness-game-hono
+    runtime: node
+    rootDir: hono-server
+    # devDependencies(tsc)가 필요하므로 npm ci 는 기본 모드로 설치한다.
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    branch: main
+    autoDeploy: true
+    region: singapore
+    # free: 15분 동안 요청이 없으면 잠들고 깨우는 데 플랫폼 기준 약 1분. 매일 04:00 정리 작업은 깨어 있을 때만 돈다.
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # --- DB: Spring 과 같은 Supabase. postgres://<user>:<password>@<host>:5432/postgres?sslmode=require
+      #     (jdbc:postgresql://... 형식 + DATABASE_USERNAME/PASSWORD 도 된다). 스키마는 Spring Flyway 가 관리한다.
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
+      # --- 인증: Spring 서비스(wellness-game-api)의 AUTH_JWT_SECRET 과 같은 값을 넣어야 두 서버가 토큰을 공유한다.
+      - key: AUTH_JWT_SECRET
+        sync: false
+      - key: AUTH_JWT_LEGACY_CUTOFF
+        value: ""
+      - key: OAUTH_APPLE_REQUIRE_NONCE
+        value: "true"
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      # Swagger(/swagger-ui). 운영에서 끄려면 "false".
+      - key: APP_API_DOCS_ENABLED
+        value: "true"
+      # Render 프록시 뒤: X-Forwarded-For 오른쪽부터 HOPS 개를 건너뛴 값을 클라이언트 IP 로 쓴다(Spring 과 같은 규칙).
+      - key: APP_RATE_LIMIT_TRUST_FORWARDED_HEADER
+        value: "true"
+      - key: APP_RATE_LIMIT_TRUSTED_PROXY_HOPS
+        value: "0"
+      # --- 소셜 로그인: Spring 서비스와 같은 값(비우면 해당 공급자 503) ---
+      - key: OAUTH_GOOGLE_CLIENT_ID
+        sync: false
+      - key: OAUTH_GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: OAUTH_GOOGLE_NATIVE_CLIENT_IDS
+        sync: false
+      - key: OAUTH_KAKAO_CLIENT_ID
+        sync: false
+      - key: OAUTH_KAKAO_CLIENT_SECRET
+        sync: false
+      - key: OAUTH_KAKAO_NATIVE_APP_ID
+        sync: false
+      - key: OAUTH_NAVER_CLIENT_ID
+        sync: false
+      - key: OAUTH_NAVER_CLIENT_SECRET
+        sync: false
+      - key: OAUTH_APPLE_BUNDLE_ID
+        sync: false

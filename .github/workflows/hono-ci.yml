@@ -1,0 +1,71 @@
+name: Hono API CI
+
+# hono-server/ (TypeScript, Hono) 타입 검사·테스트. API 테스트는 PostgreSQL 서비스 컨테이너에
+# backend/db/schema.sql을 만들어 실행한다. 배포는 하지 않는다.
+on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - 'hono-server/**'
+      - 'backend/db/schema.sql'
+      - 'backend/src/main/resources/messages*.properties'
+      - '.github/workflows/hono-ci.yml'
+  push:
+    branches: [dev, main]
+    paths:
+      - 'hono-server/**'
+      - 'backend/db/schema.sql'
+      - 'backend/src/main/resources/messages*.properties'
+      - '.github/workflows/hono-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: hono-server
+
+jobs:
+  test:
+    name: Typecheck + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        # postgres:16-alpine (다중 아키텍처 인덱스 digest 고정, 2026-10-21 조회). 올릴 때 docker buildx imagetools inspect 로 다시 조회
+        image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+        env:
+          POSTGRES_USER: wellness
+          POSTGRES_PASSWORD: wellness
+          POSTGRES_DB: wellness_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wellness -d wellness_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL_TEST: postgres://wellness:wellness@localhost:5432/wellness_test
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: hono-server/package-lock.json
+      # 의존성 설치 스크립트를 실행하지 않는다(타입 검사·테스트·tsc 빌드에 필요 없음을 확인했다)
+      - run: npm ci --ignore-scripts
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test (unit + PostgreSQL API)
+        run: npm test
+      - name: Build (Node)
+        run: npm run build
