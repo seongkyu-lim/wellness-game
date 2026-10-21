@@ -144,6 +144,11 @@
 		9A0000000000000000000122 /* HealthBackgroundSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0000000000000000000102 /* HealthBackgroundSync.swift */; };
 		9A0000000000000000000113 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0000000000000000000103 /* AppEnvironment.swift */; };
 		9A0000000000000000000124 /* HealthBackgroundSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0000000000000000000104 /* HealthBackgroundSyncTests.swift */; };
+		AB1550000000000000000201 /* NetworkClientBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1550000000000000000101 /* NetworkClientBehaviorTests.swift */; };
+		AB1550000000000000000202 /* CredentialStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1550000000000000000102 /* CredentialStorageTests.swift */; };
+		AB1550000000000000000203 /* AuthFlowStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1550000000000000000103 /* AuthFlowStateTests.swift */; };
+		AB1550000000000000000204 /* ContractAndMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1550000000000000000104 /* ContractAndMappingTests.swift */; };
+		AB1550000000000000000205 /* EndToEndSyncFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1550000000000000000105 /* EndToEndSyncFlowTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -274,6 +279,11 @@
 		9A0000000000000000000102 /* HealthBackgroundSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthBackgroundSync.swift; sourceTree = "<group>"; };
 		9A0000000000000000000103 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		9A0000000000000000000104 /* HealthBackgroundSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthBackgroundSyncTests.swift; sourceTree = "<group>"; };
+		AB1550000000000000000101 /* NetworkClientBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkClientBehaviorTests.swift; sourceTree = "<group>"; };
+		AB1550000000000000000102 /* CredentialStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialStorageTests.swift; sourceTree = "<group>"; };
+		AB1550000000000000000103 /* AuthFlowStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthFlowStateTests.swift; sourceTree = "<group>"; };
+		AB1550000000000000000104 /* ContractAndMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractAndMappingTests.swift; sourceTree = "<group>"; };
+		AB1550000000000000000105 /* EndToEndSyncFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndToEndSyncFlowTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -428,6 +438,11 @@
 				6F0000000000000000000508 /* WatchDashboardModelTests.swift */,
 				5F0000000000000000000709 /* WatchWorkoutTests.swift */,
 				9A0000000000000000000104 /* HealthBackgroundSyncTests.swift */,
+				AB1550000000000000000101 /* NetworkClientBehaviorTests.swift */,
+				AB1550000000000000000102 /* CredentialStorageTests.swift */,
+				AB1550000000000000000103 /* AuthFlowStateTests.swift */,
+				AB1550000000000000000104 /* ContractAndMappingTests.swift */,
+				AB1550000000000000000105 /* EndToEndSyncFlowTests.swift */,
 );
 			path = WellnessGameTests;
 			sourceTree = "<group>";
@@ -842,6 +857,11 @@
 				5B0000000000000000000724 /* WorkoutViewModel.swift in Sources */,
 				5B0000000000000000000725 /* WatchWorkoutTests.swift in Sources */,
 				5B0000000000000000000726 /* WorkoutSessionController.swift in Sources */,
+				AB1550000000000000000201 /* NetworkClientBehaviorTests.swift in Sources */,
+				AB1550000000000000000202 /* CredentialStorageTests.swift in Sources */,
+				AB1550000000000000000203 /* AuthFlowStateTests.swift in Sources */,
+				AB1550000000000000000204 /* ContractAndMappingTests.swift in Sources */,
+				AB1550000000000000000205 /* EndToEndSyncFlowTests.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};
