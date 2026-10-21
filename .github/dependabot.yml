@@ -1,4 +1,5 @@
-# 의존성 업데이트 PR (#109). Actions는 커밋 SHA로 고정돼 있어 Dependabot이 SHA와 버전 주석을 함께 갱신한다.
+# 의존성 업데이트 PR (#109, #139). Actions는 커밋 SHA로 고정돼 있어 Dependabot이 SHA와 버전 주석을 함께 갱신한다.
+# 메이저 업데이트는 호환성 작업이 필요해 자동 PR에서 빼고 계획해서 올린다. minor·patch 는 생태계별로 한 PR 로 묶는다.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -15,15 +16,45 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      backend-minor-patch:
+        update-types: ["minor", "patch"]
   - package-ecosystem: gradle
     directory: /android
     target-branch: dev
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      android-minor-patch:
+        update-types: ["minor", "patch"]
   - package-ecosystem: npm
     directory: /web
     target-branch: dev
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      web-minor-patch:
+        update-types: ["minor", "patch"]
+  - package-ecosystem: npm
+    directory: /hono-server
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      hono-server-minor-patch:
+        update-types: ["minor", "patch"]
