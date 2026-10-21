@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setLanguage } from '../i18n/core'
 import { sessionManager } from '../lib/session'
+import { tokenResponse } from '../test/fixtures'
 import { ApiError, fetchDailyActivities, fetchMyCharacter, isUnauthorized, postSocialLogin } from './client'
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -15,6 +16,8 @@ function startLegacySession(accessToken = 'tok-123') {
 }
 
 beforeEach(() => {
+  // 다른 테스트가 바꾼 전역 언어에 영향받지 않도록(순서 무작위 실행 대비) 매번 ko로 시작한다.
+  setLanguage('ko')
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
   startLegacySession()
@@ -107,20 +110,9 @@ describe('오류 처리', () => {
 
 const CHARACTER = { userId: 'kakao:1', character: { level: 1 } }
 
-function v2Tokens(n: number, expiresIn = 3600) {
-  return {
-    userId: 'kakao:1',
-    displayName: null,
-    accessToken: `acc-${n}`,
-    tokenType: 'Bearer' as const,
-    expiresIn,
-    refreshToken: `ref-${n}`,
-    refreshExpiresIn: 2_592_000,
-  }
-}
 
 function startV2Session(expiresIn = 3600) {
-  sessionManager.start('kakao', v2Tokens(1, expiresIn))
+  sessionManager.start('kakao', tokenResponse(1, expiresIn))
 }
 
 function bearer(init: RequestInit | undefined): string | undefined {
@@ -131,7 +123,7 @@ function bearer(init: RequestInit | undefined): string | undefined {
 function serverRotatingTo(n: number, refreshStatus = 200) {
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/api/auth/refresh')) {
-      return refreshStatus === 200 ? jsonResponse(200, v2Tokens(n)) : jsonResponse(refreshStatus, { message: '만료' })
+      return refreshStatus === 200 ? jsonResponse(200, tokenResponse(n)) : jsonResponse(refreshStatus, { message: '만료' })
     }
     if (bearer(init) === 'Bearer acc-1') {
       return jsonResponse(401, { message: '인증이 필요합니다.' })
@@ -166,7 +158,7 @@ describe('Auth v2 토큰 갱신', () => {
   it('재시도도 401이면 더 갱신하지 않고 ApiError(401)', async () => {
     startV2Session()
     fetchMock.mockImplementation(async (url: string) =>
-      url.endsWith('/api/auth/refresh') ? jsonResponse(200, v2Tokens(2)) : jsonResponse(401, {}),
+      url.endsWith('/api/auth/refresh') ? jsonResponse(200, tokenResponse(2)) : jsonResponse(401, {}),
     )
     const error = await fetchMyCharacter().catch((e: unknown) => e)
     expect(isUnauthorized(error)).toBe(true)
@@ -266,7 +258,7 @@ describe('로그아웃', () => {
   })
 
   it('액세스 토큰이 만료됐어도 갱신 없이 리프레시 토큰으로 바로 로그아웃 요청한다', async () => {
-    sessionManager.start('kakao', v2Tokens(1, 0))
+    sessionManager.start('kakao', tokenResponse(1, 0))
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
     await sessionManager.logout()
     expect(refreshCalls()).toHaveLength(0)
@@ -280,5 +272,62 @@ describe('로그아웃', () => {
     await sessionManager.logout()
     expect(fetchMock).not.toHaveBeenCalled()
     expect(sessionManager.current()).toBeNull()
+  })
+})
+
+describe('오류 매핑', () => {
+  it.each([
+    ['서버 message', jsonResponse(403, { message: '권한이 없습니다.' }), { raw: '권한이 없습니다.' }],
+    ['빈 message', jsonResponse(500, { message: '' }), { key: 'error.request', params: { status: 500 } }],
+    ['문자열이 아닌 message', jsonResponse(502, { message: { detail: 'x' } }), { key: 'error.request', params: { status: 502 } }],
+    ['본문 없음', new Response(null, { status: 503 }), { key: 'error.request', params: { status: 503 } }],
+  ])('%s → 화면 메시지', async (_, response, expected) => {
+    fetchMock.mockResolvedValue(response)
+    const error = (await fetchDailyActivities('kakao:1', '2026-01-01').catch((e: unknown) => e)) as ApiError
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.userMessage).toEqual(expected)
+  })
+
+  it('fetch 자체가 실패하면(TypeError) ApiError로 감싸지 않고 그대로 던져 호출 측이 네트워크 오류로 처리한다', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+    const error = await fetchMyCharacter().catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(TypeError)
+    expect(isUnauthorized(error)).toBe(false)
+  })
+
+  it('404는 캐릭터 조회에서만 "없음"이고 활동 조회에서는 오류다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(404, {}))
+    await expect(fetchMyCharacter()).resolves.toBeNull()
+    await expect(fetchDailyActivities('kakao:1', '2026-01-01')).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('로그아웃 상태에서 조회하면 요청을 보내지 않고 만료(401)로 끝난다', async () => {
+    sessionManager.clear('logout')
+    const error = await fetchMyCharacter().catch((e: unknown) => e)
+    expect(isUnauthorized(error)).toBe(true)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('갱신 응답 검증', () => {
+  it('refresh 응답에 새 리프레시 토큰이 없으면 error.noToken으로 실패하고 세션은 지우지 않는다', async () => {
+    startV2Session()
+    fetchMock.mockImplementation(async (url: string) =>
+      url.endsWith('/api/auth/refresh') ? jsonResponse(200, { ...tokenResponse(2), refreshToken: undefined }) : jsonResponse(401, {}),
+    )
+    const error = (await fetchMyCharacter().catch((e: unknown) => e)) as ApiError
+    expect(error.userMessage).toEqual({ key: 'error.noToken' })
+    expect(isUnauthorized(error)).toBe(false)
+    expect(sessionManager.current()?.refreshToken).toBe('ref-1')
+  })
+
+  it('재시도 요청은 처음과 같은 URL·Accept-Language를 쓰고 Authorization만 바뀐다', async () => {
+    setLanguage('en')
+    startV2Session()
+    serverRotatingTo(2)
+    await fetchDailyActivities('kakao:1', '2026-02-03')
+    const [first, , retry] = fetchMock.mock.calls
+    expect(retry[0]).toBe(first[0])
+    expect(retry[1].headers).toEqual({ 'Accept-Language': 'en', Authorization: 'Bearer acc-2' })
   })
 })
