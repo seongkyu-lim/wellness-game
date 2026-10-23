@@ -288,7 +288,7 @@ final class SnapshotStoreTests: XCTestCase {
     }
 
     func test_appGroupIdentifier_matchesEntitlements() {
-        XCTAssertEqual(SnapshotStore.appGroupIdentifier, "group.com.example.WellnessGame")
+        XCTAssertEqual(SnapshotStore.appGroupIdentifier, "group.io.github.seongkyulim.wellnessgame")
     }
 }
 

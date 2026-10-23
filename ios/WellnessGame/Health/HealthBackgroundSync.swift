@@ -2,7 +2,7 @@ import Foundation
 import HealthKit
 import OSLog
 
-private let logger = Logger(subsystem: "com.example.WellnessGame", category: "BackgroundSync")
+private let logger = Logger(subsystem: "io.github.seongkyulim.wellnessgame", category: "BackgroundSync")
 
 /// 백그라운드 전달을 받는 HealthKit 데이터 종류.
 enum HealthObservedType: CaseIterable, Sendable {

@@ -31,7 +31,7 @@ enum ServerEnvironment {
     static let allowsInsecureHTTP = false
     #endif
 
-    private static let logger = Logger(subsystem: "com.example.WellnessGame", category: "ServerEnvironment")
+    private static let logger = Logger(subsystem: "io.github.seongkyulim.wellnessgame", category: "ServerEnvironment")
 
     static let current: Resolution = resolve(
         Bundle.main.object(forInfoDictionaryKey: infoPlistKey) as? String,

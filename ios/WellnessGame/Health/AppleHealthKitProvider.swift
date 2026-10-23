@@ -163,7 +163,7 @@ final class AppleHealthKitProvider: HealthDataProvider {
         )
     }
 
-    private static let logger = Logger(subsystem: "com.example.WellnessGame", category: "HealthSync")
+    private static let logger = Logger(subsystem: "io.github.seongkyulim.wellnessgame", category: "HealthSync")
 
     /// 종목 매핑은 Watch 운동 기록과 같은 `WorkoutKind`를 쓴다.
     private func mapWorkoutType(_ type: HKWorkoutActivityType) -> WorkoutType {
