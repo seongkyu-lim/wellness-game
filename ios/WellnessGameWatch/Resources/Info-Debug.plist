@@ -7,7 +7,7 @@
     <key>WKApplication</key>
     <true/>
     <key>WKCompanionAppBundleIdentifier</key>
-    <string>com.example.WellnessGame</string>
+    <string>io.github.seongkyulim.wellnessgame</string>
     <key>WKRunsIndependentlyOfCompanionApp</key>
     <false/>
     <key>NSHealthShareUsageDescription</key>

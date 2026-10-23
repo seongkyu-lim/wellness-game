@@ -50,10 +50,10 @@ struct CharacterSnapshot: Codable, Equatable {
 
 /// App Group UserDefaults에 마지막 스냅샷을 JSON으로 보관한다. Watch 앱이 쓰고 위젯이 읽는다.
 struct SnapshotStore {
-    static let appGroupIdentifier = "group.com.example.WellnessGame"
+    static let appGroupIdentifier = "group.io.github.seongkyulim.wellnessgame"
     static let key = "watch.characterSnapshot"
 
-    private static let logger = Logger(subsystem: "com.example.WellnessGame", category: "SnapshotStore")
+    private static let logger = Logger(subsystem: "io.github.seongkyulim.wellnessgame", category: "SnapshotStore")
 
     let defaults: UserDefaults
 

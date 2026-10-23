@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-private let logger = Logger(subsystem: "com.example.WellnessGame", category: "HealthSync")
+private let logger = Logger(subsystem: "io.github.seongkyulim.wellnessgame", category: "HealthSync")
 
 /// 마지막으로 오늘 데이터 동기화에 성공한 시각. 포그라운드·백그라운드 어느 경로든 성공하면 기록한다.
 /// 다음 동기화 때 전날 데이터를 다시 보낼지 판단하는 데 쓴다(`SyncDayPlanner`).
