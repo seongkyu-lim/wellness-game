@@ -420,7 +420,7 @@ iOS 앱은 각 SDK에서 받은 토큰을 아래 엔드포인트로 보내 서�
 
 ## Android 앱 실행
 
-`android/`는 네이티브 Kotlin + Jetpack Compose 앱이다(minSdk 28, target/compileSdk 35, 패키지 `com.example.wellnessgame`). 서버 계약은 iOS와 같다.
+`android/`는 네이티브 Kotlin + Jetpack Compose 앱이다(minSdk 28, target/compileSdk 35, 패키지 `io.github.seongkyulim.wellnessgame`). 서버 계약은 iOS와 같다.
 
 ```bash
 cd android
