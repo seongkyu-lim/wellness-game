@@ -1,8 +1,8 @@
-package com.example.wellnessgame.auth
+package io.github.seongkyulim.wellnessgame.auth
 
-import com.example.wellnessgame.data.network.AuthTokenResponse
-import com.example.wellnessgame.domain.LoginProvider
-import com.example.wellnessgame.testing.FakeTokenStore
+import io.github.seongkyulim.wellnessgame.data.network.AuthTokenResponse
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.testing.FakeTokenStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent

@@ -1,6 +1,6 @@
-package com.example.wellnessgame.data.health
+package io.github.seongkyulim.wellnessgame.data.health
 
-import com.example.wellnessgame.data.network.HealthActivityPayload
+import io.github.seongkyulim.wellnessgame.data.network.HealthActivityPayload
 import java.time.LocalDate
 
 /** 건강 데이터 출처(Health Connect 또는 Mock). */

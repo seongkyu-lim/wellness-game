@@ -1,4 +1,4 @@
-package com.example.wellnessgame.ui.account
+package io.github.seongkyulim.wellnessgame.ui.account
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -23,13 +23,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.example.wellnessgame.R
-import com.example.wellnessgame.auth.SessionState
-import com.example.wellnessgame.ui.components.CelButton
-import com.example.wellnessgame.ui.components.CelCard
-import com.example.wellnessgame.ui.components.PillBadge
-import com.example.wellnessgame.ui.components.displayName
-import com.example.wellnessgame.ui.theme.Wellness
+import io.github.seongkyulim.wellnessgame.R
+import io.github.seongkyulim.wellnessgame.auth.SessionState
+import io.github.seongkyulim.wellnessgame.ui.components.CelButton
+import io.github.seongkyulim.wellnessgame.ui.components.CelCard
+import io.github.seongkyulim.wellnessgame.ui.components.PillBadge
+import io.github.seongkyulim.wellnessgame.ui.components.displayName
+import io.github.seongkyulim.wellnessgame.ui.theme.Wellness
 
 @Composable
 fun AccountScreen(

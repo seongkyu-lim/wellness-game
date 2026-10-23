@@ -1,7 +1,7 @@
-package com.example.wellnessgame.auth.social
+package io.github.seongkyulim.wellnessgame.auth.social
 
 import android.content.Context
-import com.example.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
 import com.kakao.sdk.auth.model.OAuthToken
 import com.kakao.sdk.common.KakaoSdk
 import com.kakao.sdk.common.model.ClientError

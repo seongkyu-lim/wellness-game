@@ -21,11 +21,11 @@ require(releaseBaseUrl.isEmpty() || releaseBaseUrl.startsWith("https://")) {
 val kakaoAppKey = prop("KAKAO_NATIVE_APP_KEY")
 
 android {
-    namespace = "com.example.wellnessgame"
+    namespace = "io.github.seongkyulim.wellnessgame"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.wellnessgame"
+        applicationId = "io.github.seongkyulim.wellnessgame"
         minSdk = 28
         targetSdk = 35
         versionCode = 1

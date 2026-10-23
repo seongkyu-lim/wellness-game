@@ -1,4 +1,4 @@
-package com.example.wellnessgame.data.network
+package io.github.seongkyulim.wellnessgame.data.network
 
 import retrofit2.Response
 import retrofit2.http.Body

@@ -1,12 +1,12 @@
-package com.example.wellnessgame.auth
+package io.github.seongkyulim.wellnessgame.auth
 
-import com.example.wellnessgame.auth.social.SignInHost
-import com.example.wellnessgame.auth.social.SocialCredential
-import com.example.wellnessgame.auth.social.SocialSignInClient
-import com.example.wellnessgame.data.network.ApiClient
-import com.example.wellnessgame.data.network.ApiException
-import com.example.wellnessgame.data.network.AuthTokenResponse
-import com.example.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.auth.social.SignInHost
+import io.github.seongkyulim.wellnessgame.auth.social.SocialCredential
+import io.github.seongkyulim.wellnessgame.auth.social.SocialSignInClient
+import io.github.seongkyulim.wellnessgame.data.network.ApiClient
+import io.github.seongkyulim.wellnessgame.data.network.ApiException
+import io.github.seongkyulim.wellnessgame.data.network.AuthTokenResponse
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch

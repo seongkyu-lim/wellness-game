@@ -1,9 +1,9 @@
-package com.example.wellnessgame.sync
+package io.github.seongkyulim.wellnessgame.sync
 
 import android.util.Log
 import androidx.work.ListenableWorker.Result
-import com.example.wellnessgame.data.health.HealthDataException
-import com.example.wellnessgame.data.network.ApiException
+import io.github.seongkyulim.wellnessgame.data.health.HealthDataException
+import io.github.seongkyulim.wellnessgame.data.network.ApiException
 
 /** [SyncWorker]가 Application에서 동기화 작업을 얻는 경로. 테스트 Application이 가짜를 넘긴다. */
 interface BackgroundSyncProvider {

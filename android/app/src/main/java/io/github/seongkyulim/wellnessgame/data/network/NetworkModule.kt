@@ -1,4 +1,4 @@
-package com.example.wellnessgame.data.network
+package io.github.seongkyulim.wellnessgame.data.network
 
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor

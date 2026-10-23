@@ -1,4 +1,4 @@
-package com.example.wellnessgame.ui.login
+package io.github.seongkyulim.wellnessgame.ui.login
 
 import android.app.Application
 import androidx.compose.runtime.getValue
@@ -13,9 +13,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.example.wellnessgame.domain.LoginProvider
-import com.example.wellnessgame.domain.LoginProviderPolicy
-import com.example.wellnessgame.ui.theme.WellnessTheme
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.domain.LoginProviderPolicy
+import io.github.seongkyulim.wellnessgame.ui.theme.WellnessTheme
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test

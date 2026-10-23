@@ -1,10 +1,10 @@
-package com.example.wellnessgame.data.health
+package io.github.seongkyulim.wellnessgame.data.health
 
-import com.example.wellnessgame.data.network.ApiJson
-import com.example.wellnessgame.data.network.HealthActivityPayload
-import com.example.wellnessgame.data.network.HealthActivitySyncRequest
-import com.example.wellnessgame.domain.WorkoutKind
-import com.example.wellnessgame.domain.WorkoutSyncRules
+import io.github.seongkyulim.wellnessgame.data.network.ApiJson
+import io.github.seongkyulim.wellnessgame.data.network.HealthActivityPayload
+import io.github.seongkyulim.wellnessgame.data.network.HealthActivitySyncRequest
+import io.github.seongkyulim.wellnessgame.domain.WorkoutKind
+import io.github.seongkyulim.wellnessgame.domain.WorkoutSyncRules
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray

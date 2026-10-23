@@ -1,6 +1,6 @@
-package com.example.wellnessgame.auth
+package io.github.seongkyulim.wellnessgame.auth
 
-import com.example.wellnessgame.auth.social.KakaoSignInClient
+import io.github.seongkyulim.wellnessgame.auth.social.KakaoSignInClient
 import com.kakao.sdk.common.model.ClientError
 import com.kakao.sdk.common.model.ClientErrorCause
 import kotlinx.serialization.SerializationException

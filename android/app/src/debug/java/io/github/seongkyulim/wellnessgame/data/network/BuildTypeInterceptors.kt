@@ -1,4 +1,4 @@
-package com.example.wellnessgame.data.network
+package io.github.seongkyulim.wellnessgame.data.network
 
 import okhttp3.Interceptor
 import okhttp3.logging.HttpLoggingInterceptor

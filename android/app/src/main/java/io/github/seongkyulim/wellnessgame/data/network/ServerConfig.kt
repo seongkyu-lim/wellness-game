@@ -1,4 +1,4 @@
-package com.example.wellnessgame.data.network
+package io.github.seongkyulim.wellnessgame.data.network
 
 /**
  * 서버 주소 결정. debug는 에뮬레이터의 호스트 localhost(`http://10.0.2.2:8080`),

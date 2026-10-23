@@ -1,8 +1,8 @@
-package com.example.wellnessgame.data.health
+package io.github.seongkyulim.wellnessgame.data.health
 
-import com.example.wellnessgame.data.network.HealthActivityPayload
-import com.example.wellnessgame.domain.WorkoutKind
-import com.example.wellnessgame.domain.WorkoutSyncRules
+import io.github.seongkyulim.wellnessgame.data.network.HealthActivityPayload
+import io.github.seongkyulim.wellnessgame.domain.WorkoutKind
+import io.github.seongkyulim.wellnessgame.domain.WorkoutSyncRules
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate

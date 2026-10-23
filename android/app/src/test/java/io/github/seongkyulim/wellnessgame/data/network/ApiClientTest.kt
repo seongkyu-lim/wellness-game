@@ -1,9 +1,9 @@
-package com.example.wellnessgame.data.network
+package io.github.seongkyulim.wellnessgame.data.network
 
-import com.example.wellnessgame.testing.CHARACTER_JSON
-import com.example.wellnessgame.testing.FakeTokenSource
-import com.example.wellnessgame.testing.apiClient
-import com.example.wellnessgame.testing.jsonResponse
+import io.github.seongkyulim.wellnessgame.testing.CHARACTER_JSON
+import io.github.seongkyulim.wellnessgame.testing.FakeTokenSource
+import io.github.seongkyulim.wellnessgame.testing.apiClient
+import io.github.seongkyulim.wellnessgame.testing.jsonResponse
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject

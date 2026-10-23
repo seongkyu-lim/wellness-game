@@ -1,8 +1,8 @@
-package com.example.wellnessgame.domain
+package io.github.seongkyulim.wellnessgame.domain
 
-import com.example.wellnessgame.data.health.DailyHealthSnapshot
-import com.example.wellnessgame.data.network.ActivityEntry
-import com.example.wellnessgame.data.network.HealthActivityPayload
+import io.github.seongkyulim.wellnessgame.data.health.DailyHealthSnapshot
+import io.github.seongkyulim.wellnessgame.data.network.ActivityEntry
+import io.github.seongkyulim.wellnessgame.data.network.HealthActivityPayload
 
 /**
  * 서버에 저장된 하루치 기록 → 퀘스트 현재값(iOS `DailyQuestProgress(activities:)`).

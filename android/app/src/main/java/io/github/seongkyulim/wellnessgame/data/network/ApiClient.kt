@@ -1,4 +1,4 @@
-package com.example.wellnessgame.data.network
+package io.github.seongkyulim.wellnessgame.data.network
 
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -35,7 +35,7 @@ interface AccessTokenSource {
  *
  * 갱신을 OkHttp `Authenticator` 대신 여기서 하는 이유: 보호 API는 `Authorization`을 호출 인자로 받아
  * "그 요청에 실은 토큰"을 호출부가 알아야 늦게 온 401이 새 세션을 지우지 않는다. 또 코루틴 [kotlinx.coroutines.sync.Mutex]로
- * 단일 비행을 묶어 OkHttp 스레드를 막지 않는다. 앱의 모든 보호 요청(백그라운드 [com.example.wellnessgame.sync.SyncWorker] 포함)이
+ * 단일 비행을 묶어 OkHttp 스레드를 막지 않는다. 앱의 모든 보호 요청(백그라운드 [io.github.seongkyulim.wellnessgame.sync.SyncWorker] 포함)이
  * [authorized]를 거친다.
  */
 class ApiClient(

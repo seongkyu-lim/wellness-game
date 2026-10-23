@@ -1,13 +1,13 @@
-package com.example.wellnessgame.ui.login
+package io.github.seongkyulim.wellnessgame.ui.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.wellnessgame.auth.AuthRepository
-import com.example.wellnessgame.auth.social.SignInHost
-import com.example.wellnessgame.auth.social.SocialSignInCancelled
-import com.example.wellnessgame.data.network.ApiException
-import com.example.wellnessgame.domain.LoginProvider
-import com.example.wellnessgame.domain.LoginProviderPolicy
+import io.github.seongkyulim.wellnessgame.auth.AuthRepository
+import io.github.seongkyulim.wellnessgame.auth.social.SignInHost
+import io.github.seongkyulim.wellnessgame.auth.social.SocialSignInCancelled
+import io.github.seongkyulim.wellnessgame.data.network.ApiException
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.domain.LoginProviderPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

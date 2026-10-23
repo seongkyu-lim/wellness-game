@@ -1,4 +1,4 @@
-package com.example.wellnessgame.domain
+package io.github.seongkyulim.wellnessgame.domain
 
 import java.time.Duration
 import java.time.Instant

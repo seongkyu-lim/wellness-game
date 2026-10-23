@@ -1,8 +1,8 @@
-package com.example.wellnessgame.domain
+package io.github.seongkyulim.wellnessgame.domain
 
-import com.example.wellnessgame.domain.LoginProvider.GOOGLE
-import com.example.wellnessgame.domain.LoginProvider.KAKAO
-import com.example.wellnessgame.domain.LoginProvider.NAVER
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider.GOOGLE
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider.KAKAO
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider.NAVER
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test

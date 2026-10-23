@@ -1,4 +1,4 @@
-package com.example.wellnessgame.ui.theme
+package io.github.seongkyulim.wellnessgame.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme

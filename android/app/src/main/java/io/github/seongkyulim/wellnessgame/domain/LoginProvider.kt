@@ -1,4 +1,4 @@
-package com.example.wellnessgame.domain
+package io.github.seongkyulim.wellnessgame.domain
 
 /** 로그인 수단. Apple은 Android에서 제공하지 않는다. */
 enum class LoginProvider(val storageKey: String) {

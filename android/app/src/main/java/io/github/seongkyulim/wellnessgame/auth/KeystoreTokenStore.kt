@@ -1,4 +1,4 @@
-package com.example.wellnessgame.auth
+package io.github.seongkyulim.wellnessgame.auth
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
@@ -11,7 +11,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.example.wellnessgame.data.network.ApiJson
+import io.github.seongkyulim.wellnessgame.data.network.ApiJson
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

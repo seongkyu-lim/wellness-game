@@ -1,4 +1,4 @@
-package com.example.wellnessgame.testing
+package io.github.seongkyulim.wellnessgame.testing
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi

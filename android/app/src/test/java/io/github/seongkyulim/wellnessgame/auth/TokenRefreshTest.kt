@@ -1,15 +1,15 @@
-package com.example.wellnessgame.auth
+package io.github.seongkyulim.wellnessgame.auth
 
-import com.example.wellnessgame.data.network.ApiClient
-import com.example.wellnessgame.data.network.ApiException
-import com.example.wellnessgame.data.network.ApiJson
-import com.example.wellnessgame.data.network.AuthTokenResponse
-import com.example.wellnessgame.domain.LoginProvider
-import com.example.wellnessgame.testing.CHARACTER_JSON
-import com.example.wellnessgame.testing.FakeSocialClient
-import com.example.wellnessgame.testing.FakeTokenStore
-import com.example.wellnessgame.testing.apiClient
-import com.example.wellnessgame.testing.jsonResponse
+import io.github.seongkyulim.wellnessgame.data.network.ApiClient
+import io.github.seongkyulim.wellnessgame.data.network.ApiException
+import io.github.seongkyulim.wellnessgame.data.network.ApiJson
+import io.github.seongkyulim.wellnessgame.data.network.AuthTokenResponse
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.testing.CHARACTER_JSON
+import io.github.seongkyulim.wellnessgame.testing.FakeSocialClient
+import io.github.seongkyulim.wellnessgame.testing.FakeTokenStore
+import io.github.seongkyulim.wellnessgame.testing.apiClient
+import io.github.seongkyulim.wellnessgame.testing.jsonResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

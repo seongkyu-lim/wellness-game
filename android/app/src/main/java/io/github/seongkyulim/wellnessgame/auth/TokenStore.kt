@@ -1,4 +1,4 @@
-package com.example.wellnessgame.auth
+package io.github.seongkyulim.wellnessgame.auth
 
 import kotlinx.serialization.Serializable
 
@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 data class StoredSession(
     val userId: String,
     val displayName: String? = null,
-    /** [com.example.wellnessgame.domain.LoginProvider.storageKey] */
+    /** [io.github.seongkyulim.wellnessgame.domain.LoginProvider.storageKey] */
     val provider: String,
     val accessToken: String,
     /** 액세스 토큰 만료 시각(epoch 초). 서버가 expiresIn을 주지 않으면 null. */

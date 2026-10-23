@@ -1,9 +1,9 @@
-package com.example.wellnessgame
+package io.github.seongkyulim.wellnessgame
 
 import android.app.Application
-import com.example.wellnessgame.sync.BackgroundSync
-import com.example.wellnessgame.sync.BackgroundSyncProvider
-import com.example.wellnessgame.sync.SyncWorker
+import io.github.seongkyulim.wellnessgame.sync.BackgroundSync
+import io.github.seongkyulim.wellnessgame.sync.BackgroundSyncProvider
+import io.github.seongkyulim.wellnessgame.sync.SyncWorker
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map

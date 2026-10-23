@@ -1,4 +1,4 @@
-package com.example.wellnessgame.sync
+package io.github.seongkyulim.wellnessgame.sync
 
 import android.content.Context
 import androidx.work.BackoffPolicy

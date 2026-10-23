@@ -1,4 +1,4 @@
-package com.example.wellnessgame.ui.components
+package io.github.seongkyulim.wellnessgame.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -51,8 +51,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.example.wellnessgame.ui.theme.Wellness
-import com.example.wellnessgame.ui.theme.WellnessMetrics
+import io.github.seongkyulim.wellnessgame.ui.theme.Wellness
+import io.github.seongkyulim.wellnessgame.ui.theme.WellnessMetrics
 
 /**
  * 셀 애니 외곽선: 오프셋 그림자 → 채움 → 잉크 외곽선 순서로 그린다(iOS `celOutline`).

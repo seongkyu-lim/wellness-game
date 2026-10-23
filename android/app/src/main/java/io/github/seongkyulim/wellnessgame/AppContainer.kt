@@ -1,31 +1,31 @@
-package com.example.wellnessgame
+package io.github.seongkyulim.wellnessgame
 
 import android.app.LocaleManager
 import android.content.Context
 import android.content.res.Resources
 import android.os.Build
 import android.os.LocaleList
-import com.example.wellnessgame.auth.AuthRepository
-import com.example.wellnessgame.auth.KeystoreTokenStore
-import com.example.wellnessgame.auth.SessionManager
-import com.example.wellnessgame.auth.social.GoogleSignInClient
-import com.example.wellnessgame.auth.social.KakaoSignInClient
-import com.example.wellnessgame.auth.social.NaverSignInClient
-import com.example.wellnessgame.data.health.HealthConnectProvider
-import com.example.wellnessgame.data.health.MockHealthDataProvider
-import com.example.wellnessgame.data.network.ApiClient
-import com.example.wellnessgame.data.network.NetworkModule
-import com.example.wellnessgame.data.network.ServerConfig
-import com.example.wellnessgame.data.settings.SettingsStore
-import com.example.wellnessgame.domain.AppLanguage
-import com.example.wellnessgame.domain.LoginProvider
-import com.example.wellnessgame.sync.DashboardRepository
-import com.example.wellnessgame.sync.DefaultDashboardRepository
+import io.github.seongkyulim.wellnessgame.auth.AuthRepository
+import io.github.seongkyulim.wellnessgame.auth.KeystoreTokenStore
+import io.github.seongkyulim.wellnessgame.auth.SessionManager
+import io.github.seongkyulim.wellnessgame.auth.social.GoogleSignInClient
+import io.github.seongkyulim.wellnessgame.auth.social.KakaoSignInClient
+import io.github.seongkyulim.wellnessgame.auth.social.NaverSignInClient
+import io.github.seongkyulim.wellnessgame.data.health.HealthConnectProvider
+import io.github.seongkyulim.wellnessgame.data.health.MockHealthDataProvider
+import io.github.seongkyulim.wellnessgame.data.network.ApiClient
+import io.github.seongkyulim.wellnessgame.data.network.NetworkModule
+import io.github.seongkyulim.wellnessgame.data.network.ServerConfig
+import io.github.seongkyulim.wellnessgame.data.settings.SettingsStore
+import io.github.seongkyulim.wellnessgame.domain.AppLanguage
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.sync.DashboardRepository
+import io.github.seongkyulim.wellnessgame.sync.DefaultDashboardRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import com.example.wellnessgame.data.network.buildTypeInterceptors
+import io.github.seongkyulim.wellnessgame.data.network.buildTypeInterceptors
 
 /** 수동 DI 컨테이너. 앱 프로세스당 하나(Application이 소유). */
 class AppContainer(context: Context) {

@@ -1,4 +1,4 @@
-package com.example.wellnessgame.data.settings
+package io.github.seongkyulim.wellnessgame.data.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore

@@ -1,7 +1,7 @@
-package com.example.wellnessgame.auth.social
+package io.github.seongkyulim.wellnessgame.auth.social
 
 import android.app.Activity
-import com.example.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
 
 /** 소셜 SDK가 발급한, 서버에 교환할 자격 증명. */
 sealed interface SocialCredential {

@@ -1,4 +1,4 @@
-package com.example.wellnessgame.data.health
+package io.github.seongkyulim.wellnessgame.data.health
 
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
@@ -14,7 +14,7 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
-import com.example.wellnessgame.domain.WorkoutKind
+import io.github.seongkyulim.wellnessgame.domain.WorkoutKind
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant

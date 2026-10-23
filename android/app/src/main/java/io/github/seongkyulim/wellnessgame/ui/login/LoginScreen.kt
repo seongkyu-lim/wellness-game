@@ -1,4 +1,4 @@
-package com.example.wellnessgame.ui.login
+package io.github.seongkyulim.wellnessgame.ui.login
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -43,16 +43,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import com.example.wellnessgame.R
-import com.example.wellnessgame.domain.GrowthStage
-import com.example.wellnessgame.domain.LoginProvider
-import com.example.wellnessgame.ui.components.CelButton
-import com.example.wellnessgame.ui.components.DangerNotice
-import com.example.wellnessgame.ui.components.SproutyAvatar
-import com.example.wellnessgame.ui.components.displayName
-import com.example.wellnessgame.ui.components.rateLimitedText
-import com.example.wellnessgame.ui.theme.Wellness
-import com.example.wellnessgame.ui.theme.WellnessMetrics
+import io.github.seongkyulim.wellnessgame.R
+import io.github.seongkyulim.wellnessgame.domain.GrowthStage
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.ui.components.CelButton
+import io.github.seongkyulim.wellnessgame.ui.components.DangerNotice
+import io.github.seongkyulim.wellnessgame.ui.components.SproutyAvatar
+import io.github.seongkyulim.wellnessgame.ui.components.displayName
+import io.github.seongkyulim.wellnessgame.ui.components.rateLimitedText
+import io.github.seongkyulim.wellnessgame.ui.theme.Wellness
+import io.github.seongkyulim.wellnessgame.ui.theme.WellnessMetrics
 
 data class LoginActions(
     val onUsernameChange: (String) -> Unit,

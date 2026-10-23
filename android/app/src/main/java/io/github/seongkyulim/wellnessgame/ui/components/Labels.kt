@@ -1,13 +1,13 @@
-package com.example.wellnessgame.ui.components
+package io.github.seongkyulim.wellnessgame.ui.components
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import com.example.wellnessgame.R
-import com.example.wellnessgame.domain.GrowthStage
-import com.example.wellnessgame.domain.LoginProvider
-import com.example.wellnessgame.domain.WorkoutKind
+import io.github.seongkyulim.wellnessgame.R
+import io.github.seongkyulim.wellnessgame.domain.GrowthStage
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.domain.WorkoutKind
 
 @StringRes
 fun GrowthStage.labelRes(): Int = when (this) {

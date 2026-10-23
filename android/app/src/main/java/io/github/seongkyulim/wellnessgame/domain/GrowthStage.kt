@@ -1,4 +1,4 @@
-package com.example.wellnessgame.domain
+package io.github.seongkyulim.wellnessgame.domain
 
 /**
  * 레벨 → 캐릭터 성장 단계. iOS `GrowthStage`, 웹 `growthStage.ts`와 같은 구간을 유지해야 한다.

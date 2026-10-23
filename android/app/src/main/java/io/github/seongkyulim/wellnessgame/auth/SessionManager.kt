@@ -1,12 +1,12 @@
-package com.example.wellnessgame.auth
+package io.github.seongkyulim.wellnessgame.auth
 
 import android.util.Log
-import com.example.wellnessgame.data.network.AccessTokenSource
-import com.example.wellnessgame.data.network.ApiException
-import com.example.wellnessgame.data.network.AuthTokenResponse
-import com.example.wellnessgame.data.network.RefreshResponse
-import com.example.wellnessgame.data.network.TokenRefresh
-import com.example.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.data.network.AccessTokenSource
+import io.github.seongkyulim.wellnessgame.data.network.ApiException
+import io.github.seongkyulim.wellnessgame.data.network.AuthTokenResponse
+import io.github.seongkyulim.wellnessgame.data.network.RefreshResponse
+import io.github.seongkyulim.wellnessgame.data.network.TokenRefresh
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred

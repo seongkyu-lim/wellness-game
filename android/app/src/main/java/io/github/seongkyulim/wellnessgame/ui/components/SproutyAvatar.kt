@@ -1,4 +1,4 @@
-package com.example.wellnessgame.ui.components
+package io.github.seongkyulim.wellnessgame.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
@@ -16,7 +16,7 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import com.example.wellnessgame.domain.GrowthStage
+import io.github.seongkyulim.wellnessgame.domain.GrowthStage
 
 /**
  * 화분 마스코트 '새싹이'(Sprouty). iOS `CharacterAvatarView`·웹 `CharacterAvatar.tsx`와 같은 120×120 좌표와

@@ -1,24 +1,24 @@
-package com.example.wellnessgame.ui.home
+package io.github.seongkyulim.wellnessgame.ui.home
 
-import com.example.wellnessgame.auth.SessionManager
-import com.example.wellnessgame.auth.StoredSession
-import com.example.wellnessgame.data.health.DailyHealthSnapshot
-import com.example.wellnessgame.data.health.HealthActivityMapper
-import com.example.wellnessgame.data.network.ActivityXpResult
-import com.example.wellnessgame.data.network.ApiException
-import com.example.wellnessgame.data.network.CharacterState
-import com.example.wellnessgame.data.network.CharacterStats
-import com.example.wellnessgame.data.network.HealthActivitySyncResponse
-import com.example.wellnessgame.domain.DailyQuestProgress
-import com.example.wellnessgame.data.network.AuthTokenResponse
-import com.example.wellnessgame.domain.LoginProvider
-import com.example.wellnessgame.sync.HealthAccess
+import io.github.seongkyulim.wellnessgame.auth.SessionManager
+import io.github.seongkyulim.wellnessgame.auth.StoredSession
+import io.github.seongkyulim.wellnessgame.data.health.DailyHealthSnapshot
+import io.github.seongkyulim.wellnessgame.data.health.HealthActivityMapper
+import io.github.seongkyulim.wellnessgame.data.network.ActivityXpResult
+import io.github.seongkyulim.wellnessgame.data.network.ApiException
+import io.github.seongkyulim.wellnessgame.data.network.CharacterState
+import io.github.seongkyulim.wellnessgame.data.network.CharacterStats
+import io.github.seongkyulim.wellnessgame.data.network.HealthActivitySyncResponse
+import io.github.seongkyulim.wellnessgame.domain.DailyQuestProgress
+import io.github.seongkyulim.wellnessgame.data.network.AuthTokenResponse
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.sync.HealthAccess
 import kotlinx.coroutines.CompletableDeferred
-import com.example.wellnessgame.sync.SyncResult
-import com.example.wellnessgame.testing.FakeDashboardRepository
-import com.example.wellnessgame.testing.FakeSettings
-import com.example.wellnessgame.testing.FakeTokenStore
-import com.example.wellnessgame.testing.MainDispatcherRule
+import io.github.seongkyulim.wellnessgame.sync.SyncResult
+import io.github.seongkyulim.wellnessgame.testing.FakeDashboardRepository
+import io.github.seongkyulim.wellnessgame.testing.FakeSettings
+import io.github.seongkyulim.wellnessgame.testing.FakeTokenStore
+import io.github.seongkyulim.wellnessgame.testing.MainDispatcherRule
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -44,7 +44,7 @@ class HomeViewModelTest {
         steps = 8_500,
         workouts = emptyList(),
         sleep = HealthActivityMapper.sleepActivity(
-            listOf(com.example.wellnessgame.data.health.TimeInterval(now.minusSeconds(8 * 3600), now)),
+            listOf(io.github.seongkyulim.wellnessgame.data.health.TimeInterval(now.minusSeconds(8 * 3600), now)),
         ),
     )
 

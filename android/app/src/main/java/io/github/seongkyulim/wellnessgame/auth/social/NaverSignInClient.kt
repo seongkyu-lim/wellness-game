@@ -1,7 +1,7 @@
-package com.example.wellnessgame.auth.social
+package io.github.seongkyulim.wellnessgame.auth.social
 
 import android.content.Context
-import com.example.wellnessgame.domain.LoginProvider
+import io.github.seongkyulim.wellnessgame.domain.LoginProvider
 import com.navercorp.nid.NidOAuth
 import com.navercorp.nid.core.data.errorcode.NidOAuthErrorCode
 import com.navercorp.nid.oauth.util.NidOAuthCallback

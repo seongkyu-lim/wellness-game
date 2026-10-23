@@ -1,4 +1,4 @@
-package com.example.wellnessgame
+package io.github.seongkyulim.wellnessgame
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -26,16 +26,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.wellnessgame.auth.social.SignInHost
-import com.example.wellnessgame.data.health.HealthConnectProvider
-import com.example.wellnessgame.ui.account.AccountScreen
-import com.example.wellnessgame.ui.home.HomeActions
-import com.example.wellnessgame.ui.home.HomeScreen
-import com.example.wellnessgame.ui.home.HomeViewModel
-import com.example.wellnessgame.ui.login.LoginActions
-import com.example.wellnessgame.ui.login.LoginScreen
-import com.example.wellnessgame.ui.login.LoginViewModel
-import com.example.wellnessgame.ui.theme.WellnessTheme
+import io.github.seongkyulim.wellnessgame.auth.social.SignInHost
+import io.github.seongkyulim.wellnessgame.data.health.HealthConnectProvider
+import io.github.seongkyulim.wellnessgame.ui.account.AccountScreen
+import io.github.seongkyulim.wellnessgame.ui.home.HomeActions
+import io.github.seongkyulim.wellnessgame.ui.home.HomeScreen
+import io.github.seongkyulim.wellnessgame.ui.home.HomeViewModel
+import io.github.seongkyulim.wellnessgame.ui.login.LoginActions
+import io.github.seongkyulim.wellnessgame.ui.login.LoginScreen
+import io.github.seongkyulim.wellnessgame.ui.login.LoginViewModel
+import io.github.seongkyulim.wellnessgame.ui.theme.WellnessTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {

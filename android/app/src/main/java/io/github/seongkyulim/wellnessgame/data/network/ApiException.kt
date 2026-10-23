@@ -1,4 +1,4 @@
-package com.example.wellnessgame.data.network
+package io.github.seongkyulim.wellnessgame.data.network
 
 /** 서버 호출 실패. 화면은 종류별로 문구를 고른다. */
 sealed class ApiException(message: String?, cause: Throwable? = null) : Exception(message, cause) {

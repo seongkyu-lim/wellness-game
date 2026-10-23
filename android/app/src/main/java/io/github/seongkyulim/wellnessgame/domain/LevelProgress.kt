@@ -1,4 +1,4 @@
-package com.example.wellnessgame.domain
+package io.github.seongkyulim.wellnessgame.domain
 
 /** 진행률 계산. XP 바와 오늘의 퀘스트가 같은 규칙을 쓴다(iOS `LevelProgress`). */
 object LevelProgress {

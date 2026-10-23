@@ -1,7 +1,7 @@
-package com.example.wellnessgame.domain
+package io.github.seongkyulim.wellnessgame.domain
 
-import com.example.wellnessgame.data.network.ActivityEntry
-import com.example.wellnessgame.data.network.ServerConfig
+import io.github.seongkyulim.wellnessgame.data.network.ActivityEntry
+import io.github.seongkyulim.wellnessgame.data.network.ServerConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
